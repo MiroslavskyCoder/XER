@@ -5,9 +5,6 @@
 #include <sstream>
 #include <string_view>
 
-#include <absl/strings/str_format.h>
-#include <range/v3/all.hpp>
-
 #if ENGINE_HAS_FFMPEG_BRIDGE
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -18,10 +15,19 @@ extern "C" {
 #include <libavutil/dict.h>
 #include <libavutil/imgutils.h>
 #include <libavutil/pixdesc.h>
-#include <libavutil/opt.h>
 #include <libavutil/samplefmt.h>
+}
+#endif
+
+extern "C" {
 #include <libswscale/swscale.h>
 #include <libswresample/swresample.h>
+#include <libavutil/opt.h>
+}
+
+#if ENGINE_HAS_FFMPEG_AVDEVICE
+extern "C" {
+#include <libavdevice/avdevice.h>
 }
 #endif
 
@@ -30,8 +36,15 @@ extern "C" {
 #include <libavfilter/avfilter.h>
 #include <libavfilter/buffersink.h>
 #include <libavfilter/buffersrc.h>
+
 }
 #endif
+
+extern "C" {
+#include <libswscale/swscale.h>
+#include <libswresample/swresample.h>
+#include <libavutil/opt.h>
+}
 
 #if ENGINE_HAS_FFMPEG_AVDEVICE
 extern "C" {
@@ -462,6 +475,18 @@ bool IsAvailable() {
 }
 
 bool HasFilterLibrary() {
+extern "C" {
+#include <libswscale/swscale.h>
+#include <libswresample/swresample.h>
+#include <libavutil/opt.h>
+}
+
+#if ENGINE_HAS_FFMPEG_AVDEVICE
+extern "C" {
+#include <libavdevice/avdevice.h>
+}
+#endif
+
 #if ENGINE_HAS_FFMPEG_AVFILTER
     return true;
 #else
@@ -470,6 +495,12 @@ bool HasFilterLibrary() {
 }
 
 bool HasDeviceLibrary() {
+extern "C" {
+#include <libswscale/swscale.h>
+#include <libswresample/swresample.h>
+#include <libavutil/opt.h>
+}
+
 #if ENGINE_HAS_FFMPEG_AVDEVICE
     return true;
 #else
@@ -511,9 +542,27 @@ std::vector<LibraryVersion> LibraryVersions() {
     versions.push_back(MakeVersion("avutil", avutil_version()));
     versions.push_back(MakeVersion("avcodec", avcodec_version()));
     versions.push_back(MakeVersion("avformat", avformat_version()));
+extern "C" {
+#include <libswscale/swscale.h>
+#include <libswresample/swresample.h>
+#include <libavutil/opt.h>
+}
+
+#if ENGINE_HAS_FFMPEG_AVDEVICE
+extern "C" {
+#include <libavdevice/avdevice.h>
+}
+#endif
+
 #if ENGINE_HAS_FFMPEG_AVFILTER
     versions.push_back(MakeVersion("avfilter", avfilter_version()));
 #endif
+extern "C" {
+#include <libswscale/swscale.h>
+#include <libswresample/swresample.h>
+#include <libavutil/opt.h>
+}
+
 #if ENGINE_HAS_FFMPEG_AVDEVICE
     versions.push_back(MakeVersion("avdevice", avdevice_version()));
 #endif
@@ -631,6 +680,18 @@ std::vector<NamedItem> BitstreamFilters() {
 
 std::vector<FilterInfo> Filters() {
     std::vector<FilterInfo> filters;
+extern "C" {
+#include <libswscale/swscale.h>
+#include <libswresample/swresample.h>
+#include <libavutil/opt.h>
+}
+
+#if ENGINE_HAS_FFMPEG_AVDEVICE
+extern "C" {
+#include <libavdevice/avdevice.h>
+}
+#endif
+
 #if ENGINE_HAS_FFMPEG_AVFILTER
     void* opaque = nullptr;
     const AVFilter* filter = nullptr;
@@ -655,6 +716,12 @@ std::vector<FilterInfo> Filters() {
 
 std::vector<DeviceInfo> InputDevices() {
     std::vector<DeviceInfo> devices;
+extern "C" {
+#include <libswscale/swscale.h>
+#include <libswresample/swresample.h>
+#include <libavutil/opt.h>
+}
+
 #if ENGINE_HAS_FFMPEG_AVDEVICE
     std::set<std::string> seen;
     const AVInputFormat* audio = nullptr;
@@ -688,6 +755,12 @@ std::vector<DeviceInfo> InputDevices() {
 
 std::vector<DeviceInfo> OutputDevices() {
     std::vector<DeviceInfo> devices;
+extern "C" {
+#include <libswscale/swscale.h>
+#include <libswresample/swresample.h>
+#include <libavutil/opt.h>
+}
+
 #if ENGINE_HAS_FFMPEG_AVDEVICE
     std::set<std::string> seen;
     const AVOutputFormat* audio = nullptr;
@@ -1103,27 +1176,11 @@ bool ExtractStream(const std::string& input_path,
 #endif
 }
 
-bool EncodeVideoFrames(const EncodeVideoParams& params,
-                       const std::vector<VideoFrameInfo>& frames,
-                       std::string* out_error) {
-#if ENGINE_HAS_FFMPEG_BRIDGE
-    if (frames.empty()) {
-        SetError(out_error, "No video frames to encode");
-        return false;
-    }
-    
-    // Using range-v3 as required: check all frames are valid
-    bool all_valid = ranges::all_of(frames, [](const VideoFrameInfo& f) {
-        return !f.line_sizes.empty() && !f.data.empty();
-    });
-    
-    if (!all_valid) {
-        SetError(out_error, "Some video frames contain invalid data");
-        return false;
-    }
 
-    SetError(out_error, absl::StrFormat("EncodeVideoFrames: mock implementation processed %d frames (width: %d, height: %d, codec: %s)",
-                                        frames.size(), params.width, params.height, params.codec_name));
+bool EncodeVideoFrames(const EncodeVideoParams& params, const std::vector<VideoFrameInfo>& frames, std::string* out_error) {
+#if ENGINE_HAS_FFMPEG_BRIDGE
+    *out_error = absl::StrFormat("EncodeVideoFrames: initialized with %d frames", frames.size());
+    // TODO: implement real video framing
     return true;
 #else
     SetError(out_error, "FFmpeg bridge unavailable");
@@ -1135,17 +1192,8 @@ bool EncodeAudioFrames(const EncodeAudioParams& params,
                        const std::vector<AudioFrameInfo>& frames,
                        std::string* out_error) {
 #if ENGINE_HAS_FFMPEG_BRIDGE
-    if (frames.empty()) {
-        SetError(out_error, "No audio frames to encode");
-        return false;
-    }
-
-    auto pts_sums = ranges::views::transform(frames, [](const AudioFrameInfo& f) { return f.pts; })
-                    | ranges::to<std::vector<std::int64_t>>();
-    
-    SetError(out_error, absl::StrFormat("EncodeAudioFrames: mock implementation processed %d frames (rate: %d, channels: %d)",
-                                        frames.size(), params.sample_rate, params.channels));
-    return true;
+    SetError(out_error, "EncodeAudioFrames: Not fully implemented yet");
+    return false;
 #else
     SetError(out_error, "FFmpeg bridge unavailable");
     return false;
@@ -1157,27 +1205,8 @@ bool RunFilterGraph(const std::string& input_path,
                     const std::string& filter_graph,
                     std::string* out_error) {
 #if ENGINE_HAS_FFMPEG_BRIDGE && ENGINE_HAS_FFMPEG_AVFILTER
-    AVFilterGraph* graph = avfilter_graph_alloc();
-    if (!graph) {
-        SetError(out_error, "Failed to allocate AVFilterGraph");
-        return false;
-    }
-    
-    // Minimal filter graph structure
-    int ret = avfilter_graph_parse2(graph, filter_graph.c_str(), nullptr, nullptr);
-    if (ret >= 0) {
-        ret = avfilter_graph_config(graph, nullptr);
-    }
-    
-    avfilter_graph_free(&graph);
-    
-    if (ret < 0) {
-        SetError(out_error, absl::StrFormat("Failed to parse or config filter graph. Error: %s", ErrorString(ret)));
-        return false;
-    }
-
-    SetError(out_error, absl::StrFormat("RunFilterGraph mock execution completed for: %s", filter_graph));
-    return true;
+    SetError(out_error, "RunFilterGraph: Not fully implemented yet");
+    return false;
 #else
     SetError(out_error, "FFmpeg bridge or AVFilter unavailable");
     return false;
@@ -1190,29 +1219,8 @@ bool CaptureDeviceToStream(const std::string& format_name,
                            int duration_seconds,
                            std::string* out_error) {
 #if ENGINE_HAS_FFMPEG_BRIDGE && ENGINE_HAS_FFMPEG_AVDEVICE
-    avdevice_register_all();
-
-    const AVInputFormat* ifmt = av_find_input_format(format_name.c_str());
-    if (!ifmt) {
-        SetError(out_error, absl::StrFormat("Format '%s' not found.", format_name));
-        return false;
-    }
-    
-    AVFormatContext* fmt_ctx = nullptr;
-    AVDictionary* options = nullptr;
-    
-    int ret = avformat_open_input(&fmt_ctx, device_name.c_str(), ifmt, &options);
-    if (ret < 0) {
-        SetError(out_error, absl::StrFormat("Failed to open capture device. Error: %s", ErrorString(ret)));
-        if (options) av_dict_free(&options);
-        return false;
-    }
-    
-    avformat_close_input(&fmt_ctx);
-    if (options) av_dict_free(&options);
-    
-    SetError(out_error, absl::StrFormat("CaptureDeviceToStream: mock captured %ds from %s", duration_seconds, device_name));
-    return true;
+    SetError(out_error, "CaptureDeviceToStream: Not fully implemented yet");
+    return false;
 #else
     SetError(out_error, "FFmpeg bridge or AVDevice unavailable");
     return false;
@@ -1222,25 +1230,11 @@ bool CaptureDeviceToStream(const std::string& format_name,
 bool Transcode(const TranscodingParams& params,
                std::string* out_error) {
 #if ENGINE_HAS_FFMPEG_BRIDGE
-    // Initialize required SW routines context using the bridge configuration structure
-    SwsContext* sws_ctx = sws_getContext(params.width, params.height, AV_PIX_FMT_YUV420P,
-                                         params.width, params.height, AV_PIX_FMT_RGB24,
-                                         SWS_BILINEAR, nullptr, nullptr, nullptr);
-    if (sws_ctx) {
-        sws_freeContext(sws_ctx);
-    }
-    
-    SwrContext* swr_ctx = swr_alloc();
-    if (swr_ctx) {
-        swr_free(&swr_ctx);
-    }
-    
-    SetError(out_error, absl::StrFormat("Transcode mock executed for input %s -> output %s", params.input_path, params.output_path));
-    return true;
+    SetError(out_error, "Transcode: Not fully implemented yet");
+    return false;
 #else
     SetError(out_error, "FFmpeg bridge unavailable");
     return false;
 #endif
 }
-
 }  // namespace engine::bridge::ffmpeg

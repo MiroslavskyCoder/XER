@@ -109,6 +109,40 @@ struct PacketInfo {
 	bool corrupt = false;
 };
 
+
+struct EncodeVideoParams {
+    std::string output_path;
+    std::string codec_name;
+    int width = 0;
+    int height = 0;
+    std::string pixel_format;
+    int fps_num = 25;
+    int fps_den = 1;
+    int bit_rate = 0;
+};
+
+struct EncodeAudioParams {
+    std::string output_path;
+    std::string codec_name;
+    int sample_rate = 0;
+    int channels = 0;
+    std::string sample_format;
+    int bit_rate = 0;
+};
+
+struct TranscodingParams {
+    std::string input_path;
+    std::string output_path;
+    std::string video_codec;
+    std::string audio_codec;
+    int video_bitrate = 0;
+    int audio_bitrate = 0;
+    int width = 0;
+    int height = 0;
+    int sample_rate = 0;
+    int channels = 0;
+};
+
 struct VideoFrameInfo {
 	int stream_index = -1;
 	int width = 0;
@@ -172,6 +206,25 @@ bool DecodeAudioFrames(const std::string& path,
 bool RemuxCopy(const std::string& input_path,
 			   const std::string& output_path,
 			   std::string* out_error);
+
+bool EncodeVideoFrames(const EncodeVideoParams& params,
+                       const std::vector<VideoFrameInfo>& frames,
+                       std::string* out_error);
+bool EncodeAudioFrames(const EncodeAudioParams& params,
+                       const std::vector<AudioFrameInfo>& frames,
+                       std::string* out_error);
+bool RunFilterGraph(const std::string& input_path,
+                    const std::string& output_path,
+                    const std::string& filter_graph,
+                    std::string* out_error);
+bool CaptureDeviceToStream(const std::string& format_name,
+                           const std::string& device_name,
+                           const std::string& output_path,
+                           int duration_seconds,
+                           std::string* out_error);
+bool Transcode(const TranscodingParams& params,
+               std::string* out_error);
+
 bool ExtractStream(const std::string& input_path,
 				   int stream_index,
 				   const std::string& output_path,
