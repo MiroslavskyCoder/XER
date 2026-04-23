@@ -1,0 +1,133 @@
+# ============================================================
+# EngineBuilder main executable
+# ============================================================
+
+add_executable(EngineBuilder ${ENGINE_PROJECT_CC})
+target_sources(EngineBuilder PRIVATE ${ENGINE_PROJECT_H})
+
+target_include_directories(EngineBuilder PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${LIBXML2_INCLUDE_DIRS}
+    ${LLVM_INCLUDE_DIRS}
+    ${NODE_INCLUDE_DIR}
+    ${CURL_INCLUDE_DIRS}
+    ${OPENSSL_INCLUDE_DIR}
+    ${ZLIB_INCLUDE_DIRS}
+    ${LLVM_DEFINITIONS})
+
+if(ENGINE_HAS_ZSTD)
+    target_include_directories(EngineBuilder PRIVATE ${ZSTD_INCLUDE_DIR})
+endif()
+if(ENGINE_HAS_BROTLI)
+    target_include_directories(EngineBuilder PRIVATE ${BROTLI_INCLUDE_DIR})
+endif()
+
+target_compile_definitions(EngineBuilder PRIVATE
+    ${LLVM_DEFINITIONS}
+    ENGINE_HAS_ZSTD=${ENGINE_HAS_ZSTD}
+    ENGINE_HAS_BROTLI=${ENGINE_HAS_BROTLI}
+    ENGINE_HAS_SQLITE3=${ENGINE_HAS_SQLITE3}
+    ENGINE_HAS_QT6=${ENGINE_HAS_QT6})
+
+# ── Required link deps ───────────────────────────────────────
+target_link_libraries(EngineBuilder PRIVATE
+    EngineBuilderAsyncIO
+    EngineJavaScript
+    ${NODE_LIBRARY}
+    CURL::libcurl
+    OpenSSL::Crypto
+    ZLIB::ZLIB
+    absl::strings
+    absl::str_format
+    absl::hash
+    ${LLVM_ALL_COMPONENT_LIBS}
+    ${CLANG_AVAILABLE_LIBS})
+
+# ── Optional system libs ─────────────────────────────────────
+if(ENGINE_HAS_ZSTD)
+    target_link_libraries(EngineBuilder PRIVATE ${ZSTD_LIBRARY})
+endif()
+
+if(ENGINE_HAS_BROTLI)
+    target_link_libraries(EngineBuilder PRIVATE
+        ${BROTLI_ENC_LIBRARY}
+        ${BROTLI_DEC_LIBRARY}
+        ${BROTLI_COMMON_LIBRARY})
+endif()
+
+if(TARGET LibXml2::LibXml2)
+    target_link_libraries(EngineBuilder PRIVATE LibXml2::LibXml2)
+else()
+    target_link_libraries(EngineBuilder PRIVATE ${LIBXML2_LIBRARIES})
+endif()
+
+if(SQLite3_FOUND)
+    target_link_libraries(EngineBuilder PRIVATE SQLite::SQLite3)
+endif()
+
+# libuv
+if(libuv_FOUND AND TARGET libuv::libuv)
+    target_link_libraries(EngineBuilder PRIVATE libuv::libuv)
+else()
+    pkg_check_modules(LIBUV libuv QUIET)
+    if(LIBUV_FOUND)
+        target_include_directories(EngineBuilder PRIVATE ${LIBUV_INCLUDE_DIRS})
+        target_link_libraries(EngineBuilder PRIVATE ${LIBUV_LIBRARIES})
+    endif()
+endif()
+
+# jsoncpp
+if(TARGET JsonCpp::JsonCpp)
+    target_link_libraries(EngineBuilder PRIVATE JsonCpp::JsonCpp)
+elseif(TARGET jsoncpp_lib)
+    target_link_libraries(EngineBuilder PRIVATE jsoncpp_lib)
+else()
+    pkg_check_modules(JSONCPP jsoncpp QUIET)
+    if(JSONCPP_FOUND)
+        target_include_directories(EngineBuilder PRIVATE ${JSONCPP_INCLUDE_DIRS})
+        target_link_libraries(EngineBuilder PRIVATE ${JSONCPP_LIBRARIES})
+    endif()
+endif()
+
+# re2
+if(TARGET re2::re2)
+    target_link_libraries(EngineBuilder PRIVATE re2::re2)
+else()
+    pkg_check_modules(RE2 re2 QUIET)
+    if(RE2_FOUND)
+        target_include_directories(EngineBuilder PRIVATE ${RE2_INCLUDE_DIRS})
+        target_link_libraries(EngineBuilder PRIVATE ${RE2_LIBRARIES})
+    endif()
+endif()
+
+# range-v3
+if(TARGET range-v3::range-v3)
+    target_link_libraries(EngineBuilder PRIVATE range-v3::range-v3)
+elseif(TARGET range-v3)
+    target_link_libraries(EngineBuilder PRIVATE range-v3)
+else()
+    pkg_check_modules(RANGEV3 range-v3 QUIET)
+    if(RANGEV3_FOUND)
+        target_include_directories(EngineBuilder PRIVATE ${RANGEV3_INCLUDE_DIRS})
+        target_link_libraries(EngineBuilder PRIVATE ${RANGEV3_LIBRARIES})
+    endif()
+endif()
+
+# ── Bridge static libs ───────────────────────────────────────
+foreach(_bridge EngineQt6Bridge EngineJavaScript
+                EngineBridgeOpenCV EngineBridgeCuda EngineBridgeCudnn
+                EngineBridgeSkia EngineBridgeFfmpeg EngineBridgeAngle)
+    if(TARGET ${_bridge})
+        target_link_libraries(EngineBuilder PRIVATE ${_bridge})
+    endif()
+endforeach()
+
+if(Qt6Core_FOUND)
+    target_link_libraries(EngineBuilder PRIVATE Qt6::Core)
+endif()
+
+# ── Interface alias for all Qt6 targets ──────────────────────
+if(ENGINE_QT6_FOUND_TARGETS)
+    add_library(EngineQt6All INTERFACE)
+    target_link_libraries(EngineQt6All INTERFACE ${ENGINE_QT6_FOUND_TARGETS})
+endif()

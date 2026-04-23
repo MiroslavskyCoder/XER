@@ -1,0 +1,1098 @@
+#include "wrapper/ffmpeg/ffmpeg_engine_bridge.h"
+
+#include <algorithm>
+#include <set>
+#include <sstream>
+#include <string_view>
+
+#if ENGINE_HAS_FFMPEG_BRIDGE
+extern "C" {
+#include <libavcodec/avcodec.h>
+#include <libavcodec/bsf.h>
+#include <libavformat/avformat.h>
+#include <libavformat/avio.h>
+#include <libavutil/avutil.h>
+#include <libavutil/dict.h>
+#include <libavutil/imgutils.h>
+#include <libavutil/pixdesc.h>
+#include <libavutil/samplefmt.h>
+}
+#endif
+
+#if ENGINE_HAS_FFMPEG_AVFILTER
+extern "C" {
+#include <libavfilter/avfilter.h>
+}
+#endif
+
+#if ENGINE_HAS_FFMPEG_AVDEVICE
+extern "C" {
+#include <libavdevice/avdevice.h>
+}
+#endif
+
+namespace engine::bridge::ffmpeg {
+
+namespace {
+
+#if ENGINE_HAS_FFMPEG_BRIDGE
+#ifndef AV_CODEC_CAP_INTRA_ONLY
+#define AV_CODEC_CAP_INTRA_ONLY 0
+#endif
+#ifndef AV_CODEC_CAP_LOSSY
+#define AV_CODEC_CAP_LOSSY 0
+#endif
+#ifndef AV_CODEC_CAP_LOSSLESS
+#define AV_CODEC_CAP_LOSSLESS 0
+#endif
+#endif
+
+#if ENGINE_HAS_FFMPEG_BRIDGE
+std::string ErrorString(int error_code) {
+    char buffer[AV_ERROR_MAX_STRING_SIZE] = {};
+    av_strerror(error_code, buffer, sizeof(buffer));
+    return std::string(buffer);
+}
+
+void SetError(std::string* out_error, const std::string& message) {
+    if (out_error != nullptr) {
+        *out_error = message;
+    }
+}
+
+LibraryVersion MakeVersion(std::string name, unsigned version) {
+    LibraryVersion result;
+    result.name = std::move(name);
+    result.version = version;
+    result.major = static_cast<int>((version >> 16U) & 0xFFU);
+    result.minor = static_cast<int>((version >> 8U) & 0xFFU);
+    result.micro = static_cast<int>(version & 0xFFU);
+    result.version_text = std::to_string(result.major) + "." +
+                          std::to_string(result.minor) + "." +
+                          std::to_string(result.micro);
+    return result;
+}
+
+std::string MediaTypeName(AVMediaType media_type) {
+    const char* value = av_get_media_type_string(media_type);
+    return value != nullptr ? std::string(value) : std::string("unknown");
+}
+
+std::vector<MetadataEntry> ReadMetadata(const AVDictionary* dictionary) {
+    std::vector<MetadataEntry> entries;
+    AVDictionaryEntry* item = nullptr;
+    while ((item = av_dict_get(dictionary, "", item, AV_DICT_IGNORE_SUFFIX)) != nullptr) {
+        entries.push_back({item->key != nullptr ? item->key : "",
+                           item->value != nullptr ? item->value : ""});
+    }
+    return entries;
+}
+
+std::string SampleFormatName(int format) {
+    if (format < 0) {
+        return "";
+    }
+    const char* name = av_get_sample_fmt_name(static_cast<AVSampleFormat>(format));
+    return name != nullptr ? std::string(name) : std::string();
+}
+
+std::string PixelFormatName(int format) {
+    if (format < 0) {
+        return "";
+    }
+    const char* name = av_get_pix_fmt_name(static_cast<AVPixelFormat>(format));
+    return name != nullptr ? std::string(name) : std::string();
+}
+
+StreamInfo MakeStreamInfo(const AVStream* stream) {
+    StreamInfo info;
+    if (stream == nullptr || stream->codecpar == nullptr) {
+        return info;
+    }
+
+    const AVCodecParameters* codecpar = stream->codecpar;
+    const AVCodec* codec = avcodec_find_decoder(codecpar->codec_id);
+
+    info.index = stream->index;
+    info.media_type = MediaTypeName(codecpar->codec_type);
+    info.codec_id = static_cast<int>(codecpar->codec_id);
+    info.codec_name = avcodec_get_name(codecpar->codec_id);
+    info.codec_long_name = (codec != nullptr && codec->long_name != nullptr) ? codec->long_name : "";
+    info.width = codecpar->width;
+    info.height = codecpar->height;
+    info.sample_rate = codecpar->sample_rate;
+#if LIBAVCODEC_VERSION_MAJOR >= 59
+    info.channels = codecpar->ch_layout.nb_channels;
+    info.channel_layout = static_cast<std::int64_t>(codecpar->ch_layout.u.mask);
+#else
+    info.channels = codecpar->channels;
+    info.channel_layout = static_cast<std::int64_t>(codecpar->channel_layout);
+#endif
+    info.sample_format = SampleFormatName(codecpar->format);
+    info.pixel_format = PixelFormatName(codecpar->format);
+    info.time_base_num = stream->time_base.num;
+    info.time_base_den = stream->time_base.den;
+    info.duration = stream->duration;
+    info.start_time = stream->start_time;
+    info.bit_rate = codecpar->bit_rate;
+    info.frame_count = stream->nb_frames;
+    info.metadata = ReadMetadata(stream->metadata);
+    for (const auto& entry : info.metadata) {
+        if (entry.key == "language") {
+            info.language = entry.value;
+            break;
+        }
+    }
+    return info;
+}
+
+bool OpenInputContext(const std::string& path,
+                      AVFormatContext** out_context,
+                      std::string* out_error) {
+    AVFormatContext* format_context = nullptr;
+    int result = avformat_open_input(&format_context, path.c_str(), nullptr, nullptr);
+    if (result < 0) {
+        SetError(out_error, "avformat_open_input failed: " + ErrorString(result));
+        return false;
+    }
+    result = avformat_find_stream_info(format_context, nullptr);
+    if (result < 0) {
+        SetError(out_error, "avformat_find_stream_info failed: " + ErrorString(result));
+        avformat_close_input(&format_context);
+        return false;
+    }
+    *out_context = format_context;
+    return true;
+}
+
+bool OpenDecoderContext(AVFormatContext* format_context,
+                        AVMediaType media_type,
+                        int requested_stream_index,
+                        int* out_stream_index,
+                        AVCodecContext** out_codec_context,
+                        std::string* out_error) {
+    int stream_index = requested_stream_index;
+    if (stream_index < 0) {
+        stream_index = av_find_best_stream(format_context, media_type, -1, -1, nullptr, 0);
+        if (stream_index < 0) {
+            SetError(out_error, "av_find_best_stream failed: " + ErrorString(stream_index));
+            return false;
+        }
+    }
+    if (stream_index >= static_cast<int>(format_context->nb_streams)) {
+        SetError(out_error, "Stream index out of range");
+        return false;
+    }
+
+    AVStream* stream = format_context->streams[stream_index];
+    AVCodecParameters* codecpar = stream->codecpar;
+    if (codecpar == nullptr) {
+        SetError(out_error, "Stream codec parameters are missing");
+        return false;
+    }
+    if (codecpar->codec_type != media_type) {
+        SetError(out_error, "Requested stream does not match requested media type");
+        return false;
+    }
+
+    const AVCodec* codec = avcodec_find_decoder(codecpar->codec_id);
+    if (codec == nullptr) {
+        SetError(out_error, "Decoder not found for stream codec");
+        return false;
+    }
+
+    AVCodecContext* codec_context = avcodec_alloc_context3(codec);
+    if (codec_context == nullptr) {
+        SetError(out_error, "avcodec_alloc_context3 failed");
+        return false;
+    }
+    int result = avcodec_parameters_to_context(codec_context, codecpar);
+    if (result < 0) {
+        avcodec_free_context(&codec_context);
+        SetError(out_error, "avcodec_parameters_to_context failed: " + ErrorString(result));
+        return false;
+    }
+    result = avcodec_open2(codec_context, codec, nullptr);
+    if (result < 0) {
+        avcodec_free_context(&codec_context);
+        SetError(out_error, "avcodec_open2 failed: " + ErrorString(result));
+        return false;
+    }
+
+    *out_stream_index = stream_index;
+    *out_codec_context = codec_context;
+    return true;
+}
+
+std::string PictureTypeName(AVPictureType picture_type) {
+    switch (picture_type) {
+        case AV_PICTURE_TYPE_I: return "I";
+        case AV_PICTURE_TYPE_P: return "P";
+        case AV_PICTURE_TYPE_B: return "B";
+        case AV_PICTURE_TYPE_S: return "S";
+        case AV_PICTURE_TYPE_SI: return "SI";
+        case AV_PICTURE_TYPE_SP: return "SP";
+        case AV_PICTURE_TYPE_BI: return "BI";
+        case AV_PICTURE_TYPE_NONE:
+        default:
+            return "NONE";
+    }
+}
+
+bool CollectVideoFrame(const AVFrame* frame,
+                       int stream_index,
+                       std::vector<VideoFrameInfo>* out_frames,
+                       std::string* out_error) {
+    const int size = av_image_get_buffer_size(static_cast<AVPixelFormat>(frame->format),
+                                              frame->width,
+                                              frame->height,
+                                              1);
+    if (size < 0) {
+        SetError(out_error, "av_image_get_buffer_size failed: " + ErrorString(size));
+        return false;
+    }
+
+    VideoFrameInfo info;
+    info.stream_index = stream_index;
+    info.width = frame->width;
+    info.height = frame->height;
+    info.pixel_format = PixelFormatName(frame->format);
+    info.picture_type = PictureTypeName(frame->pict_type);
+    info.pts = frame->pts;
+    info.best_effort_timestamp = frame->best_effort_timestamp;
+    info.duration = frame->pkt_duration;
+    info.key_frame = frame->key_frame != 0;
+    info.line_sizes.assign(frame->linesize, frame->linesize + AV_NUM_DATA_POINTERS);
+    info.data.resize(static_cast<size_t>(size));
+
+    const int copy_result = av_image_copy_to_buffer(info.data.data(),
+                                                    size,
+                                                    frame->data,
+                                                    frame->linesize,
+                                                    static_cast<AVPixelFormat>(frame->format),
+                                                    frame->width,
+                                                    frame->height,
+                                                    1);
+    if (copy_result < 0) {
+        SetError(out_error, "av_image_copy_to_buffer failed: " + ErrorString(copy_result));
+        return false;
+    }
+    out_frames->push_back(std::move(info));
+    return true;
+}
+
+bool CollectAudioFrame(const AVFrame* frame,
+                       int stream_index,
+                       std::vector<AudioFrameInfo>* out_frames,
+                       std::string* out_error) {
+    const AVSampleFormat sample_format = static_cast<AVSampleFormat>(frame->format);
+    const int bytes_per_sample = av_get_bytes_per_sample(sample_format);
+    if (bytes_per_sample <= 0) {
+        SetError(out_error, "av_get_bytes_per_sample failed");
+        return false;
+    }
+    const bool planar = av_sample_fmt_is_planar(sample_format) != 0;
+#if LIBAVUTIL_VERSION_MAJOR >= 57
+    const int channels = frame->ch_layout.nb_channels;
+#else
+    const int channels = frame->channels;
+#endif
+    const int plane_count = planar ? std::max(channels, 0) : 1;
+    const int plane_size = frame->nb_samples * bytes_per_sample * (planar ? 1 : std::max(channels, 0));
+
+    AudioFrameInfo info;
+    info.stream_index = stream_index;
+    info.sample_rate = frame->sample_rate;
+    info.channels = channels;
+    info.sample_count = frame->nb_samples;
+    info.planar = planar;
+    info.sample_format = SampleFormatName(frame->format);
+    info.pts = frame->pts;
+    info.best_effort_timestamp = frame->best_effort_timestamp;
+    info.plane_sizes.reserve(static_cast<size_t>(plane_count));
+    info.data.reserve(static_cast<size_t>(std::max(plane_count, 0) * std::max(plane_size, 0)));
+
+    for (int plane = 0; plane < plane_count; ++plane) {
+        if (frame->extended_data == nullptr || frame->extended_data[plane] == nullptr) {
+            SetError(out_error, "Audio frame plane data is missing");
+            return false;
+        }
+        info.plane_sizes.push_back(plane_size);
+        const uint8_t* begin = frame->extended_data[plane];
+        info.data.insert(info.data.end(), begin, begin + plane_size);
+    }
+
+    out_frames->push_back(std::move(info));
+    return true;
+}
+
+template <typename Collector>
+bool DecodeFramesImpl(const std::string& path,
+                      AVMediaType media_type,
+                      int requested_stream_index,
+                      int max_frames,
+                      Collector collector,
+                      std::string* out_error) {
+    AVFormatContext* format_context = nullptr;
+    if (!OpenInputContext(path, &format_context, out_error)) {
+        return false;
+    }
+
+    int stream_index = -1;
+    AVCodecContext* codec_context = nullptr;
+    if (!OpenDecoderContext(format_context, media_type, requested_stream_index, &stream_index, &codec_context, out_error)) {
+        avformat_close_input(&format_context);
+        return false;
+    }
+
+    AVPacket* packet = av_packet_alloc();
+    AVFrame* frame = av_frame_alloc();
+    if (packet == nullptr || frame == nullptr) {
+        av_packet_free(&packet);
+        av_frame_free(&frame);
+        avcodec_free_context(&codec_context);
+        avformat_close_input(&format_context);
+        SetError(out_error, "Failed to allocate AVPacket/AVFrame");
+        return false;
+    }
+
+    const int frame_limit = max_frames <= 0 ? 0 : max_frames;
+    int frame_count = 0;
+    int result = 0;
+    bool success = true;
+
+    while (frame_limit == 0 || frame_count < frame_limit) {
+        result = av_read_frame(format_context, packet);
+        if (result == AVERROR_EOF) {
+            break;
+        }
+        if (result < 0) {
+            SetError(out_error, "av_read_frame failed: " + ErrorString(result));
+            success = false;
+            break;
+        }
+        if (packet->stream_index != stream_index) {
+            av_packet_unref(packet);
+            continue;
+        }
+
+        result = avcodec_send_packet(codec_context, packet);
+        av_packet_unref(packet);
+        if (result < 0) {
+            SetError(out_error, "avcodec_send_packet failed: " + ErrorString(result));
+            success = false;
+            break;
+        }
+
+        while (frame_limit == 0 || frame_count < frame_limit) {
+            result = avcodec_receive_frame(codec_context, frame);
+            if (result == AVERROR(EAGAIN) || result == AVERROR_EOF) {
+                break;
+            }
+            if (result < 0) {
+                SetError(out_error, "avcodec_receive_frame failed: " + ErrorString(result));
+                success = false;
+                break;
+            }
+            if (!collector(frame, stream_index, out_error)) {
+                av_frame_unref(frame);
+                success = false;
+                break;
+            }
+            ++frame_count;
+            av_frame_unref(frame);
+        }
+        if (!success) {
+            break;
+        }
+    }
+
+    if (success && (frame_limit == 0 || frame_count < frame_limit)) {
+        result = avcodec_send_packet(codec_context, nullptr);
+        if (result >= 0) {
+            while (frame_limit == 0 || frame_count < frame_limit) {
+                result = avcodec_receive_frame(codec_context, frame);
+                if (result == AVERROR(EAGAIN) || result == AVERROR_EOF) {
+                    break;
+                }
+                if (result < 0) {
+                    SetError(out_error, "avcodec_receive_frame flush failed: " + ErrorString(result));
+                    success = false;
+                    break;
+                }
+                if (!collector(frame, stream_index, out_error)) {
+                    av_frame_unref(frame);
+                    success = false;
+                    break;
+                }
+                ++frame_count;
+                av_frame_unref(frame);
+            }
+        } else {
+            SetError(out_error, "avcodec_send_packet flush failed: " + ErrorString(result));
+            success = false;
+        }
+    }
+
+    av_packet_free(&packet);
+    av_frame_free(&frame);
+    avcodec_free_context(&codec_context);
+    avformat_close_input(&format_context);
+    return success;
+}
+
+#endif
+
+}  // namespace
+
+bool IsAvailable() {
+#if ENGINE_HAS_FFMPEG_BRIDGE
+    return true;
+#else
+    return false;
+#endif
+}
+
+bool HasFilterLibrary() {
+#if ENGINE_HAS_FFMPEG_AVFILTER
+    return true;
+#else
+    return false;
+#endif
+}
+
+bool HasDeviceLibrary() {
+#if ENGINE_HAS_FFMPEG_AVDEVICE
+    return true;
+#else
+    return false;
+#endif
+}
+
+std::string Summary() {
+    if (!IsAvailable()) {
+        return "FFmpeg bridge unavailable";
+    }
+    std::ostringstream stream;
+    stream << "FFmpeg bridge enabled";
+    stream << " (avcodec+avformat+avutil";
+    stream << ", avfilter=" << (HasFilterLibrary() ? "on" : "off");
+    stream << ", avdevice=" << (HasDeviceLibrary() ? "on" : "off") << ")";
+    return stream.str();
+}
+
+std::string Configuration() {
+#if ENGINE_HAS_FFMPEG_BRIDGE
+    return avcodec_configuration();
+#else
+    return "";
+#endif
+}
+
+std::string License() {
+#if ENGINE_HAS_FFMPEG_BRIDGE
+    return avcodec_license();
+#else
+    return "";
+#endif
+}
+
+std::vector<LibraryVersion> LibraryVersions() {
+    std::vector<LibraryVersion> versions;
+#if ENGINE_HAS_FFMPEG_BRIDGE
+    versions.push_back(MakeVersion("avutil", avutil_version()));
+    versions.push_back(MakeVersion("avcodec", avcodec_version()));
+    versions.push_back(MakeVersion("avformat", avformat_version()));
+#if ENGINE_HAS_FFMPEG_AVFILTER
+    versions.push_back(MakeVersion("avfilter", avfilter_version()));
+#endif
+#if ENGINE_HAS_FFMPEG_AVDEVICE
+    versions.push_back(MakeVersion("avdevice", avdevice_version()));
+#endif
+#endif
+    return versions;
+}
+
+std::vector<ProtocolInfo> Protocols() {
+    std::vector<ProtocolInfo> protocols;
+#if ENGINE_HAS_FFMPEG_BRIDGE
+    std::set<std::string> seen;
+    void* opaque = nullptr;
+    const char* name = nullptr;
+    while ((name = avio_enum_protocols(&opaque, 0)) != nullptr) {
+        ProtocolInfo info;
+        info.name = name;
+        info.input = true;
+        auto [it, inserted] = seen.insert(info.name);
+        if (inserted) {
+            protocols.push_back(info);
+        }
+    }
+
+    opaque = nullptr;
+    while ((name = avio_enum_protocols(&opaque, 1)) != nullptr) {
+        auto found = std::find_if(protocols.begin(), protocols.end(),
+                                  [name](const ProtocolInfo& info) { return info.name == name; });
+        if (found == protocols.end()) {
+            ProtocolInfo info;
+            info.name = name;
+            info.output = true;
+            protocols.push_back(info);
+        } else {
+            found->output = true;
+        }
+    }
+    std::sort(protocols.begin(), protocols.end(),
+              [](const ProtocolInfo& left, const ProtocolInfo& right) {
+                  return left.name < right.name;
+              });
+#endif
+    return protocols;
+}
+
+std::vector<NamedItem> InputFormats() {
+    std::vector<NamedItem> items;
+#if ENGINE_HAS_FFMPEG_BRIDGE
+    void* opaque = nullptr;
+    const AVInputFormat* format = nullptr;
+    while ((format = av_demuxer_iterate(&opaque)) != nullptr) {
+        items.push_back({format->name != nullptr ? format->name : "",
+                         format->long_name != nullptr ? format->long_name : ""});
+    }
+    std::sort(items.begin(), items.end(), [](const NamedItem& left, const NamedItem& right) {
+        return left.name < right.name;
+    });
+#endif
+    return items;
+}
+
+std::vector<NamedItem> OutputFormats() {
+    std::vector<NamedItem> items;
+#if ENGINE_HAS_FFMPEG_BRIDGE
+    void* opaque = nullptr;
+    const AVOutputFormat* format = nullptr;
+    while ((format = av_muxer_iterate(&opaque)) != nullptr) {
+        items.push_back({format->name != nullptr ? format->name : "",
+                         format->long_name != nullptr ? format->long_name : ""});
+    }
+    std::sort(items.begin(), items.end(), [](const NamedItem& left, const NamedItem& right) {
+        return left.name < right.name;
+    });
+#endif
+    return items;
+}
+
+std::vector<CodecInfo> Codecs() {
+    std::vector<CodecInfo> codecs;
+#if ENGINE_HAS_FFMPEG_BRIDGE
+    void* opaque = nullptr;
+    const AVCodec* codec = nullptr;
+    while ((codec = av_codec_iterate(&opaque)) != nullptr) {
+        CodecInfo info;
+        info.name = codec->name != nullptr ? codec->name : "";
+        info.long_name = codec->long_name != nullptr ? codec->long_name : "";
+        info.media_type = MediaTypeName(codec->type);
+        info.encoder = av_codec_is_encoder(codec) != 0;
+        info.decoder = av_codec_is_decoder(codec) != 0;
+        info.intra_only = (codec->capabilities & AV_CODEC_CAP_INTRA_ONLY) != 0;
+        info.lossy = (codec->capabilities & AV_CODEC_CAP_LOSSY) != 0;
+        info.lossless = (codec->capabilities & AV_CODEC_CAP_LOSSLESS) != 0;
+        codecs.push_back(info);
+    }
+    std::sort(codecs.begin(), codecs.end(), [](const CodecInfo& left, const CodecInfo& right) {
+        return left.name < right.name;
+    });
+#endif
+    return codecs;
+}
+
+std::vector<NamedItem> BitstreamFilters() {
+    std::vector<NamedItem> items;
+#if ENGINE_HAS_FFMPEG_BRIDGE
+    void* opaque = nullptr;
+    const AVBitStreamFilter* filter = nullptr;
+    while ((filter = av_bsf_iterate(&opaque)) != nullptr) {
+        items.push_back({filter->name != nullptr ? filter->name : "", ""});
+    }
+    std::sort(items.begin(), items.end(), [](const NamedItem& left, const NamedItem& right) {
+        return left.name < right.name;
+    });
+#endif
+    return items;
+}
+
+std::vector<FilterInfo> Filters() {
+    std::vector<FilterInfo> filters;
+#if ENGINE_HAS_FFMPEG_AVFILTER
+    void* opaque = nullptr;
+    const AVFilter* filter = nullptr;
+    while ((filter = av_filter_iterate(&opaque)) != nullptr) {
+        FilterInfo info;
+        info.name = filter->name != nullptr ? filter->name : "";
+        info.description = filter->description != nullptr ? filter->description : "";
+        info.dynamic_inputs = (filter->flags & AVFILTER_FLAG_DYNAMIC_INPUTS) != 0;
+        info.dynamic_outputs = (filter->flags & AVFILTER_FLAG_DYNAMIC_OUTPUTS) != 0;
+        info.slice_threads = (filter->flags & AVFILTER_FLAG_SLICE_THREADS) != 0;
+        info.timeline_generic = (filter->flags & AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC) != 0;
+        info.timeline_internal = (filter->flags & AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL) != 0;
+        info.timeline_support = (filter->flags & AVFILTER_FLAG_SUPPORT_TIMELINE) != 0;
+        filters.push_back(info);
+    }
+    std::sort(filters.begin(), filters.end(), [](const FilterInfo& left, const FilterInfo& right) {
+        return left.name < right.name;
+    });
+#endif
+    return filters;
+}
+
+std::vector<DeviceInfo> InputDevices() {
+    std::vector<DeviceInfo> devices;
+#if ENGINE_HAS_FFMPEG_AVDEVICE
+    std::set<std::string> seen;
+    const AVInputFormat* audio = nullptr;
+    while ((audio = av_input_audio_device_next(audio)) != nullptr) {
+        DeviceInfo info;
+        info.name = audio->name != nullptr ? audio->name : "";
+        info.description = audio->long_name != nullptr ? audio->long_name : "";
+        info.media_type = "audio";
+        info.input = true;
+        if (seen.insert(info.media_type + ":" + info.name).second) {
+            devices.push_back(info);
+        }
+    }
+    const AVInputFormat* video = nullptr;
+    while ((video = av_input_video_device_next(video)) != nullptr) {
+        DeviceInfo info;
+        info.name = video->name != nullptr ? video->name : "";
+        info.description = video->long_name != nullptr ? video->long_name : "";
+        info.media_type = "video";
+        info.input = true;
+        if (seen.insert(info.media_type + ":" + info.name).second) {
+            devices.push_back(info);
+        }
+    }
+    std::sort(devices.begin(), devices.end(), [](const DeviceInfo& left, const DeviceInfo& right) {
+        return left.name < right.name;
+    });
+#endif
+    return devices;
+}
+
+std::vector<DeviceInfo> OutputDevices() {
+    std::vector<DeviceInfo> devices;
+#if ENGINE_HAS_FFMPEG_AVDEVICE
+    std::set<std::string> seen;
+    const AVOutputFormat* audio = nullptr;
+    while ((audio = av_output_audio_device_next(audio)) != nullptr) {
+        DeviceInfo info;
+        info.name = audio->name != nullptr ? audio->name : "";
+        info.description = audio->long_name != nullptr ? audio->long_name : "";
+        info.media_type = "audio";
+        info.output = true;
+        if (seen.insert(info.media_type + ":" + info.name).second) {
+            devices.push_back(info);
+        }
+    }
+    const AVOutputFormat* video = nullptr;
+    while ((video = av_output_video_device_next(video)) != nullptr) {
+        DeviceInfo info;
+        info.name = video->name != nullptr ? video->name : "";
+        info.description = video->long_name != nullptr ? video->long_name : "";
+        info.media_type = "video";
+        info.output = true;
+        if (seen.insert(info.media_type + ":" + info.name).second) {
+            devices.push_back(info);
+        }
+    }
+    std::sort(devices.begin(), devices.end(), [](const DeviceInfo& left, const DeviceInfo& right) {
+        return left.name < right.name;
+    });
+#endif
+    return devices;
+}
+
+bool ProbeMedia(const std::string& path, MediaInfo* out_info, std::string* out_error) {
+#if ENGINE_HAS_FFMPEG_BRIDGE
+    if (out_info == nullptr) {
+        SetError(out_error, "Output MediaInfo pointer is null");
+        return false;
+    }
+    AVFormatContext* format_context = nullptr;
+    if (!OpenInputContext(path, &format_context, out_error)) {
+        return false;
+    }
+
+    MediaInfo info;
+    info.path = path;
+    info.format_name = (format_context->iformat != nullptr && format_context->iformat->name != nullptr)
+                           ? format_context->iformat->name
+                           : "";
+    info.format_long_name = (format_context->iformat != nullptr && format_context->iformat->long_name != nullptr)
+                                ? format_context->iformat->long_name
+                                : "";
+    info.duration = format_context->duration;
+    info.start_time = format_context->start_time;
+    info.size = format_context->pb != nullptr ? avio_size(format_context->pb) : 0;
+    info.bit_rate = format_context->bit_rate;
+    info.stream_count = static_cast<int>(format_context->nb_streams);
+    info.metadata = ReadMetadata(format_context->metadata);
+    for (unsigned i = 0; i < format_context->nb_streams; ++i) {
+        info.streams.push_back(MakeStreamInfo(format_context->streams[i]));
+    }
+
+    avformat_close_input(&format_context);
+    *out_info = std::move(info);
+    return true;
+#else
+    (void)path;
+    (void)out_info;
+    SetError(out_error, "FFmpeg bridge unavailable");
+    return false;
+#endif
+}
+
+bool ReadPackets(const std::string& path,
+                 int max_packets,
+                 std::vector<PacketInfo>* out_packets,
+                 std::string* out_error) {
+#if ENGINE_HAS_FFMPEG_BRIDGE
+    if (out_packets == nullptr) {
+        SetError(out_error, "Output packet list pointer is null");
+        return false;
+    }
+    AVFormatContext* format_context = nullptr;
+    if (!OpenInputContext(path, &format_context, out_error)) {
+        return false;
+    }
+
+    std::vector<PacketInfo> packets;
+    packets.reserve(static_cast<size_t>(std::max(max_packets, 0)));
+    AVPacket packet;
+    av_init_packet(&packet);
+
+    const int packet_limit = max_packets <= 0 ? 0 : max_packets;
+    while (packet_limit == 0 || static_cast<int>(packets.size()) < packet_limit) {
+        int result = av_read_frame(format_context, &packet);
+        if (result == AVERROR_EOF) {
+            break;
+        }
+        if (result < 0) {
+            av_packet_unref(&packet);
+            avformat_close_input(&format_context);
+            SetError(out_error, "av_read_frame failed: " + ErrorString(result));
+            return false;
+        }
+        PacketInfo info;
+        info.stream_index = packet.stream_index;
+        if (packet.stream_index >= 0 && packet.stream_index < static_cast<int>(format_context->nb_streams)) {
+            info.media_type = MediaTypeName(format_context->streams[packet.stream_index]->codecpar->codec_type);
+        }
+        info.pts = packet.pts;
+        info.dts = packet.dts;
+        info.duration = packet.duration;
+        info.pos = packet.pos;
+        info.size = packet.size;
+        info.key_frame = (packet.flags & AV_PKT_FLAG_KEY) != 0;
+        info.corrupt = (packet.flags & AV_PKT_FLAG_CORRUPT) != 0;
+        packets.push_back(info);
+        av_packet_unref(&packet);
+    }
+
+    avformat_close_input(&format_context);
+    *out_packets = std::move(packets);
+    return true;
+#else
+    (void)path;
+    (void)max_packets;
+    (void)out_packets;
+    SetError(out_error, "FFmpeg bridge unavailable");
+    return false;
+#endif
+}
+
+bool DecodeVideoFrames(const std::string& path,
+                       int stream_index,
+                       int max_frames,
+                       std::vector<VideoFrameInfo>* out_frames,
+                       std::string* out_error) {
+#if ENGINE_HAS_FFMPEG_BRIDGE
+    if (out_frames == nullptr) {
+        SetError(out_error, "Output video frame list pointer is null");
+        return false;
+    }
+    out_frames->clear();
+    return DecodeFramesImpl(
+        path,
+        AVMEDIA_TYPE_VIDEO,
+        stream_index,
+        max_frames,
+        [out_frames](const AVFrame* frame, int resolved_stream_index, std::string* error) {
+            return CollectVideoFrame(frame, resolved_stream_index, out_frames, error);
+        },
+        out_error);
+#else
+    (void)path;
+    (void)stream_index;
+    (void)max_frames;
+    (void)out_frames;
+    SetError(out_error, "FFmpeg bridge unavailable");
+    return false;
+#endif
+}
+
+bool DecodeAudioFrames(const std::string& path,
+                       int stream_index,
+                       int max_frames,
+                       std::vector<AudioFrameInfo>* out_frames,
+                       std::string* out_error) {
+#if ENGINE_HAS_FFMPEG_BRIDGE
+    if (out_frames == nullptr) {
+        SetError(out_error, "Output audio frame list pointer is null");
+        return false;
+    }
+    out_frames->clear();
+    return DecodeFramesImpl(
+        path,
+        AVMEDIA_TYPE_AUDIO,
+        stream_index,
+        max_frames,
+        [out_frames](const AVFrame* frame, int resolved_stream_index, std::string* error) {
+            return CollectAudioFrame(frame, resolved_stream_index, out_frames, error);
+        },
+        out_error);
+#else
+    (void)path;
+    (void)stream_index;
+    (void)max_frames;
+    (void)out_frames;
+    SetError(out_error, "FFmpeg bridge unavailable");
+    return false;
+#endif
+}
+
+bool RemuxCopy(const std::string& input_path,
+               const std::string& output_path,
+               std::string* out_error) {
+#if ENGINE_HAS_FFMPEG_BRIDGE
+    AVFormatContext* input_context = nullptr;
+    if (!OpenInputContext(input_path, &input_context, out_error)) {
+        return false;
+    }
+
+    AVFormatContext* output_context = nullptr;
+    int result = avformat_alloc_output_context2(&output_context, nullptr, nullptr, output_path.c_str());
+    if (result < 0 || output_context == nullptr) {
+        avformat_close_input(&input_context);
+        SetError(out_error, "avformat_alloc_output_context2 failed: " + ErrorString(result));
+        return false;
+    }
+
+    for (unsigned i = 0; i < input_context->nb_streams; ++i) {
+        AVStream* input_stream = input_context->streams[i];
+        AVStream* output_stream = avformat_new_stream(output_context, nullptr);
+        if (output_stream == nullptr) {
+            avformat_free_context(output_context);
+            avformat_close_input(&input_context);
+            SetError(out_error, "avformat_new_stream failed");
+            return false;
+        }
+        result = avcodec_parameters_copy(output_stream->codecpar, input_stream->codecpar);
+        if (result < 0) {
+            avformat_free_context(output_context);
+            avformat_close_input(&input_context);
+            SetError(out_error, "avcodec_parameters_copy failed: " + ErrorString(result));
+            return false;
+        }
+        output_stream->codecpar->codec_tag = 0;
+        output_stream->time_base = input_stream->time_base;
+    }
+
+    if ((output_context->oformat->flags & AVFMT_NOFILE) == 0) {
+        result = avio_open(&output_context->pb, output_path.c_str(), AVIO_FLAG_WRITE);
+        if (result < 0) {
+            avformat_free_context(output_context);
+            avformat_close_input(&input_context);
+            SetError(out_error, "avio_open failed: " + ErrorString(result));
+            return false;
+        }
+    }
+
+    result = avformat_write_header(output_context, nullptr);
+    if (result < 0) {
+        if ((output_context->oformat->flags & AVFMT_NOFILE) == 0) {
+            avio_closep(&output_context->pb);
+        }
+        avformat_free_context(output_context);
+        avformat_close_input(&input_context);
+        SetError(out_error, "avformat_write_header failed: " + ErrorString(result));
+        return false;
+    }
+
+    AVPacket packet;
+    av_init_packet(&packet);
+    while ((result = av_read_frame(input_context, &packet)) >= 0) {
+        AVStream* input_stream = input_context->streams[packet.stream_index];
+        AVStream* output_stream = output_context->streams[packet.stream_index];
+        packet.pts = av_rescale_q_rnd(packet.pts, input_stream->time_base, output_stream->time_base,
+                                      static_cast<AVRounding>(AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
+        packet.dts = av_rescale_q_rnd(packet.dts, input_stream->time_base, output_stream->time_base,
+                                      static_cast<AVRounding>(AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
+        packet.duration = av_rescale_q(packet.duration, input_stream->time_base, output_stream->time_base);
+        packet.pos = -1;
+        result = av_interleaved_write_frame(output_context, &packet);
+        av_packet_unref(&packet);
+        if (result < 0) {
+            av_write_trailer(output_context);
+            if ((output_context->oformat->flags & AVFMT_NOFILE) == 0) {
+                avio_closep(&output_context->pb);
+            }
+            avformat_free_context(output_context);
+            avformat_close_input(&input_context);
+            SetError(out_error, "av_interleaved_write_frame failed: " + ErrorString(result));
+            return false;
+        }
+    }
+    if (result != AVERROR_EOF) {
+        av_write_trailer(output_context);
+        if ((output_context->oformat->flags & AVFMT_NOFILE) == 0) {
+            avio_closep(&output_context->pb);
+        }
+        avformat_free_context(output_context);
+        avformat_close_input(&input_context);
+        SetError(out_error, "av_read_frame failed: " + ErrorString(result));
+        return false;
+    }
+
+    av_write_trailer(output_context);
+    if ((output_context->oformat->flags & AVFMT_NOFILE) == 0) {
+        avio_closep(&output_context->pb);
+    }
+    avformat_free_context(output_context);
+    avformat_close_input(&input_context);
+    return true;
+#else
+    (void)input_path;
+    (void)output_path;
+    SetError(out_error, "FFmpeg bridge unavailable");
+    return false;
+#endif
+}
+
+bool ExtractStream(const std::string& input_path,
+                   int stream_index,
+                   const std::string& output_path,
+                   std::string* out_error) {
+#if ENGINE_HAS_FFMPEG_BRIDGE
+    AVFormatContext* input_context = nullptr;
+    if (!OpenInputContext(input_path, &input_context, out_error)) {
+        return false;
+    }
+    if (stream_index < 0 || stream_index >= static_cast<int>(input_context->nb_streams)) {
+        avformat_close_input(&input_context);
+        SetError(out_error, "Stream index out of range");
+        return false;
+    }
+
+    AVFormatContext* output_context = nullptr;
+    int result = avformat_alloc_output_context2(&output_context, nullptr, nullptr, output_path.c_str());
+    if (result < 0 || output_context == nullptr) {
+        avformat_close_input(&input_context);
+        SetError(out_error, "avformat_alloc_output_context2 failed: " + ErrorString(result));
+        return false;
+    }
+
+    AVStream* input_stream = input_context->streams[stream_index];
+    AVStream* output_stream = avformat_new_stream(output_context, nullptr);
+    if (output_stream == nullptr) {
+        avformat_free_context(output_context);
+        avformat_close_input(&input_context);
+        SetError(out_error, "avformat_new_stream failed");
+        return false;
+    }
+
+    result = avcodec_parameters_copy(output_stream->codecpar, input_stream->codecpar);
+    if (result < 0) {
+        avformat_free_context(output_context);
+        avformat_close_input(&input_context);
+        SetError(out_error, "avcodec_parameters_copy failed: " + ErrorString(result));
+        return false;
+    }
+    output_stream->codecpar->codec_tag = 0;
+    output_stream->time_base = input_stream->time_base;
+
+    if ((output_context->oformat->flags & AVFMT_NOFILE) == 0) {
+        result = avio_open(&output_context->pb, output_path.c_str(), AVIO_FLAG_WRITE);
+        if (result < 0) {
+            avformat_free_context(output_context);
+            avformat_close_input(&input_context);
+            SetError(out_error, "avio_open failed: " + ErrorString(result));
+            return false;
+        }
+    }
+
+    result = avformat_write_header(output_context, nullptr);
+    if (result < 0) {
+        if ((output_context->oformat->flags & AVFMT_NOFILE) == 0) {
+            avio_closep(&output_context->pb);
+        }
+        avformat_free_context(output_context);
+        avformat_close_input(&input_context);
+        SetError(out_error, "avformat_write_header failed: " + ErrorString(result));
+        return false;
+    }
+
+    AVPacket packet;
+    av_init_packet(&packet);
+    while ((result = av_read_frame(input_context, &packet)) >= 0) {
+        if (packet.stream_index != stream_index) {
+            av_packet_unref(&packet);
+            continue;
+        }
+        packet.stream_index = 0;
+        packet.pts = av_rescale_q_rnd(packet.pts, input_stream->time_base, output_stream->time_base,
+                                      static_cast<AVRounding>(AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
+        packet.dts = av_rescale_q_rnd(packet.dts, input_stream->time_base, output_stream->time_base,
+                                      static_cast<AVRounding>(AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
+        packet.duration = av_rescale_q(packet.duration, input_stream->time_base, output_stream->time_base);
+        packet.pos = -1;
+        result = av_interleaved_write_frame(output_context, &packet);
+        av_packet_unref(&packet);
+        if (result < 0) {
+            av_write_trailer(output_context);
+            if ((output_context->oformat->flags & AVFMT_NOFILE) == 0) {
+                avio_closep(&output_context->pb);
+            }
+            avformat_free_context(output_context);
+            avformat_close_input(&input_context);
+            SetError(out_error, "av_interleaved_write_frame failed: " + ErrorString(result));
+            return false;
+        }
+    }
+    if (result != AVERROR_EOF) {
+        av_write_trailer(output_context);
+        if ((output_context->oformat->flags & AVFMT_NOFILE) == 0) {
+            avio_closep(&output_context->pb);
+        }
+        avformat_free_context(output_context);
+        avformat_close_input(&input_context);
+        SetError(out_error, "av_read_frame failed: " + ErrorString(result));
+        return false;
+    }
+
+    av_write_trailer(output_context);
+    if ((output_context->oformat->flags & AVFMT_NOFILE) == 0) {
+        avio_closep(&output_context->pb);
+    }
+    avformat_free_context(output_context);
+    avformat_close_input(&input_context);
+    return true;
+#else
+    (void)input_path;
+    (void)stream_index;
+    (void)output_path;
+    SetError(out_error, "FFmpeg bridge unavailable");
+    return false;
+#endif
+}
+
+}  // namespace engine::bridge::ffmpeg

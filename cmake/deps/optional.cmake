@@ -1,0 +1,199 @@
+# ============================================================
+# Optional / third-party dependencies + feature flags
+# ============================================================
+
+find_package(PkgConfig QUIET)
+find_package(ICU COMPONENTS uc i18n QUIET)
+find_package(SQLite3 QUIET)
+find_package(V8 QUIET)
+find_package(libuv QUIET)
+find_package(jsoncpp QUIET)
+find_package(re2 QUIET)
+find_package(range-v3 QUIET)
+find_package(OpenCV QUIET)
+find_package(CUDAToolkit QUIET)
+find_package(Skia QUIET CONFIG)
+
+# ── ICU ──────────────────────────────────────────────────────
+set(ENGINE_HAS_ICU 0)
+if(ICU_FOUND)
+    set(ENGINE_HAS_ICU 1)
+endif()
+
+# ── SQLite3 ──────────────────────────────────────────────────
+set(ENGINE_HAS_SQLITE3 0)
+if(SQLite3_FOUND)
+    set(ENGINE_HAS_SQLITE3 1)
+endif()
+
+# ── OpenCV ───────────────────────────────────────────────────
+set(ENGINE_HAS_OPENCV_BRIDGE 0)
+if(OpenCV_FOUND)
+    set(ENGINE_HAS_OPENCV_BRIDGE 1)
+endif()
+
+# ── CUDA ─────────────────────────────────────────────────────
+set(ENGINE_HAS_CUDA_BRIDGE 0)
+if(CUDAToolkit_FOUND)
+    set(ENGINE_HAS_CUDA_BRIDGE 1)
+endif()
+
+# ── cuDNN ────────────────────────────────────────────────────
+find_path(CUDNN_INCLUDE_DIR NAMES cudnn.h)
+find_library(CUDNN_LIBRARY NAMES cudnn libcudnn)
+set(ENGINE_HAS_CUDNN_BRIDGE 0)
+if(CUDNN_INCLUDE_DIR AND CUDNN_LIBRARY)
+    set(ENGINE_HAS_CUDNN_BRIDGE 1)
+endif()
+
+# ── Skia ─────────────────────────────────────────────────────
+set(ENGINE_HAS_SKIA_BRIDGE 0)
+set(ENGINE_SKIA_INCLUDE_DIRS)
+set(ENGINE_SKIA_LIBRARIES)
+if(TARGET Skia::skia)
+    set(ENGINE_HAS_SKIA_BRIDGE 1)
+    list(APPEND ENGINE_SKIA_LIBRARIES Skia::skia)
+elseif(PkgConfig_FOUND)
+    pkg_check_modules(SKIA skia QUIET)
+    if(SKIA_FOUND)
+        set(ENGINE_HAS_SKIA_BRIDGE 1)
+        list(APPEND ENGINE_SKIA_INCLUDE_DIRS ${SKIA_INCLUDE_DIRS})
+        list(APPEND ENGINE_SKIA_LIBRARIES    ${SKIA_LIBRARIES})
+    endif()
+endif()
+
+# ── FFmpeg ───────────────────────────────────────────────────
+set(ENGINE_HAS_FFMPEG_BRIDGE 0)
+set(ENGINE_HAS_FFMPEG_AVFILTER 0)
+set(ENGINE_HAS_FFMPEG_AVDEVICE 0)
+set(ENGINE_FFMPEG_INCLUDE_DIRS)
+set(ENGINE_FFMPEG_LIBRARIES)
+if(PkgConfig_FOUND)
+    pkg_check_modules(FFMPEG_AVUTIL   libavutil   QUIET)
+    pkg_check_modules(FFMPEG_AVCODEC  libavcodec  QUIET)
+    pkg_check_modules(FFMPEG_AVFORMAT libavformat QUIET)
+    pkg_check_modules(FFMPEG_AVFILTER libavfilter QUIET)
+    pkg_check_modules(FFMPEG_AVDEVICE libavdevice QUIET)
+    if(FFMPEG_AVUTIL_FOUND AND FFMPEG_AVCODEC_FOUND AND FFMPEG_AVFORMAT_FOUND)
+        set(ENGINE_HAS_FFMPEG_BRIDGE 1)
+        list(APPEND ENGINE_FFMPEG_INCLUDE_DIRS
+            ${FFMPEG_AVUTIL_INCLUDE_DIRS}
+            ${FFMPEG_AVCODEC_INCLUDE_DIRS}
+            ${FFMPEG_AVFORMAT_INCLUDE_DIRS})
+        list(APPEND ENGINE_FFMPEG_LIBRARIES
+            ${FFMPEG_AVUTIL_LIBRARIES}
+            ${FFMPEG_AVCODEC_LIBRARIES}
+            ${FFMPEG_AVFORMAT_LIBRARIES})
+        if(FFMPEG_AVFILTER_FOUND)
+            set(ENGINE_HAS_FFMPEG_AVFILTER 1)
+            list(APPEND ENGINE_FFMPEG_INCLUDE_DIRS ${FFMPEG_AVFILTER_INCLUDE_DIRS})
+            list(APPEND ENGINE_FFMPEG_LIBRARIES ${FFMPEG_AVFILTER_LIBRARIES})
+        endif()
+        if(FFMPEG_AVDEVICE_FOUND)
+            set(ENGINE_HAS_FFMPEG_AVDEVICE 1)
+            list(APPEND ENGINE_FFMPEG_INCLUDE_DIRS ${FFMPEG_AVDEVICE_INCLUDE_DIRS})
+            list(APPEND ENGINE_FFMPEG_LIBRARIES ${FFMPEG_AVDEVICE_LIBRARIES})
+        endif()
+    endif()
+endif()
+
+# ── ANGLE ────────────────────────────────────────────────────
+find_path(ANGLE_INCLUDE_DIR  NAMES EGL/egl.h)
+find_library(ANGLE_EGL_LIBRARY   NAMES EGL libEGL)
+find_library(ANGLE_GLESV2_LIBRARY NAMES GLESv2 libGLESv2)
+set(ENGINE_HAS_ANGLE_BRIDGE 0)
+if(ANGLE_INCLUDE_DIR AND ANGLE_EGL_LIBRARY AND ANGLE_GLESV2_LIBRARY)
+    set(ENGINE_HAS_ANGLE_BRIDGE 1)
+endif()
+
+# ── ZSTD ─────────────────────────────────────────────────────
+find_path(ZSTD_INCLUDE_DIR NAMES zstd.h)
+find_library(ZSTD_LIBRARY NAMES zstd libzstd)
+set(ENGINE_HAS_ZSTD 0)
+if(ZSTD_INCLUDE_DIR AND ZSTD_LIBRARY)
+    set(ENGINE_HAS_ZSTD 1)
+endif()
+
+# ── Brotli ───────────────────────────────────────────────────
+find_path(BROTLI_INCLUDE_DIR NAMES brotli/encode.h)
+find_library(BROTLI_ENC_LIBRARY    NAMES brotlienc)
+find_library(BROTLI_DEC_LIBRARY    NAMES brotlidec)
+find_library(BROTLI_COMMON_LIBRARY NAMES brotlicommon)
+set(ENGINE_HAS_BROTLI 0)
+if(BROTLI_INCLUDE_DIR AND BROTLI_ENC_LIBRARY
+        AND BROTLI_DEC_LIBRARY AND BROTLI_COMMON_LIBRARY)
+    set(ENGINE_HAS_BROTLI 1)
+endif()
+
+# ── Qt6 ──────────────────────────────────────────────────────
+set(ENGINE_QT6_COMPONENTS
+    Concurrent Core DBus Gui
+    LabsAnimation LabsFolderListModel LabsQmlModels LabsSettings
+    LabsSharedImage LabsWavefrontMesh
+    Network OpenGL OpenGLWidgets
+    Pdf PdfQuick PdfWidgets Platform
+    Positioning PositioningQuick PrintSupport
+    Qml QmlCore QmlIntegration QmlLocalStorage
+    QmlModels QmlWorkerScript QmlXmlListModel
+    Quick QuickControls2 QuickControls2Impl
+    QuickDialogs2 QuickDialogs2QuickImpl QuickDialogs2Utils
+    QuickLayouts QuickTemplates2 QuickTest QuickWidgets
+    Sql Test
+    WebChannel WebView
+    WebEngineCore WebEngineQuick WebEngineQuickDelegatesQml WebEngineWidgets
+    Widgets Xml
+)
+
+find_package(Qt6 COMPONENTS ${ENGINE_QT6_COMPONENTS} QUIET)
+
+set(ENGINE_HAS_QT6 0)
+if(Qt6Core_FOUND)
+    set(ENGINE_HAS_QT6 1)
+endif()
+
+# Individual Qt6 feature flags:
+set(ENGINE_HAS_QT6_CORE       0)
+set(ENGINE_HAS_QT6_GUI        0)
+set(ENGINE_HAS_QT6_WIDGETS    0)
+set(ENGINE_HAS_QT6_WEBCHANNEL 0)
+set(ENGINE_HAS_QT6_WEBVIEW    0)
+set(ENGINE_HAS_QT6_WEBENGINE  0)
+set(ENGINE_HAS_QT6_QML        0)
+set(ENGINE_HAS_QT6_QUICK      0)
+if(Qt6Core_FOUND)
+    set(ENGINE_HAS_QT6_CORE 1)
+endif()
+if(Qt6Gui_FOUND)
+    set(ENGINE_HAS_QT6_GUI 1)
+endif()
+if(Qt6Widgets_FOUND)
+    set(ENGINE_HAS_QT6_WIDGETS 1)
+endif()
+if(Qt6WebChannel_FOUND)
+    set(ENGINE_HAS_QT6_WEBCHANNEL 1)
+endif()
+if(Qt6WebView_FOUND)
+    set(ENGINE_HAS_QT6_WEBVIEW 1)
+endif()
+if(Qt6WebEngineCore_FOUND)
+    set(ENGINE_HAS_QT6_WEBENGINE 1)
+endif()
+if(Qt6Qml_FOUND)
+    set(ENGINE_HAS_QT6_QML 1)
+endif()
+if(Qt6Quick_FOUND)
+    set(ENGINE_HAS_QT6_QUICK 1)
+endif()
+
+# Collect actually-available Qt6 targets
+set(ENGINE_QT6_FOUND_TARGETS)
+foreach(qt6_component IN LISTS ENGINE_QT6_COMPONENTS)
+    if(TARGET Qt6::${qt6_component})
+        list(APPEND ENGINE_QT6_FOUND_TARGETS Qt6::${qt6_component})
+    endif()
+endforeach()
+
+if(ENGINE_QT6_FOUND_TARGETS)
+    list(JOIN ENGINE_QT6_FOUND_TARGETS ", " _qt6_list_text)
+    message(STATUS "Qt6 components available: ${_qt6_list_text}")
+endif()
