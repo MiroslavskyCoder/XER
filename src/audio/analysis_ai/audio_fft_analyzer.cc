@@ -1,0 +1,96 @@
+#include "audio_fft_analyzer.h"
+
+#include <cmath>
+#include <algorithm>
+#include <numeric>
+
+namespace Engine::Audio::AnalysisAI {
+
+const float PI = 3.14159265359f;
+
+AudioFFTAnalyzer::AudioFFTAnalyzer(size_t fft_size)
+    : fft_size_(fft_size), total_power_(0.0f), rms_energy_(0.0f) {
+    fft_output_.resize(fft_size);
+    magnitude_spectrum_.resize(fft_size / 2);
+    phase_spectrum_.resize(fft_size / 2);
+    GenerateWindow();
+}
+
+AudioFFTAnalyzer::~AudioFFTAnalyzer() {}
+
+bool AudioFFTAnalyzer::ComputeFFT(const float* input, size_t frame_count) {
+    if (!input || frame_count != fft_size_) return false;
+
+    // Simple DFT implementation (optimized FFT would use FFTW/vDSP)
+    for (size_t k = 0; k < fft_size_; ++k) {
+        Complex sum(0.0f, 0.0f);
+        
+        for (size_t n = 0; n < fft_size_; ++n) {
+            float angle = -2.0f * PI * k * n / fft_size_;
+            Complex exp_val(std::cos(angle), std::sin(angle));
+            sum += input[n] * window_[n] * exp_val;
+        }
+        
+        fft_output_[k] = sum;
+    }
+
+    ComputeMagnitudePhase();
+    return true;
+}
+
+bool AudioFFTAnalyzer::AnalyzeSpectrum(const float* input, size_t frame_count) {
+    if (!ComputeFFT(input, frame_count)) return false;
+
+    // Calculate power and energy
+    total_power_ = 0.0f;
+    for (float mag : magnitude_spectrum_) {
+        total_power_ += mag * mag;
+    }
+    total_power_ /= magnitude_spectrum_.size();
+
+    // Calculate RMS energy
+    float sum_sq = 0.0f;
+    for (size_t i = 0; i < frame_count; ++i) {
+        sum_sq += input[i] * input[i];
+    }
+    rms_energy_ = std::sqrt(sum_sq / frame_count);
+
+    return true;
+}
+
+float AudioFFTAnalyzer::GetDominantFrequency(int sample_rate) const {
+    auto it = std::max_element(magnitude_spectrum_.begin(), magnitude_spectrum_.end());
+    size_t bin = std::distance(magnitude_spectrum_.begin(), it);
+    return (bin * sample_rate) / static_cast<float>(fft_size_);
+}
+
+std::vector<float> AudioFFTAnalyzer::GetFrequencyBands() const {
+    // Return magnitude spectrum as frequency bands
+    return magnitude_spectrum_;
+}
+
+void AudioFFTAnalyzer::GenerateWindow() {
+    window_.resize(fft_size_);
+    
+    // Hann window
+    for (size_t i = 0; i < fft_size_; ++i) {
+        window_[i] = 0.5f * (1.0f - std::cos(2.0f * PI * i / (fft_size_ - 1)));
+    }
+}
+
+void AudioFFTAnalyzer::ComputeMagnitudePhase() {
+    for (size_t i = 0; i < magnitude_spectrum_.size(); ++i) {
+        magnitude_spectrum_[i] = std::abs(fft_output_[i]);
+        phase_spectrum_[i] = std::arg(fft_output_[i]);
+    }
+}
+
+std::string AudioFFTAnalyzer::GetAnalysisReport() const {
+    std::string report = "FFT Analysis Report:\n";
+    report += "Total Power: " + std::to_string(total_power_) + "\n";
+    report += "RMS Energy: " + std::to_string(rms_energy_) + "\n";
+    report += "Spectra Size: " + std::to_string(magnitude_spectrum_.size()) + "\n";
+    return report;
+}
+
+}  // namespace Engine::Audio::AnalysisAI

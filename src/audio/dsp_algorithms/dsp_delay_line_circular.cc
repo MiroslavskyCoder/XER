@@ -1,0 +1,66 @@
+#include "dsp_delay_line_circular.h"
+
+#include <algorithm>
+
+namespace Engine::Audio::DSP {
+
+CircularDelayLine::CircularDelayLine()
+	: max_delay_samples_(0),
+	  delay_samples_(0),
+	  write_index_(0),
+	  buffer_pool_(16384, 2) {}
+
+CircularDelayLine::~CircularDelayLine() = default;
+
+bool CircularDelayLine::Initialize(size_t max_delay_samples) {
+	if (max_delay_samples == 0) {
+		return false;
+	}
+
+	max_delay_samples_ = max_delay_samples;
+	delay_samples_ = std::min<size_t>(delay_samples_, max_delay_samples_);
+	write_index_ = 0;
+	buffer_.assign(max_delay_samples_, 0.0f);
+	return true;
+}
+
+void CircularDelayLine::SetDelaySamples(size_t delay_samples) {
+	delay_samples_ = std::min(delay_samples, max_delay_samples_ > 0 ? max_delay_samples_ - 1 : 0);
+}
+
+void CircularDelayLine::Reset() {
+	std::fill(buffer_.begin(), buffer_.end(), 0.0f);
+	write_index_ = 0;
+}
+
+float CircularDelayLine::Process(float sample) {
+	if (buffer_.empty()) {
+		return sample;
+	}
+
+	size_t read_index = 0;
+	if (write_index_ >= delay_samples_) {
+		read_index = write_index_ - delay_samples_;
+	} else {
+		read_index = buffer_.size() + write_index_ - delay_samples_;
+	}
+
+	const float delayed = buffer_[read_index];
+	buffer_[write_index_] = sample;
+	write_index_ = (write_index_ + 1) % buffer_.size();
+
+	auto temp_block = buffer_pool_.AcquireBuffer();
+	if (temp_block != nullptr) {
+		temp_block->used_bytes = 0;
+		buffer_pool_.ReleaseBuffer(temp_block);
+	}
+
+	return delayed;
+}
+
+std::string CircularDelayLine::GetReport() const {
+	return "DelayLine: max=" + std::to_string(max_delay_samples_) +
+		", delay=" + std::to_string(delay_samples_);
+}
+
+}  // namespace Engine::Audio::DSP
