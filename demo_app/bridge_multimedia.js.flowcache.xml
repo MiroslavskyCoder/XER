@@ -21,28 +21,22 @@
     <path>demo_app/bridge_multimedia.js.flowcache.bin</path>
     <exists>true</exists>
     <valid>true</valid>
-    <rebuilt>true</rebuilt>
+    <rebuilt>false</rebuilt>
     <used>true</used>
     <size>164</size>
     <last_write_time_ticks>-4660689969860000000</last_write_time_ticks>
     <sha256>61945d8b36084ac935fa5f181642223841232d9513dfddd9a0388657c56f9434</sha256>
     <expanded_sha256>1401f54315e0e4df2a0f7456cffce86aacfd7fa8c23eb78b771752d9a95ff82a</expanded_sha256>
-    <validation_mode>diff</validation_mode>
-    <validation_reason>expanded_text_changed</validation_reason>
+    <validation_mode>hash</validation_mode>
+    <validation_reason>metadata_sha256_match</validation_reason>
     <validation_stats>
-      <total>32</total>
-      <hash>0</hash>
+      <total>33</total>
+      <hash>1</hash>
       <diff>31</diff>
       <rebuild>1</rebuild>
     </validation_stats>
     <validation_history>
       <count>10</count>
-      <validation>
-        <mode>diff</mode>
-        <reason>expanded_text_changed</reason>
-        <status>ready</status>
-        <timestamp_ticks>1776972326326314809</timestamp_ticks>
-      </validation>
       <validation>
         <mode>diff</mode>
         <reason>expanded_text_changed</reason>
@@ -96,6 +90,12 @@
         <reason>expanded_text_changed</reason>
         <status>ready</status>
         <timestamp_ticks>1776974030148069870</timestamp_ticks>
+      </validation>
+      <validation>
+        <mode>hash</mode>
+        <reason>metadata_sha256_match</reason>
+        <status>ready</status>
+        <timestamp_ticks>1777042265685686157</timestamp_ticks>
       </validation>
     </validation_history>
   </cache>
