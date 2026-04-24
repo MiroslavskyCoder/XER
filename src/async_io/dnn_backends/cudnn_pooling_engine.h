@@ -1,11 +1,8 @@
-#ifndef AITOOLSXPRO_IO_DNN_BACKENDS_CUDNN_POOLING_ENGINE_H
-#define AITOOLSXPRO_IO_DNN_BACKENDS_CUDNN_POOLING_ENGINE_H
-
 #include <cstddef>
 
 #include "cudnn_bridge.h"
 
-namespace AIToolsXPro::IO::DNNBackends {
+namespace AsyncIO::IO::DNNBackends {
 
 enum class PoolingKind {
     Max,
@@ -35,6 +32,5 @@ private:
     bool configured_;
 };
 
-} // namespace AIToolsXPro::IO::DNNBackends
-
-#endif // AITOOLSXPRO_IO_DNN_BACKENDS_CUDNN_POOLING_ENGINE_H
+} // namespace AsyncIO::IO::DNNBackends
+ 

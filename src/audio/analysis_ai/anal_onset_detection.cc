@@ -21,7 +21,7 @@ bool OnsetDetector::DetectOnsets(const float* audio, size_t frame_count, int sam
 		return false;
 	}
 
-	IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
+	AsyncIO::IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
 	perf_counter_.StartCounter("onset_detection");
 
 	onset_frames_.clear();
@@ -60,7 +60,7 @@ bool OnsetDetector::DetectOnsets(const float* audio, size_t frame_count, int sam
 }
 
 void OnsetDetector::Reset() {
-	IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
+	AsyncIO::IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
 	onset_frames_.clear();
 	onset_strengths_.clear();
 	flux_curve_.clear();

@@ -12,12 +12,12 @@ ReverbConvolution::ReverbConvolution()
 ReverbConvolution::~ReverbConvolution() = default;
 
 bool ReverbConvolution::LoadImpulseResponse(const float* ir, size_t ir_size) {
-	IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
+	AsyncIO::IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
 	return convolution_.SetImpulseResponse(ir, ir_size);
 }
 
 void ReverbConvolution::SetMix(float mix) {
-	IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
+	AsyncIO::IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
 	mix_ = std::clamp(mix, 0.0f, 1.0f);
 }
 
@@ -26,7 +26,7 @@ bool ReverbConvolution::ProcessBlock(const float* input, size_t frame_count, flo
 		return false;
 	}
 
-	IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
+	AsyncIO::IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
 	std::vector<float> wet(frame_count, 0.0f);
 	if (!convolution_.ProcessBlock(input, frame_count, wet.data())) {
 		return false;

@@ -8,7 +8,7 @@ FIRFilterBank::FIRFilterBank()
 FIRFilterBank::~FIRFilterBank() = default;
 
 void FIRFilterBank::Clear() {
-	IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
+	AsyncIO::IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
 	filters_.clear();
 	states_.clear();
 }
@@ -18,14 +18,14 @@ bool FIRFilterBank::AddFilter(const std::vector<float>& taps) {
 		return false;
 	}
 
-	IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
+	AsyncIO::IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
 	filters_.push_back(taps);
 	states_.push_back(std::vector<float>(taps.size(), 0.0f));
 	return true;
 }
 
 bool FIRFilterBank::ProcessSample(float input, std::vector<float>& outputs) {
-	IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
+	AsyncIO::IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
 	outputs.assign(filters_.size(), 0.0f);
 
 	for (size_t filter_index = 0; filter_index < filters_.size(); ++filter_index) {

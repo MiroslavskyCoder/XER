@@ -26,9 +26,9 @@ public:
 	std::string GetReport() const;
 
 private:
-	AIToolsXPro::IO::AsyncIO::AsyncBufferPool buffer_pool_;
-	AIToolsXPro::IO::LogDebug::PerformanceCounter perf_counter_;
-	AIToolsXPro::IO::Sync::MutexWrapper mutex_;
+	IO::AsyncIO::AsyncBufferPool buffer_pool_;
+	AsyncIO::IO::LogDebug::PerformanceCounter perf_counter_;
+	AsyncIO::IO::Sync::MutexWrapper mutex_;
 	std::vector<double> loudness_history_;
 	double momentary_lufs_;
 	double short_term_lufs_;
@@ -39,4 +39,4 @@ private:
 	static double MeanSquareToLUFS(double mean_square);
 };
 
-}  // namespace AIToolsXPro::Audio::AnalysisAI
+}  // namespace Engine::Audio::AnalysisAI

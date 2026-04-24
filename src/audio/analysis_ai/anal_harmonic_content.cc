@@ -80,7 +80,7 @@ std::string HarmonicContentAnalyzer::GetSummary() const {
 	return "HarmonicContent: f0=" + std::to_string(fundamental_frequency_) +
 		", ratio=" + std::to_string(harmonic_ratio_) +
 		", inharmonicity=" + std::to_string(inharmonicity_) +
-		", bits=" + IO::LogDebug::DumpHelper::BitDump(harmonic_bits);
+		", bits=" + AsyncIO::IO::LogDebug::DumpHelper::BitDump(harmonic_bits);
 }
 
 size_t HarmonicContentAnalyzer::FrequencyToBin(float frequency, int sample_rate) const {

@@ -17,7 +17,7 @@ bool SpectralShaper::SetCurve(const std::vector<float>& curve) {
 		return false;
 	}
 
-	IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
+	AsyncIO::IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
 	shaping_curve_ = curve;
 	return true;
 }
@@ -27,7 +27,7 @@ bool SpectralShaper::ProcessBlock(const float* input, size_t frame_count, float*
 		return false;
 	}
 
-	IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
+	AsyncIO::IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
 	if (!fft_engine_.Forward(input, frame_count)) {
 		return false;
 	}
@@ -43,7 +43,7 @@ bool SpectralShaper::ProcessBlock(const float* input, size_t frame_count, float*
 }
 
 void SpectralShaper::Reset() {
-	IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
+	AsyncIO::IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
 	std::fill(shaping_curve_.begin(), shaping_curve_.end(), 1.0f);
 }
 

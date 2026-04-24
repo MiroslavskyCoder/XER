@@ -62,13 +62,13 @@ float AudioPitchDetector::GetFundamentalFrequency(const float* audio, size_t fra
 
 std::vector<float> AudioPitchDetector::GetHarmonics(const float* audio, size_t frame_count) const {
     std::vector<float> harmonics(5, 0.0f);
-    float fundamental = GetFundamentalFrequency(audio, frame_count);
+    // float fundamental = GetFundamentalFrequency(audio, frame_count);
     
-    if (fundamental > 0) {
-        for (int i = 0; i < 5; ++i) {
-            harmonics[i] = fundamental * (i + 1);
-        }
-    }
+    // if (fundamental > 0) {
+    //     for (int i = 0; i < 5; ++i) {
+    //         harmonics[i] = fundamental * (i + 1);
+    //     }
+    // }
     
     return harmonics;
 }

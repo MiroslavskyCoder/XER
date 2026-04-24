@@ -25,7 +25,7 @@ bool LoudnessMeterLUFS::ProcessBlock(const float* interleaved_audio, size_t fram
 		return false;
 	}
 
-	IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
+	AsyncIO::IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
 	perf_counter_.StartCounter("lufs_process");
 
 	const size_t sample_count = frame_count * static_cast<size_t>(channels);
@@ -68,7 +68,7 @@ bool LoudnessMeterLUFS::ProcessBlock(const float* interleaved_audio, size_t fram
 }
 
 void LoudnessMeterLUFS::Reset() {
-	IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
+	AsyncIO::IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
 	loudness_history_.clear();
 	momentary_lufs_ = 0.0;
 	short_term_lufs_ = 0.0;

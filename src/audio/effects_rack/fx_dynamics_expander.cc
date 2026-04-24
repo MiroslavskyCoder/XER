@@ -24,17 +24,17 @@ DynamicsExpander::DynamicsExpander()
 DynamicsExpander::~DynamicsExpander() = default;
 
 void DynamicsExpander::SetThresholdDb(float threshold_db) {
-	IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
+	AsyncIO::IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
 	threshold_db_ = threshold_db;
 }
 
 void DynamicsExpander::SetRatio(float ratio) {
-	IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
+	AsyncIO::IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
 	ratio_ = std::max(1.0f, ratio);
 }
 
 void DynamicsExpander::SetRangeDb(float range_db) {
-	IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
+	AsyncIO::IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
 	range_db_ = std::max(0.0f, range_db);
 }
 
@@ -43,7 +43,7 @@ bool DynamicsExpander::ProcessBlock(const float* input, size_t frame_count, floa
 		return false;
 	}
 
-	AIToolsXPro::IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
+	AsyncIO::IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
 	for (size_t i = 0; i < frame_count; ++i) {
 		const float in = input[i];
 		const float level_db = LinearToDb(std::abs(in));

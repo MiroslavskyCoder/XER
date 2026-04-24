@@ -25,11 +25,7 @@ bool AudioEngine::Initialize(int sample_rate, int buffer_size, int channel_count
     
     initialized_ = true;
     return true;
-}
-
-bool AudioEngine::IsInitialized() const {
-    return initialized_;
-}
+} 
 
 bool AudioEngine::Start() {
     if (!initialized_) return false;

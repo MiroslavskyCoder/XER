@@ -26,22 +26,22 @@ DynamicsCompressor::DynamicsCompressor()
 DynamicsCompressor::~DynamicsCompressor() = default;
 
 void DynamicsCompressor::SetThresholdDb(float threshold_db) {
-	AIToolsXPro::IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
+	AsyncIO::IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
 	threshold_db_ = threshold_db;
 }
 
 void DynamicsCompressor::SetRatio(float ratio) {
-	AIToolsXPro::IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
+	AsyncIO::IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
 	ratio_ = std::max(1.0f, ratio);
 }
 
 void DynamicsCompressor::SetAttackMs(float attack_ms) {
-	AIToolsXPro::IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
+	AsyncIO::IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
 	attack_ms_ = std::max(0.1f, attack_ms);
 }
 
 void DynamicsCompressor::SetReleaseMs(float release_ms) {
-	AIToolsXPro::IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
+	AsyncIO::IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
 	release_ms_ = std::max(1.0f, release_ms);
 }
 
@@ -50,7 +50,7 @@ bool DynamicsCompressor::ProcessBlock(const float* input, size_t frame_count, fl
 		return false;
 	}
 
-	AIToolsXPro::IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
+	AsyncIO::IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
 	for (size_t i = 0; i < frame_count; ++i) {
 		const float sample = input[i];
 		const float abs_sample = std::abs(sample);

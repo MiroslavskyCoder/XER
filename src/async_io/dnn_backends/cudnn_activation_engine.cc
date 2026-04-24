@@ -1,6 +1,5 @@
 #include "cudnn_activation_engine.h"
- 
-#include <cuda_runtime.h> 
+  
 #include <cudnn.h> 
 
 namespace AsyncIO::IO::DNNBackends {

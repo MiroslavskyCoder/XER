@@ -26,8 +26,8 @@ public:
 
 private:
 	int sample_rate_;
-	IO::LogDebug::PerformanceCounter perf_counter_;
-	IO::Sync::MutexWrapper mutex_;
+	AsyncIO::IO::LogDebug::PerformanceCounter perf_counter_;
+	AsyncIO::IO::Sync::MutexWrapper mutex_;
 	AudioPitchDetector detector_;
 	PitchInfo last_pitch_;
 	std::vector<float> last_harmonics_;

@@ -20,12 +20,12 @@ DynamicsLimiter::DynamicsLimiter()
 DynamicsLimiter::~DynamicsLimiter() = default;
 
 void DynamicsLimiter::SetCeilingDb(float ceiling_db) {
-	IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
+	AsyncIO::IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
 	ceiling_db_ = ceiling_db;
 }
 
 void DynamicsLimiter::SetRelease(float release) {
-	IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
+	AsyncIO::IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
 	release_ = std::max(0.00001f, release);
 }
 
@@ -34,7 +34,7 @@ bool DynamicsLimiter::ProcessBlock(const float* input, size_t frame_count, float
 		return false;
 	}
 
-	IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
+	AsyncIO::IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
 	const float ceiling_linear = DbToLinear(ceiling_db_);
 
 	for (size_t i = 0; i < frame_count; ++i) {

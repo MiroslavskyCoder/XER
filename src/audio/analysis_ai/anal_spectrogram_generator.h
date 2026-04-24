@@ -32,7 +32,7 @@ private:
 	size_t hop_size_;
 	AudioFFTAnalyzer fft_analyzer_;
 	IO::AsyncIO::AsyncBufferPool buffer_pool_;
-	IO::LogDebug::PerformanceCounter perf_counter_;
+	AsyncIO::IO::LogDebug::PerformanceCounter perf_counter_;
 	std::vector<std::vector<float>> magnitude_matrix_;
 };
 

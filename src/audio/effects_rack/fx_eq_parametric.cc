@@ -22,7 +22,7 @@ bool ParametricEQ::Initialize(float sample_rate, size_t band_count) {
 		return false;
 	}
 
-	IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
+	AsyncIO::IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
 	sample_rate_ = sample_rate;
 	bands_.assign(band_count, ParametricBand{1000.0f, 1.0f, 0.0f, true});
 	filters_.assign(band_count, Engine::Audio::DSP::BiquadProcessor());
@@ -34,7 +34,7 @@ bool ParametricEQ::Initialize(float sample_rate, size_t band_count) {
 }
 
 bool ParametricEQ::SetBand(size_t index, const ParametricBand& band) {
-	IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
+	AsyncIO::IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
 	if (index >= bands_.size()) {
 		return false;
 	}
@@ -55,7 +55,7 @@ bool ParametricEQ::ProcessBlock(const float* input, size_t frame_count, float* o
 		return false;
 	}
 
-	IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
+	AsyncIO::IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
 	for (size_t n = 0; n < frame_count; ++n) {
 		float sum = input[n];
 		for (size_t band = 0; band < bands_.size(); ++band) {

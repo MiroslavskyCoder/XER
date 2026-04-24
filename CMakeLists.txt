@@ -1,14 +1,17 @@
 cmake_minimum_required(VERSION 3.16)
 
-if(NOT DEFINED CMAKE_C_COMPILER)
-    set(CMAKE_C_COMPILER clang)
-endif()
+set(CMAKE_CXX_COMPILER clang++)
+set(CMAKE_CUDA_COMPILER clang++) 
+set(CMAKE_CUDA_HOST_COMPILER clang++)
+ 
+set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --cuda-path=/usr/local/cuda --offload-arch=sm_86")
 
-if(NOT DEFINED CMAKE_CXX_COMPILER)
-    set(CMAKE_CXX_COMPILER clang++)
-endif()
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CUDA_STANDARD 17)
+ 
+set(CMAKE_CUDA_ARCHITECTURES "75;86;90")
 
-project(EngineBuilder LANGUAGES C CXX)
+project(EngineBuilder LANGUAGES C CXX CUDA)
 
 include(GNUInstallDirs)
   

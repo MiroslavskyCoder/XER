@@ -55,7 +55,7 @@ bool ModPhaser::ProcessBlock(const float* input, size_t frame_count, float* outp
 		return false;
 	}
 
-	IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
+	AsyncIO::IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
 	const float phase_inc = 2.0f * kPi * rate_hz_ / sample_rate_;
 
 	for (size_t i = 0; i < frame_count; ++i) {

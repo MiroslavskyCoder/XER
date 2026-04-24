@@ -28,8 +28,8 @@ public:
 private:
 	size_t window_size_;
 	size_t hop_size_;
-	IO::LogDebug::PerformanceCounter perf_counter_;
-	IO::Sync::MutexWrapper mutex_;
+	AsyncIO::IO::LogDebug::PerformanceCounter perf_counter_;
+	AsyncIO::IO::Sync::MutexWrapper mutex_;
 	AudioFFTAnalyzer fft_analyzer_;
 	std::vector<size_t> onset_frames_;
 	std::vector<float> onset_strengths_;
@@ -38,4 +38,4 @@ private:
 	static float ComputeAdaptiveThreshold(const std::vector<float>& flux_curve, size_t index);
 };
 
-}  // namespace AIToolsXPro::Audio::AnalysisAI
+}  // namespace Engine::Audio::AnalysisAI

@@ -2,7 +2,7 @@
   
 #include <cuda_runtime.h> 
 
-namespace AIToolsXPro::IO::LogDebug {
+namespace AsyncIO::IO::LogDebug {
 
 GPUUsageLogger::GPUUsageLogger()
     : initialized_(false), is_logging_(false) {}

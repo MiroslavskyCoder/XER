@@ -68,7 +68,7 @@ std::string WindowingFunctions::DescribeWindow(const std::vector<float>& window)
 	return "Window: size=" + std::to_string(window.size()) +
 		", min=" + std::to_string(min_value) +
 		", max=" + std::to_string(max_value) +
-		", span_bits=" + IO::LogDebug::DumpHelper::BitDump(encoded_span);
+		", span_bits=" + AsyncIO::IO::LogDebug::DumpHelper::BitDump(encoded_span);
 }
 
 }  // namespace Engine::Audio::DSP

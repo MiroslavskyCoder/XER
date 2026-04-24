@@ -6,14 +6,12 @@
 namespace AsyncIO::IO::DNNBackends {
 
 namespace {
-
-#if AITOOLSXPRO_HAS_CUDNN
+ 
 cudnnPoolingMode_t ToMode(PoolingKind kind) {
     return kind == PoolingKind::Max
         ? CUDNN_POOLING_MAX
         : CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING;
-}
-#endif
+} 
 
 } // namespace
 

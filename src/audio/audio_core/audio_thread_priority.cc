@@ -120,10 +120,10 @@ bool AudioThreadPriority::SetAffinity(int core_id) {
 
 int AudioThreadPriority::GetOptimalAudioCore() {
     int optimal_core = 0;
-    if (cpu_info_.IsInitialized()) {
-        // Use first available core
-        optimal_core = 0;
-    }
+    // if (cpu_info_.IsInitialized()) {
+    //     // Use first available core
+    //     optimal_core = 0;
+    // }
     return optimal_core;
 }
 

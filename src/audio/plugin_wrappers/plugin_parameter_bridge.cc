@@ -4,12 +4,12 @@ namespace Engine::Audio::Plugin {
 
 void PluginParameterBridge::RegisterParameter(uint32_t id, const std::string& name, float default_value) {
     (void)name;
-    IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
+    AsyncIO::IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
     values_[id] = default_value;
 }
 
 bool PluginParameterBridge::SetValue(uint32_t id, float value) {
-    IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
+    AsyncIO::IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
     const auto it = values_.find(id);
     if (it == values_.end()) {
         return false;
@@ -19,7 +19,7 @@ bool PluginParameterBridge::SetValue(uint32_t id, float value) {
 }
 
 bool PluginParameterBridge::GetValue(uint32_t id, float& value) const {
-    IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
+    AsyncIO::IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
     const auto it = values_.find(id);
     if (it == values_.end()) {
         return false;

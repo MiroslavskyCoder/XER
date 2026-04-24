@@ -8,7 +8,7 @@ IIRFilterBank::IIRFilterBank()
 IIRFilterBank::~IIRFilterBank() = default;
 
 void IIRFilterBank::Clear() {
-	IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
+	AsyncIO::IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
 	filters_.clear();
 }
 
@@ -18,13 +18,13 @@ bool IIRFilterBank::AddBiquad(BiquadType type, float sample_rate, float frequenc
 		return false;
 	}
 
-	IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
+	AsyncIO::IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
 	filters_.push_back(biquad);
 	return true;
 }
 
 bool IIRFilterBank::ProcessSample(float input, std::vector<float>& outputs) {
-	IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
+	AsyncIO::IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
 	outputs.assign(filters_.size(), 0.0f);
 
 	for (size_t index = 0; index < filters_.size(); ++index) {

@@ -46,7 +46,7 @@ bool SpectrogramGenerator::ExportAsRaw(const std::string& filepath) const {
 		flat.insert(flat.end(), row.begin(), row.end());
 	}
 
-	return IO::LogDebug::DumpHelper::DumpMemoryToFile(
+	return AsyncIO::IO::LogDebug::DumpHelper::DumpMemoryToFile(
 		filepath,
 		reinterpret_cast<const uint8_t*>(flat.data()),
 		flat.size() * sizeof(float));
@@ -61,4 +61,4 @@ std::string SpectrogramGenerator::GetReport() const {
 		", bins=" + std::to_string(GetBinCount());
 }
 
-}  // namespace AIToolsXPro::Audio::AnalysisAI
+}  // namespace Engine::Audio::AnalysisAI
