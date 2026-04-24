@@ -21,7 +21,7 @@ public:
 
 private:
 	float mix_;
-	IO::Sync::MutexWrapper mutex_;
+	AsyncIO::IO::Sync::MutexWrapper mutex_;
 	Engine::Audio::DSP::ConvolutionEngine convolution_;
 };
 

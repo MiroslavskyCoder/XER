@@ -28,7 +28,7 @@ private:
 	float mix_;
 	float lfo_phase_;
 	Engine::Audio::DSP::CircularDelayLine delay_line_;
-	IO::LogDebug::PerformanceCounter perf_counter_;
+	AsyncIO::IO::LogDebug::PerformanceCounter perf_counter_;
 };
 
 }  // namespace Engine::Audio::FX

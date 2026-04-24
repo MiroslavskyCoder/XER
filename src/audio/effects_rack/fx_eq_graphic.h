@@ -25,7 +25,7 @@ private:
 	std::vector<float> center_frequencies_;
 	std::vector<float> gains_db_;
 	std::vector<Engine::Audio::DSP::BiquadProcessor> filters_;
-	IO::LogDebug::PerformanceCounter perf_counter_;
+	AsyncIO::IO::LogDebug::PerformanceCounter perf_counter_;
 };
 
 }  // namespace Engine::Audio::FX

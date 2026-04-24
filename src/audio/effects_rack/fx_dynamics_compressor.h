@@ -21,7 +21,7 @@ public:
 	std::string GetReport() const;
 
 private:
-	IO::Sync::MutexWrapper mutex_;
+	AsyncIO::IO::Sync::MutexWrapper mutex_;
 	float threshold_db_;
 	float ratio_;
 	float attack_ms_;

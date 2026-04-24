@@ -16,7 +16,7 @@ public:
     bool Process(const float* input, float* output, uint32_t frames);
 
 private:
-    IO::LogDebug::PerformanceCounter perf_counter_;
+    AsyncIO::IO::LogDebug::PerformanceCounter perf_counter_;
     double sample_rate_ = 44100.0;
     uint32_t max_block_size_ = 512;
     std::string plugin_path_;

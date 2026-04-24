@@ -33,8 +33,8 @@ public:
 private:
 	size_t window_size_;
 	size_t hop_size_;
-	IO::LogDebug::PerformanceCounter perf_counter_;
-	IO::Sync::MutexWrapper mutex_;
+	AsyncIO::IO::LogDebug::PerformanceCounter perf_counter_;
+	AsyncIO::IO::Sync::MutexWrapper mutex_;
 	AudioFFTAnalyzer fft_analyzer_;
 	std::vector<BeatEvent> beat_events_;
 	std::vector<float> energy_curve_;

@@ -16,7 +16,7 @@ public:
     bool GetValue(uint32_t id, float& value) const;
 
 private:
-    mutable IO::Sync::MutexWrapper mutex_{"plugin_param_bridge"};
+    mutable AsyncIO::IO::Sync::MutexWrapper mutex_{"plugin_param_bridge"};
     std::unordered_map<uint32_t, float> values_;
 };
 

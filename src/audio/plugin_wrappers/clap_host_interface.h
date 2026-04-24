@@ -16,7 +16,7 @@ public:
     bool Process(const float* input, float* output, uint32_t frames);
 
 private:
-    IO::Sync::MutexWrapper mutex_{"clap_host"};
+    AsyncIO::IO::Sync::MutexWrapper mutex_{"clap_host"};
     double sample_rate_ = 44100.0;
     uint32_t max_block_size_ = 512;
     std::string plugin_path_;

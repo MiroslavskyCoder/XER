@@ -38,7 +38,7 @@ private:
 	float x2_;
 	float y1_;
 	float y2_;
-	AIToolsXPro::IO::LogDebug::PerformanceCounter perf_counter_;
+	AsyncIO::IO::LogDebug::PerformanceCounter perf_counter_;
 
 	bool ComputeCoefficients();
 };

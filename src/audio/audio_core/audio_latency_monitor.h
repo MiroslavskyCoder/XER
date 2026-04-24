@@ -38,7 +38,7 @@ public:
     double GetMinLatency() const;
 
     // Performance integration
-    const LogDebug::PerformanceCounter& GetPerformanceCounter() const { return perf_counter_; }
+    const AsyncIO::IO::LogDebug::PerformanceCounter& GetPerformanceCounter() const { return perf_counter_; }
 
     // Report
     std::string GetLatencyReport() const;
@@ -48,7 +48,7 @@ private:
     std::chrono::steady_clock::time_point input_timestamp_;
     std::chrono::steady_clock::time_point output_timestamp_;
     std::vector<double> latency_history_;
-    LogDebug::PerformanceCounter perf_counter_;
+    AsyncIO::IO::LogDebug::PerformanceCounter perf_counter_;
 
     void UpdateHistory(double latency_ms);
 };

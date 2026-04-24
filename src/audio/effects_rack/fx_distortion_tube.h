@@ -21,7 +21,7 @@ public:
 private:
 	float drive_;
 	float output_gain_;
-	IO::LogDebug::PerformanceCounter perf_counter_;
+	AsyncIO::IO::LogDebug::PerformanceCounter perf_counter_;
 };
 
 }  // namespace Engine::Audio::FX

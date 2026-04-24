@@ -31,7 +31,7 @@ private:
 	FFTEngine fft_engine_;
 	std::vector<float> previous_phase_;
 	std::vector<float> phase_accumulator_;
-	IO::LogDebug::PerformanceCounter perf_counter_;
+	AsyncIO::IO::LogDebug::PerformanceCounter perf_counter_;
 };
 
 }  // namespace Engine::Audio::DSP

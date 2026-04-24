@@ -14,7 +14,7 @@ public:
 private:
     double tempo_bpm_ = 120.0;
     double pulse_accumulator_ = 0.0;
-    IO::LogDebug::PerformanceCounter perf_counter_;
+    AsyncIO::IO::LogDebug::PerformanceCounter perf_counter_;
 };
 
 }  // namespace Engine::Audio::MIDI

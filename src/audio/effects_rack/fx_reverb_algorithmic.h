@@ -29,7 +29,7 @@ private:
 	Engine::Audio::DSP::CircularDelayLine comb_a_;
 	Engine::Audio::DSP::CircularDelayLine comb_b_;
 	Engine::Audio::DSP::CircularDelayLine allpass_;
-	IO::LogDebug::PerformanceCounter perf_counter_;
+	AsyncIO::IO::LogDebug::PerformanceCounter perf_counter_;
 };
 
 }  // namespace Engine::Audio::FX

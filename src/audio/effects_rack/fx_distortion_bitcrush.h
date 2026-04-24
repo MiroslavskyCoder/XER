@@ -23,7 +23,7 @@ private:
 	int downsample_factor_;
 	int downsample_counter_;
 	float held_sample_;
-	IO::LogDebug::PerformanceCounter perf_counter_;
+	AsyncIO::IO::LogDebug::PerformanceCounter perf_counter_;
 };
 
 }  // namespace Engine::Audio::FX

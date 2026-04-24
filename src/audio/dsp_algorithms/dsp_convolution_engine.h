@@ -25,7 +25,7 @@ private:
 	std::vector<float> impulse_response_;
 	std::vector<float> history_;
 	IO::AsyncIO::AsyncBufferPool buffer_pool_;
-	IO::LogDebug::PerformanceCounter perf_counter_;
+	AsyncIO::IO::LogDebug::PerformanceCounter perf_counter_;
 };
 
 }  // namespace Engine::Audio::DSP

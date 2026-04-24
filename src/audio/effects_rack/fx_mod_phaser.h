@@ -32,7 +32,7 @@ private:
 	float lfo_phase_;
 	float feedback_state_;
 	std::vector<float> ap_state_;
-	IO::Sync::MutexWrapper mutex_;
+	AsyncIO::IO::Sync::MutexWrapper mutex_;
 };
 
 }  // namespace Engine::Audio::FX

@@ -27,7 +27,7 @@ public:
 private:
 	size_t fft_size_;
 	std::vector<Complex> spectrum_;
-	IO::LogDebug::PerformanceCounter perf_counter_;
+	AsyncIO::IO::LogDebug::PerformanceCounter perf_counter_;
 };
 
 }  // namespace Engine::Audio::DSP

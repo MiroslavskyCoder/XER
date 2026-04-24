@@ -30,7 +30,7 @@ private:
 	size_t grain_index_;
 	std::vector<float> grain_window_;
 	CircularDelayLine delay_line_;
-	IO::LogDebug::PerformanceCounter perf_counter_;
+	AsyncIO::IO::LogDebug::PerformanceCounter perf_counter_;
 };
 
 }  // namespace Engine::Audio::DSP

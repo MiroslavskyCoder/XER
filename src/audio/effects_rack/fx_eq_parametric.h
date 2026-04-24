@@ -30,7 +30,7 @@ public:
 
 private:
 	float sample_rate_;
-	IO::Sync::MutexWrapper mutex_;
+	AsyncIO::IO::Sync::MutexWrapper mutex_;
 	std::vector<ParametricBand> bands_;
 	std::vector<Engine::Audio::DSP::BiquadProcessor> filters_;
 };

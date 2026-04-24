@@ -19,7 +19,7 @@ public:
 	std::string GetReport() const;
 
 private:
-	IO::Sync::MutexWrapper mutex_;
+	AsyncIO::IO::Sync::MutexWrapper mutex_;
 	float ceiling_db_;
 	float release_;
 	float gain_;

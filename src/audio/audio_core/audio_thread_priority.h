@@ -37,7 +37,7 @@ public:
     static int GetOptimalAudioCore();
 
 private:
-    Hardware::CPUInfoProvider cpu_info_;
+    AsyncIO::IO::Hardware::CPUInfoProvider cpu_info_;
 };
 
 }  // namespace Engine::Audio::Core

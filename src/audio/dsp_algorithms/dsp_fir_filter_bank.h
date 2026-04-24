@@ -21,7 +21,7 @@ public:
 	std::string GetReport() const;
 
 private:
-	IO::Sync::MutexWrapper mutex_;
+	AsyncIO::IO::Sync::MutexWrapper mutex_;
 	std::vector<std::vector<float>> filters_;
 	std::vector<std::vector<float>> states_;
 };

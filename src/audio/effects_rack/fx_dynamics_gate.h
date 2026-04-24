@@ -23,7 +23,7 @@ private:
 	size_t hold_samples_;
 	size_t hold_counter_;
 	bool gate_open_;
-	IO::LogDebug::PerformanceCounter perf_counter_;
+	AsyncIO::IO::LogDebug::PerformanceCounter perf_counter_;
 };
 
 }  // namespace Engine::Audio::FX

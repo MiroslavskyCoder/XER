@@ -26,7 +26,7 @@ private:
 	size_t fft_size_;
 	FFTEngine fft_engine_;
 	std::vector<float> shaping_curve_;
-	IO::Sync::MutexWrapper mutex_;
+	AsyncIO::IO::Sync::MutexWrapper mutex_;
 };
 
 }  // namespace Engine::Audio::DSP

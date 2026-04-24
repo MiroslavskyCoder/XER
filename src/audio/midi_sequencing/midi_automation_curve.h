@@ -18,7 +18,7 @@ public:
     float Evaluate(uint32_t tick) const;
 
 private:
-    mutable IO::Sync::MutexWrapper mutex_{"midi_automation_curve"};
+    mutable AsyncIO::IO::Sync::MutexWrapper mutex_{"midi_automation_curve"};
     std::vector<AutomationPoint> points_;
 };
 

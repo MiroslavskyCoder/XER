@@ -22,7 +22,7 @@ public:
 	std::string GetReport() const;
 
 private:
-	IO::Sync::MutexWrapper mutex_;
+	AsyncIO::IO::Sync::MutexWrapper mutex_;
 	std::vector<BiquadProcessor> filters_;
 };
 
