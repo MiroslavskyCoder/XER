@@ -14,6 +14,7 @@ public:
 
     void AddListener(const Callback& cb);
     void Dispatch(const MidiEvent& event);
+    void DispatchBatch(const std::vector<MidiEvent>& events);
 
 private:
     AsyncIO::IO::Sync::MutexWrapper mutex_{"midi_dispatcher"};

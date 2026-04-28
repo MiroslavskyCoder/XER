@@ -8,10 +8,20 @@ void MidiEventDispatcher::AddListener(const Callback& cb) {
 }
 
 void MidiEventDispatcher::Dispatch(const MidiEvent& event) {
-    AsyncIO::IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
-    for (const auto& cb : listeners_) {
-        cb(event);
+    std::vector<Callback> listeners;
+    {
+        AsyncIO::IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
+        listeners = listeners_;
     }
+    for (const auto& cb : listeners) {
+		cb(event);
+	}
+}
+
+void MidiEventDispatcher::DispatchBatch(const std::vector<MidiEvent>& events) {
+	for (const auto& event : events) {
+		Dispatch(event);
+	}
 }
 
 }  // namespace Engine::Audio::MIDI
