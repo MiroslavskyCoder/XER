@@ -3,8 +3,17 @@
 #include <cstddef>
 #include <cstdint>
 #include <vector>
- 
-#include <lame/lame.h> 
+
+#if defined(__has_include)
+#if __has_include(<lame/lame.h>)
+#include <lame/lame.h>
+#define ENGINE_CODEC_HAS_LAME_HEADERS 1
+#else
+#define ENGINE_CODEC_HAS_LAME_HEADERS 0
+#endif
+#else
+#define ENGINE_CODEC_HAS_LAME_HEADERS 0
+#endif
 
 namespace Engine::Audio::CodecIO {
 

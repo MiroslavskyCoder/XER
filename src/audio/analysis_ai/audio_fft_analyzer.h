@@ -1,10 +1,10 @@
 #pragma once
 
+#include "audio/dsp_algorithms/dsp_fft_engine.h"
+
 #include <vector>
 #include <complex>
 #include <string>
-#include <cstdint>
-#include <memory>
  
 
 namespace Engine::Audio::AnalysisAI {
@@ -40,6 +40,7 @@ private:
     std::vector<float> magnitude_spectrum_;
     std::vector<float> phase_spectrum_;
     std::vector<float> window_;
+    Engine::Audio::DSP::FFTEngine fft_engine_;
     
     float total_power_;
     float rms_energy_;

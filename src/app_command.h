@@ -6,6 +6,8 @@ class AppCommand {
 public:
     enum class Type {
         kRun,
+        kCompile,
+        kInspect,
         kHelp,
         kVersion,
         kDoctor,
@@ -21,6 +23,10 @@ public:
         // ---- Emit / output -------------------------------------------------
         bool noemit           = false;
         bool emit_source_map  = false;
+        std::string output_dir;
+        std::string xer_key;
+        std::string xer_key_file;
+        std::string xer_key_env;
 
         // ---- Compiler details ----------------------------------------------
         bool details_compiler = false;

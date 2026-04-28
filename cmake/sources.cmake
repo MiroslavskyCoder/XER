@@ -67,12 +67,18 @@ list(FILTER ENGINE_SRC_CC EXCLUDE REGEX "/src/modules/qt6/")
 list(FILTER ENGINE_SRC_CC EXCLUDE REGEX "/src/async_io/")
 list(FILTER ENGINE_SRC_CC EXCLUDE REGEX "/src/javascript/")
 list(FILTER ENGINE_SRC_CC EXCLUDE REGEX "/src/wrapper/")
+list(FILTER ENGINE_SRC_CC EXCLUDE REGEX "/src/doctor/")
+list(FILTER ENGINE_SRC_CC EXCLUDE REGEX "/src/v8/v8_runtime_checker\\.cc$")
+
+list(APPEND ENGINE_SRC_CC "${CMAKE_CURRENT_SOURCE_DIR}/src/xer/encode/sxer84321.c")
 
 list(FILTER ENGINE_SRC_H EXCLUDE REGEX "/src/wrapper/qt6/")
 list(FILTER ENGINE_SRC_H EXCLUDE REGEX "/src/modules/qt6/")
 list(FILTER ENGINE_SRC_H EXCLUDE REGEX "/src/async_io/")
 list(FILTER ENGINE_SRC_H EXCLUDE REGEX "/src/javascript/")
 list(FILTER ENGINE_SRC_H EXCLUDE REGEX "/src/wrapper/")
+list(FILTER ENGINE_SRC_H EXCLUDE REGEX "/src/doctor/")
+list(FILTER ENGINE_SRC_H EXCLUDE REGEX "/src/v8/v8_runtime_checker\\.h$")
 
 set(ENGINE_PROJECT_CC ${ENGINE_SRC_CC})
 set(ENGINE_PROJECT_H  ${ENGINE_SRC_H})

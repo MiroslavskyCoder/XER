@@ -13,10 +13,12 @@
 #include "crash/crash_handler.h"
 #include "ecosystem/ecosystem_manifest_loader.h"
 #include "engine_params.h"
-#include "flow_script.h"
+#include "flowscript/flow_script.h"
 #include "provider.h"
 #include "runtime_live.h"
 #include "watch/watch_live_updatex_script.h"
+#include "xer/xer_encode.h"
+#include "xer/xer_script.h"
 
 namespace {
 
@@ -61,6 +63,9 @@ void ExportParsedToEnv(const AppCommand::Parsed& p) {
 	// Emit
 	SetEnvFlag("ENGINE_NOEMIT",          p.noemit);
 	SetEnvFlag("ENGINE_EMIT_SOURCE_MAP", p.emit_source_map);
+	if (!p.xer_key.empty()) SetEnvValue("ENGINE_XER_KEY", p.xer_key);
+	if (!p.xer_key_file.empty()) SetEnvValue("ENGINE_XER_KEY_FILE", p.xer_key_file);
+	if (!p.xer_key_env.empty()) SetEnvValue("ENGINE_XER_KEY_ENV", p.xer_key_env);
 
 	// Compiler / logging
 	SetEnvFlag("ENGINE_DETAILS_COMPILER", p.details_compiler);
@@ -237,8 +242,66 @@ int main(int argc, char** argv) {
 		return 1;
 	}
 
+	if (parsed.type == AppCommand::Type::kInspect) {
+		Xer::XerEncode encoder;
+		std::string inspect_report;
+		std::string inspect_error;
+		if (!encoder.InspectFile(script_path, &inspect_report, &inspect_error)) {
+			std::cerr << "Failed to inspect XER artifact: " << inspect_error << "\n";
+			return 1;
+		}
+		std::cout << inspect_report;
+		if (inspect_report.empty() || inspect_report.back() != '\n') {
+			std::cout << "\n";
+		}
+		return 0;
+	}
+
+	if (parsed.type == AppCommand::Type::kCompile) {
+		std::string extension = std::filesystem::path(script_path).extension().string();
+		for (char& ch : extension) {
+			ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+		}
+		if (extension != ".xer") {
+			std::cerr << "Compile command only supports .xer sources: " << script_path << "\n";
+			return 1;
+		}
+
+		Xer::XerEncode encoder;
+		std::string protection_error;
+		const Xer::XerProtectionOptions protection = Xer::ResolveProtectionOptionsFromEnvironment(&protection_error);
+		if (!protection_error.empty()) {
+			std::cerr << "Failed to resolve XER encryption key: " << protection_error << "\n";
+			return 1;
+		}
+		std::string compile_error;
+		const Xer::XerEncodedBlock block = encoder.Compile(script_path, protection, &compile_error);
+		if (!compile_error.empty()) {
+			std::cerr << "Failed to compile .xer script: " << compile_error << "\n";
+			return 1;
+		}
+
+		const std::filesystem::path output_dir = parsed.output_dir.empty()
+			? std::filesystem::path()
+			: std::filesystem::path(parsed.output_dir);
+		if (!encoder.WriteArtifacts(script_path, block, output_dir, &compile_error)) {
+			std::cerr << "Failed to write compile artifacts: " << compile_error << "\n";
+			return 1;
+		}
+
+		const std::filesystem::path destination_dir = output_dir.empty()
+			? std::filesystem::path(script_path).parent_path()
+			: output_dir;
+		const std::string stem = std::filesystem::path(script_path).stem().string();
+		std::cout << "Compiled XER artifacts:\n";
+		std::cout << "  " << (destination_dir / (stem + ".bin")).string() << "\n";
+		std::cout << "  " << (destination_dir / (stem + ".bak")).string() << "\n";
+		return 0;
+	}
+
 	CrashHandler::SetScriptPath(script_path);
 	CrashHandler::SetDumpDir(".");
+	const bool use_xer_runtime = XerScript::Supports(script_path);
 
 	if (parsed.watch) {
 		WatchLiveUpdatexScriptConfig watch_cfg;
@@ -246,8 +309,19 @@ int main(int argc, char** argv) {
 		watch_cfg.poll_interval_ms = parsed.watch_interval_ms;
 		WatchLiveUpdatexScript watcher(std::move(watch_cfg));
 		const int watch_code = watcher.Run();
-		FlowScript::Shutdown();
+		if (!use_xer_runtime) {
+			FlowScript::Shutdown();
+		}
 		return watch_code;
+	}
+
+	if (use_xer_runtime) {
+		XerScript script(script_path);
+		if (!script.Run()) {
+			std::cerr << "Failed to run .xer script: " << script_path << "\n";
+			return 1;
+		}
+		return 0;
 	}
 
 	FlowScript script(script_path);

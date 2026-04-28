@@ -7,8 +7,8 @@
 
 #include "engine_params.h"
 #include "flow_script_require_support.h"
-#include "stack_error.h"
-#include "tool_to.h"
+#include "helper/stack_error.h"
+#include "helper/tool_to.h"
 
 namespace flow_script_detail {
 

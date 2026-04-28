@@ -32,6 +32,8 @@ std::string TryDemangle(const char* mangled) {
             return result;
         }
     }
+#elif defined(_WIN32)
+    // Windows does not have a standard demangling API.  Just return the mangled name.
 #endif
     return std::string(mangled);
 }

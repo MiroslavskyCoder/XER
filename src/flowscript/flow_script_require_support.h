@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-#include "file_diff.h"
+#include "helper/file_diff.h"
 
 namespace flow_script_detail::require_support {
 

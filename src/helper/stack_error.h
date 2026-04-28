@@ -18,3 +18,5 @@ public:
 };
 
 }
+
+using StackError = Engine::Helper::StackError;

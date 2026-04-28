@@ -8,7 +8,7 @@ bool FlacDecoder::Decode(const uint8_t* data, size_t bytes, std::vector<float>& 
     if (data == nullptr || bytes == 0) {
         return false;
     }
-#if ENGINE_USE_FLAC
+#if ENGINE_CODEC_HAS_FLAC_HEADERS
     FLAC__StreamDecoder* dec = FLAC__stream_decoder_new();
     if (dec != nullptr) {
         FLAC__stream_decoder_delete(dec);

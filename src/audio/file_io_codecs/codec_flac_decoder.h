@@ -3,8 +3,17 @@
 #include <cstddef>
 #include <cstdint>
 #include <vector>
- 
-#include <FLAC/stream_decoder.h> 
+
+#if defined(__has_include)
+#if __has_include(<FLAC/stream_decoder.h>)
+#include <FLAC/stream_decoder.h>
+#define ENGINE_CODEC_HAS_FLAC_HEADERS 1
+#else
+#define ENGINE_CODEC_HAS_FLAC_HEADERS 0
+#endif
+#else
+#define ENGINE_CODEC_HAS_FLAC_HEADERS 0
+#endif
 
 namespace Engine::Audio::CodecIO {
 

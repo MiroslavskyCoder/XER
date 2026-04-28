@@ -37,3 +37,8 @@ private:
 };
 
 }
+
+using FileDiffOperationType = Engine::Helper::FileDiffOperationType;
+using FileDiffOperation = Engine::Helper::FileDiffOperation;
+using FileDiffReturn = Engine::Helper::FileDiffReturn;
+using FileDiff = Engine::Helper::FileDiff;

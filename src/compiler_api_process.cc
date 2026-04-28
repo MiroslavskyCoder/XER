@@ -1,6 +1,6 @@
 #include "compiler_api.h"
 
-#include "tool_to.h"
+#include "helper/tool_to.h"
 
 #include <llvm/Support/ErrorOr.h>
 #include <llvm/Support/Program.h>

@@ -107,6 +107,14 @@ AppCommand::Parsed AppCommand::Parse(int argc, char** argv) {
         return parsed;
     }
 
+    if (command == "compile") {
+        parsed.type = Type::kCompile;
+    }
+
+    if (command == "inspect") {
+        parsed.type = Type::kInspect;
+    }
+
     if (command == "doctor") {
         parsed.type = Type::kDoctor;
         // allow --verbose after doctor
@@ -115,6 +123,12 @@ AppCommand::Parsed AppCommand::Parse(int argc, char** argv) {
     size_t script_index = 1;
     if (command == "run") {
         parsed.type = Type::kRun;
+        script_index = 2;
+    } else if (command == "compile") {
+        parsed.type = Type::kCompile;
+        script_index = 2;
+    } else if (command == "inspect") {
+        parsed.type = Type::kInspect;
         script_index = 2;
     } else if (command != "doctor") {
         script_index = 1;
@@ -141,6 +155,38 @@ AppCommand::Parsed AppCommand::Parse(int argc, char** argv) {
         // ---- Emit ----------------------------------------------------------
         if (arg == "--noemit")                   { parsed.noemit = true;              continue; }
         if (arg == "--emit_source_map")          { parsed.emit_source_map = true;     continue; }
+        {
+            std::string value; bool inline_v = false;
+            if (ParseValueFlag(arg, "--output_dir", &value, &inline_v)) {
+                if (!inline_v && !ConsumeStringValue("--output_dir", argc, argv, &i, &value, &parsed))
+                    return parsed;
+                parsed.output_dir = value; continue;
+            }
+        }
+        {
+            std::string value; bool inline_v = false;
+            if (ParseValueFlag(arg, "--xer_key", &value, &inline_v)) {
+                if (!inline_v && !ConsumeStringValue("--xer_key", argc, argv, &i, &value, &parsed))
+                    return parsed;
+                parsed.xer_key = value; continue;
+            }
+        }
+        {
+            std::string value; bool inline_v = false;
+            if (ParseValueFlag(arg, "--xer_key_file", &value, &inline_v)) {
+                if (!inline_v && !ConsumeStringValue("--xer_key_file", argc, argv, &i, &value, &parsed))
+                    return parsed;
+                parsed.xer_key_file = value; continue;
+            }
+        }
+        {
+            std::string value; bool inline_v = false;
+            if (ParseValueFlag(arg, "--xer_key_env", &value, &inline_v)) {
+                if (!inline_v && !ConsumeStringValue("--xer_key_env", argc, argv, &i, &value, &parsed))
+                    return parsed;
+                parsed.xer_key_env = value; continue;
+            }
+        }
 
         // ---- Compiler / logging -------------------------------------------
         if (arg == "--details_compiler")         { parsed.details_compiler = true;    continue; }
@@ -448,14 +494,21 @@ std::string AppCommand::BuildHelpText(const std::string& binary_name) {
     std::ostringstream out;
     out << "Usage:\n";
     out << "  " << binary_name << " run [script.js] [options]\n";
+    out << "  " << binary_name << " compile [script.xer] [options]\n";
+    out << "  " << binary_name << " inspect [artifact.bin|artifact.bak]\n";
     out << "  " << binary_name << " run --script path/to/script.js [options]\n";
     out << "\nScript:\n";
-    out << "  --script, -s <path>          Entry-point JS/TS file\n";
+    out << "  --script, -s <path>          Entry-point JS/TS/XER file\n";
     out << "\nSecurity:\n";
     out << "  --sandbox                    Restrict FS/network access inside scripts\n";
     out << "\nEmit / output:\n";
     out << "  --noemit                     Dry-run: parse and validate only\n";
     out << "  --emit_source_map            Write source-maps alongside compiled output\n";
+    out << "  --output_dir <path>          Write generated compile artifacts into directory\n";
+    out << "\nXER protection:\n";
+    out << "  --xer_key <secret>           Encrypt XER .bin payloads with AES-256-GCM\n";
+    out << "  --xer_key_file <path>        Read XER encryption key from file\n";
+    out << "  --xer_key_env <name>         Read XER encryption key from environment variable\n";
     out << "\nCompiler / logging:\n";
     out << "  --details_compiler           Print detailed Clang/LLVM diagnostics\n";
     out << "  --verbose                    Extra progress messages throughout pipeline\n";
@@ -513,6 +566,8 @@ std::string AppCommand::BuildHelpText(const std::string& binary_name) {
     out << "  --watch_interval_ms <n>      Watch polling interval in ms (default: 350)\n";
     out << "  --ecosystem[=path]           Load ecosystem manifest (default: ecosystem.json)\n";
     out << "\nCommands:\n";
+    out << "  " << binary_name << " compile <script.xer> [--output_dir dir] [--xer_key_file path]   Build .bin/.bak only\n";
+    out << "  " << binary_name << " inspect <artifact.bin|artifact.bak>   Print XER metadata without execution\n";
     out << "  " << binary_name << " doctor [--doctor_verbose]   Check environment\n";
     out << "  " << binary_name << " version\n";
     out << "  " << binary_name << " help\n";

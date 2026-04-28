@@ -32,13 +32,17 @@ bool SpectralShaper::ProcessBlock(const float* input, size_t frame_count, float*
 		return false;
 	}
 
-	std::vector<float> magnitude = fft_engine_.GetMagnitude();
-	const size_t limit = std::min(magnitude.size(), shaping_curve_.size());
+	auto& spectrum = fft_engine_.MutableSpectrum();
+	const size_t positive_bins = (fft_size_ / 2) + 1;
+	const size_t limit = std::min(positive_bins, shaping_curve_.size());
 	for (size_t i = 0; i < limit; ++i) {
-		magnitude[i] *= shaping_curve_[i];
+		spectrum[i] *= shaping_curve_[i];
+	}
+	for (size_t i = positive_bins; i < fft_size_; ++i) {
+		const size_t mirrored = fft_size_ - i;
+		spectrum[i] = std::conj(spectrum[mirrored]);
 	}
 
-	// Placeholder synthesis path.
 	return fft_engine_.Inverse(output, frame_count);
 }
 

@@ -21,11 +21,23 @@ endif()
 if(ENGINE_HAS_BROTLI)
     target_include_directories(EngineBuilder PRIVATE ${BROTLI_INCLUDE_DIR})
 endif()
+if(ENGINE_HAS_FFI)
+    target_include_directories(EngineBuilder PRIVATE ${FFI_INCLUDE_DIR})
+endif()
+if(ENGINE_HAS_FFTW3F)
+    target_include_directories(EngineBuilder PRIVATE ${FFTW3_INCLUDE_DIR})
+endif()
+if(ENGINE_HAS_ICU)
+    target_include_directories(EngineBuilder PRIVATE ${ICU_INCLUDE_DIRS})
+endif()
 
 target_compile_definitions(EngineBuilder PRIVATE
     ${LLVM_DEFINITIONS}
     ENGINE_HAS_ZSTD=${ENGINE_HAS_ZSTD}
     ENGINE_HAS_BROTLI=${ENGINE_HAS_BROTLI}
+    ENGINE_HAS_FFI=${ENGINE_HAS_FFI}
+    ENGINE_HAS_FFTW3F=${ENGINE_HAS_FFTW3F}
+    ENGINE_HAS_ICU=${ENGINE_HAS_ICU}
     ENGINE_HAS_SQLITE3=${ENGINE_HAS_SQLITE3}
     ENGINE_HAS_QT6=${ENGINE_HAS_QT6})
 
@@ -53,6 +65,18 @@ if(ENGINE_HAS_BROTLI)
         ${BROTLI_ENC_LIBRARY}
         ${BROTLI_DEC_LIBRARY}
         ${BROTLI_COMMON_LIBRARY})
+endif()
+
+if(ENGINE_HAS_FFI)
+    target_link_libraries(EngineBuilder PRIVATE ${FFI_LIBRARY})
+endif()
+
+if(ENGINE_HAS_FFTW3F)
+    target_link_libraries(EngineBuilder PRIVATE ${FFTW3F_LIBRARY})
+endif()
+
+if(ENGINE_HAS_ICU)
+    target_link_libraries(EngineBuilder PRIVATE ${ICU_LIBRARIES})
 endif()
 
 if(TARGET LibXml2::LibXml2)
@@ -111,6 +135,10 @@ else()
         target_include_directories(EngineBuilder PRIVATE ${RANGEV3_INCLUDE_DIRS})
         target_link_libraries(EngineBuilder PRIVATE ${RANGEV3_LIBRARIES})
     endif()
+endif()
+
+if(TARGET absl::flat_hash_map)
+    target_link_libraries(EngineBuilder PRIVATE absl::flat_hash_map)
 endif()
 
 # ── Bridge static libs ───────────────────────────────────────

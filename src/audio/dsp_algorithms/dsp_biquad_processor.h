@@ -16,7 +16,12 @@ enum class BiquadType {
 class BiquadProcessor {
 public:
 	BiquadProcessor();
+	BiquadProcessor(const BiquadProcessor& other);
+	BiquadProcessor(BiquadProcessor&& other) noexcept;
 	~BiquadProcessor();
+
+	BiquadProcessor& operator=(const BiquadProcessor& other);
+	BiquadProcessor& operator=(BiquadProcessor&& other) noexcept;
 
 	bool Configure(BiquadType type, float sample_rate, float frequency, float q);
 	float ProcessSample(float sample);

@@ -2,6 +2,7 @@
 
 #include <complex>
 #include <cstddef>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -21,13 +22,17 @@ public:
 	void Reset();
 
 	const std::vector<Complex>& GetSpectrum() const { return spectrum_; }
+	std::vector<Complex>& MutableSpectrum() { return spectrum_; }
 	std::vector<float> GetMagnitude() const;
 	std::string GetReport() const;
 
 private:
+	struct BackendState;
+
 	size_t fft_size_;
 	std::vector<Complex> spectrum_;
-	AsyncIO::IO::LogDebug::PerformanceCounter perf_counter_;
+	std::unique_ptr<BackendState> backend_;
+	mutable AsyncIO::IO::LogDebug::PerformanceCounter perf_counter_;
 };
 
 }  // namespace Engine::Audio::DSP

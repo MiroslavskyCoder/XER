@@ -25,7 +25,87 @@ BiquadProcessor::BiquadProcessor()
 	perf_counter_.Enable();
 }
 
+BiquadProcessor::BiquadProcessor(const BiquadProcessor& other)
+	: type_(other.type_),
+	  sample_rate_(other.sample_rate_),
+	  frequency_(other.frequency_),
+	  q_(other.q_),
+	  b0_(other.b0_),
+	  b1_(other.b1_),
+	  b2_(other.b2_),
+	  a1_(other.a1_),
+	  a2_(other.a2_),
+	  x1_(other.x1_),
+	  x2_(other.x2_),
+	  y1_(other.y1_),
+	  y2_(other.y2_) {
+	perf_counter_.Enable();
+}
+
+BiquadProcessor::BiquadProcessor(BiquadProcessor&& other) noexcept
+	: type_(other.type_),
+	  sample_rate_(other.sample_rate_),
+	  frequency_(other.frequency_),
+	  q_(other.q_),
+	  b0_(other.b0_),
+	  b1_(other.b1_),
+	  b2_(other.b2_),
+	  a1_(other.a1_),
+	  a2_(other.a2_),
+	  x1_(other.x1_),
+	  x2_(other.x2_),
+	  y1_(other.y1_),
+	  y2_(other.y2_) {
+	perf_counter_.Enable();
+}
+
 BiquadProcessor::~BiquadProcessor() = default;
+
+BiquadProcessor& BiquadProcessor::operator=(const BiquadProcessor& other) {
+	if (this == &other) {
+		return *this;
+	}
+
+	type_ = other.type_;
+	sample_rate_ = other.sample_rate_;
+	frequency_ = other.frequency_;
+	q_ = other.q_;
+	b0_ = other.b0_;
+	b1_ = other.b1_;
+	b2_ = other.b2_;
+	a1_ = other.a1_;
+	a2_ = other.a2_;
+	x1_ = other.x1_;
+	x2_ = other.x2_;
+	y1_ = other.y1_;
+	y2_ = other.y2_;
+	perf_counter_.ResetAll();
+	perf_counter_.Enable();
+	return *this;
+}
+
+BiquadProcessor& BiquadProcessor::operator=(BiquadProcessor&& other) noexcept {
+	if (this == &other) {
+		return *this;
+	}
+
+	type_ = other.type_;
+	sample_rate_ = other.sample_rate_;
+	frequency_ = other.frequency_;
+	q_ = other.q_;
+	b0_ = other.b0_;
+	b1_ = other.b1_;
+	b2_ = other.b2_;
+	a1_ = other.a1_;
+	a2_ = other.a2_;
+	x1_ = other.x1_;
+	x2_ = other.x2_;
+	y1_ = other.y1_;
+	y2_ = other.y2_;
+	perf_counter_.ResetAll();
+	perf_counter_.Enable();
+	return *this;
+}
 
 bool BiquadProcessor::Configure(BiquadType type, float sample_rate, float frequency, float q) {
 	if (sample_rate <= 0.0f || frequency <= 0.0f || q <= 0.0f) {

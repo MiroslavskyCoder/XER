@@ -2,14 +2,22 @@
 
 #include <string>
 
+#if defined(__has_include)
+#if __has_include("modules/module_registry.h")
 #include "modules/module_registry.h"
+#define ENGINE_FLOWSCRIPT_HAS_MODULE_REGISTRY 1
+#else
+#define ENGINE_FLOWSCRIPT_HAS_MODULE_REGISTRY 0
+#endif
+#else
+#define ENGINE_FLOWSCRIPT_HAS_MODULE_REGISTRY 0
+#endif
 
 namespace flow_script_detail {
 
 void ImportModuleCallback(const v8::FunctionCallbackInfo<v8::Value>& args) {
     v8::Isolate* isolate = args.GetIsolate();
     v8::HandleScope handle_scope(isolate);
-    v8::Local<v8::Context> context = isolate->GetCurrentContext();
 
     if (args.Length() < 1 || !args[0]->IsString()) {
         isolate->ThrowException(v8::Exception::TypeError(
@@ -24,6 +32,8 @@ void ImportModuleCallback(const v8::FunctionCallbackInfo<v8::Value>& args) {
         return;
     }
 
+#if ENGINE_FLOWSCRIPT_HAS_MODULE_REGISTRY
+    v8::Local<v8::Context> context = isolate->GetCurrentContext();
     std::string error;
     if (!modules::ImportModule(isolate, context, *module_name_utf8, &error)) {
         if (error.empty()) {
@@ -32,6 +42,10 @@ void ImportModuleCallback(const v8::FunctionCallbackInfo<v8::Value>& args) {
         isolate->ThrowException(v8::Exception::Error(
             v8::String::NewFromUtf8(isolate, error.c_str()).ToLocalChecked()));
     }
+#else
+    isolate->ThrowException(v8::Exception::Error(
+        v8::String::NewFromUtf8Literal(isolate, "ImportModule is unavailable in this build")));
+#endif
 }
 
 }  // namespace flow_script_detail

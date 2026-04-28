@@ -1,7 +1,7 @@
 #include "audio_fft_analyzer.h"
 
-#include <cmath>
 #include <algorithm>
+#include <cmath>
 #include <numeric>
 
 namespace Engine::Audio::AnalysisAI {
@@ -9,7 +9,7 @@ namespace Engine::Audio::AnalysisAI {
 const float PI = 3.14159265359f;
 
 AudioFFTAnalyzer::AudioFFTAnalyzer(size_t fft_size)
-    : fft_size_(fft_size), total_power_(0.0f), rms_energy_(0.0f) {
+    : fft_size_(fft_size), fft_engine_(fft_size), total_power_(0.0f), rms_energy_(0.0f) {
     fft_output_.resize(fft_size);
     magnitude_spectrum_.resize(fft_size / 2);
     phase_spectrum_.resize(fft_size / 2);
@@ -21,18 +21,16 @@ AudioFFTAnalyzer::~AudioFFTAnalyzer() {}
 bool AudioFFTAnalyzer::ComputeFFT(const float* input, size_t frame_count) {
     if (!input || frame_count != fft_size_) return false;
 
-    // Simple DFT implementation (optimized FFT would use FFTW/vDSP)
-    for (size_t k = 0; k < fft_size_; ++k) {
-        Complex sum(0.0f, 0.0f);
-        
-        for (size_t n = 0; n < fft_size_; ++n) {
-            float angle = -2.0f * PI * k * n / fft_size_;
-            Complex exp_val(std::cos(angle), std::sin(angle));
-            sum += input[n] * window_[n] * exp_val;
-        }
-        
-        fft_output_[k] = sum;
+    std::vector<float> time_domain(fft_size_, 0.0f);
+    for (size_t i = 0; i < fft_size_; ++i) {
+        time_domain[i] = input[i] * window_[i];
     }
+
+    if (!fft_engine_.Forward(time_domain.data(), time_domain.size())) {
+        return false;
+    }
+
+    fft_output_ = fft_engine_.GetSpectrum();
 
     ComputeMagnitudePhase();
     return true;

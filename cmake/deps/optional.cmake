@@ -13,6 +13,20 @@ find_package(range-v3 QUIET)
 find_package(OpenCV QUIET)
 find_package(CUDAToolkit QUIET)
 find_package(Skia QUIET CONFIG)
+find_path(FFI_INCLUDE_DIR NAMES ffi.h)
+find_library(FFI_LIBRARY NAMES ffi libffi)
+find_path(FFTW3_INCLUDE_DIR NAMES fftw3.h)
+find_library(FFTW3F_LIBRARY NAMES fftw3f)
+
+set(ENGINE_HAS_FFI 0)
+if(FFI_INCLUDE_DIR AND FFI_LIBRARY)
+    set(ENGINE_HAS_FFI 1)
+endif()
+
+set(ENGINE_HAS_FFTW3F 0)
+if(FFTW3_INCLUDE_DIR AND FFTW3F_LIBRARY)
+    set(ENGINE_HAS_FFTW3F 1)
+endif()
 
 # ── ICU ──────────────────────────────────────────────────────
 set(ENGINE_HAS_ICU 0)

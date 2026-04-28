@@ -1,5 +1,7 @@
 #include "codec_file_streamer.h"
 
+#include <cstring>
+
 namespace Engine::Audio::CodecIO {
 
 CodecFileStreamer::CodecFileStreamer()
@@ -25,10 +27,17 @@ size_t CodecFileStreamer::ReadBytes(uint8_t* dst, size_t bytes) {
     if (!reading_open_ || dst == nullptr || bytes == 0) {
         return 0;
     }
+
+    std::vector<uint8_t> buffer;
     perf_counter_.StartCounter("codec_stream_read");
-    const size_t read = reader_.ReadSync(dst, bytes);
+    const bool ok = reader_.ReadSync(bytes, buffer);
     perf_counter_.StopCounter("codec_stream_read");
-    return read;
+    if (!ok || buffer.empty()) {
+        return 0;
+    }
+
+    std::memcpy(dst, buffer.data(), buffer.size());
+    return buffer.size();
 }
 
 size_t CodecFileStreamer::WriteBytes(const uint8_t* src, size_t bytes) {
