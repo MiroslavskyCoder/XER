@@ -1,5 +1,7 @@
 #include "codec_mp3_lame.h"
 
+#include "codec_ffmpeg_decode_helper.h"
+
 #include <algorithm>
 #include <cstdint>
 #include <vector>
@@ -59,20 +61,10 @@ bool Mp3LameCodec::Encode(const float* input, size_t frames, std::vector<uint8_t
     out.resize(static_cast<std::size_t>(encoded + flushed));
     return !out.empty();
 #else
-    out.resize(4 + frames * sizeof(std::int16_t));
-    out[0] = kFallbackMagic[0];
-    out[1] = kFallbackMagic[1];
-    out[2] = kFallbackMagic[2];
-    out[3] = kFallbackMagic[3];
-
-    for (std::size_t i = 0; i < frames; ++i) {
-        const float clamped = std::clamp(input[i], -1.0f, 1.0f);
-        const auto sample = static_cast<std::int16_t>(clamped * 32767.0f);
-        out[4 + i * 2 + 0] = static_cast<std::uint8_t>(sample & 0xFF);
-        out[4 + i * 2 + 1] = static_cast<std::uint8_t>((sample >> 8) & 0xFF);
-    }
-
-    return true;
+    (void)input;
+    (void)frames;
+    out.clear();
+    return false;
 #endif
 }
 
@@ -96,9 +88,12 @@ bool Mp3LameCodec::Decode(const uint8_t* data, size_t bytes, std::vector<float>&
         return true;
     }
 
-    // Generic fallback for unknown MP3 payloads when no decoder backend is linked.
-    out.assign(bytes / 2, 0.0f);
-    return !out.empty();
+    std::string error;
+    if (!detail::DecodeAudioBufferWithFfmpeg(data, bytes, ".mp3", &out, &error)) {
+        out.clear();
+        return false;
+    }
+    return true;
 }
 
 }  // namespace Engine::Audio::CodecIO

@@ -1,5 +1,7 @@
 #include "codec_aac_adts.h"
 
+#include "codec_ffmpeg_decode_helper.h"
+
 #include <algorithm>
 #include <cstdint>
 
@@ -27,24 +29,21 @@ bool AacAdtsCodec::Encode(const float* input, size_t frames, std::vector<uint8_t
     if (input == nullptr || frames == 0) {
         return false;
     }
-
-    const std::size_t payload_bytes = frames * 2;
-    const std::uint16_t frame_length = static_cast<std::uint16_t>(7 + payload_bytes);
-    out.assign(frame_length, 0);
-    WriteAdtsHeader(out.data(), frame_length);
-    for (std::size_t i = 0; i < frames; ++i) {
-        const float clamped = std::clamp(input[i], -1.0f, 1.0f);
-        const std::int16_t s = static_cast<std::int16_t>(clamped * 32767.0f);
-        out[7 + i * 2 + 0] = static_cast<std::uint8_t>(s & 0xFF);
-        out[7 + i * 2 + 1] = static_cast<std::uint8_t>((s >> 8) & 0xFF);
-    }
-    return true;
+	(void)input;
+	(void)frames;
+	out.clear();
+	return false;
 }
 
 bool AacAdtsCodec::Decode(const uint8_t* data, size_t bytes, std::vector<float>& out) const {
     if (data == nullptr || bytes == 0) {
         return false;
     }
+
+	std::string error;
+	if (detail::DecodeAudioBufferWithFfmpeg(data, bytes, ".aac", &out, &error)) {
+		return true;
+	}
 
     std::vector<float> decoded;
     std::size_t cursor = 0;
