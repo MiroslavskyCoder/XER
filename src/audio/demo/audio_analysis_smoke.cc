@@ -228,7 +228,8 @@ bool RunAudioAnalysisSmoke(
 	output << "loudness_short_term_lufs=" << loudness_meter.GetShortTermLUFS() << "\n";
 	output << "loudness_integrated_lufs=" << loudness_meter.GetIntegratedLUFS() << "\n";
 	output << "loudness_true_peak_dbfs=" << loudness_meter.GetTruePeakDBFS() << "\n";
-	output << "loudness_blocks=" << loudness_history.size() << "\n";
+	output << "loudness_history_blocks=" << loudness_history.size() << "\n";
+	output << "loudness_processed_blocks=" << loudness_meter.GetProcessedBlocks() << "\n";
 	output << "beat_report=" << beat_tracker.GetReport() << "\n";
 	output << "pitch_report=" << pitch_estimator.GetReport() << "\n";
 	output << "loudness_report=" << loudness_meter.GetReport() << "\n";

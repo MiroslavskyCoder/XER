@@ -22,6 +22,7 @@ public:
 	double GetShortTermLUFS() const { return short_term_lufs_; }
 	double GetIntegratedLUFS() const { return integrated_lufs_; }
 	double GetTruePeakDBFS() const { return true_peak_dbfs_; }
+	uint64_t GetProcessedBlocks() const { return processed_blocks_; }
 	const std::vector<double>& GetHistory() const { return loudness_history_; }
 	std::string GetReport() const;
 
