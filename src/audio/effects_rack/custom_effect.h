@@ -10,6 +10,8 @@ namespace Engine::Audio::FX {
 
 CustomEffectPackage BuildSmokeCustomEffectPackage();
 CustomEffectPackage BuildExampleCustomEffectPackage(const std::string& clap_plugin_reference = "builtin://gain");
+CustomEffectPackage BuildNamedCustomEffectPackage(const std::string& effect_name, const std::string& clap_plugin_reference = "builtin://gain");
+std::vector<std::string> ListAvailableCustomEffects();
 bool RenderCustomEffectExample(
 	float sample_rate,
 	const std::vector<float>& input,

@@ -16,9 +16,18 @@ enum class CustomEffectAlgorithm {
 	kUnknown,
 	kPassthrough,
 	kCompressor,
+	kExpander,
+	kGate,
 	kChorus,
+	kFlanger,
+	kPhaser,
 	kParametricEq,
 	kLimiter,
+	kBitcrush,
+	kTube,
+	kReverbAlgorithmic,
+	kPitchShift,
+	kDelay,
 	kPlugin,
 };
 

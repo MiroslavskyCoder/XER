@@ -5,7 +5,23 @@
 namespace Engine::Audio::FX {
 
 std::vector<std::string> ListCustomEffectAlgorithms() {
-	return {"passthrough", "compressor", "chorus", "parametric_eq", "limiter", "clap_plugin"};
+	return {
+		"passthrough",
+		"compressor",
+		"expander",
+		"gate",
+		"chorus",
+		"flanger",
+		"phaser",
+		"parametric_eq",
+		"limiter",
+		"bitcrush",
+		"tube",
+		"reverb_algorithmic",
+		"pitch_shift",
+		"delay",
+		"clap_plugin",
+	};
 }
 
 CustomEffectNode CreateDefaultCustomEffectNode(const std::string& algorithm_name) {
@@ -24,10 +40,33 @@ CustomEffectNode CreateDefaultCustomEffectNode(const std::string& algorithm_name
 		node.parameters.push_back(CustomEffectParameter{"threshold_db", -16.0f});
 		node.parameters.push_back(CustomEffectParameter{"ratio", 3.0f});
 		break;
+	case CustomEffectAlgorithm::kExpander:
+		node.mix_curve.push_back(CustomEffectCurvePoint{0u, 1.0f});
+		node.parameters.push_back(CustomEffectParameter{"threshold_db", -36.0f});
+		node.parameters.push_back(CustomEffectParameter{"ratio", 2.5f});
+		node.parameters.push_back(CustomEffectParameter{"range_db", 18.0f});
+		break;
+	case CustomEffectAlgorithm::kGate:
+		node.mix_curve.push_back(CustomEffectCurvePoint{0u, 1.0f});
+		node.parameters.push_back(CustomEffectParameter{"threshold_db", -42.0f});
+		node.parameters.push_back(CustomEffectParameter{"hold_samples", 256.0f});
+		break;
 	case CustomEffectAlgorithm::kChorus:
 		node.mix_curve.push_back(CustomEffectCurvePoint{0u, 0.35f});
 		node.parameters.push_back(CustomEffectParameter{"rate_hz", 0.8f});
 		node.parameters.push_back(CustomEffectParameter{"depth_samples", 14.0f});
+		break;
+	case CustomEffectAlgorithm::kFlanger:
+		node.mix_curve.push_back(CustomEffectCurvePoint{0u, 0.40f});
+		node.parameters.push_back(CustomEffectParameter{"rate_hz", 0.35f});
+		node.parameters.push_back(CustomEffectParameter{"depth_samples", 10.0f});
+		node.parameters.push_back(CustomEffectParameter{"feedback", 0.25f});
+		break;
+	case CustomEffectAlgorithm::kPhaser:
+		node.mix_curve.push_back(CustomEffectCurvePoint{0u, 0.40f});
+		node.parameters.push_back(CustomEffectParameter{"rate_hz", 0.30f});
+		node.parameters.push_back(CustomEffectParameter{"depth", 0.7f});
+		node.parameters.push_back(CustomEffectParameter{"feedback", 0.2f});
 		break;
 	case CustomEffectAlgorithm::kParametricEq:
 		return CreateCustomEffectLiteEqNode(4.5f);
@@ -35,6 +74,30 @@ CustomEffectNode CreateDefaultCustomEffectNode(const std::string& algorithm_name
 		node.mix_curve.push_back(CustomEffectCurvePoint{0u, 1.0f});
 		node.parameters.push_back(CustomEffectParameter{"ceiling_db", -1.0f});
 		node.parameters.push_back(CustomEffectParameter{"release", 0.002f});
+		break;
+	case CustomEffectAlgorithm::kBitcrush:
+		node.mix_curve.push_back(CustomEffectCurvePoint{0u, 0.75f});
+		node.parameters.push_back(CustomEffectParameter{"bit_depth", 10.0f});
+		node.parameters.push_back(CustomEffectParameter{"downsample_factor", 2.0f});
+		break;
+	case CustomEffectAlgorithm::kTube:
+		node.mix_curve.push_back(CustomEffectCurvePoint{0u, 0.70f});
+		node.parameters.push_back(CustomEffectParameter{"drive", 2.4f});
+		node.parameters.push_back(CustomEffectParameter{"output_gain", 0.85f});
+		break;
+	case CustomEffectAlgorithm::kReverbAlgorithmic:
+		node.mix_curve.push_back(CustomEffectCurvePoint{0u, 0.35f});
+		node.parameters.push_back(CustomEffectParameter{"room_size", 0.6f});
+		node.parameters.push_back(CustomEffectParameter{"damping", 0.3f});
+		break;
+	case CustomEffectAlgorithm::kPitchShift:
+		node.mix_curve.push_back(CustomEffectCurvePoint{0u, 1.0f});
+		node.parameters.push_back(CustomEffectParameter{"pitch_ratio", 1.0f});
+		break;
+	case CustomEffectAlgorithm::kDelay:
+		node.mix_curve.push_back(CustomEffectCurvePoint{0u, 0.45f});
+		node.parameters.push_back(CustomEffectParameter{"delay_samples", 640.0f});
+		node.parameters.push_back(CustomEffectParameter{"feedback", 0.35f});
 		break;
 	case CustomEffectAlgorithm::kPlugin:
 		node.label = "clap_plugin";
@@ -47,6 +110,32 @@ CustomEffectNode CreateDefaultCustomEffectNode(const std::string& algorithm_name
 		break;
 	}
 	return node;
+}
+
+std::vector<std::string> ListCustomEffectPresets() {
+	return {
+		"BassBoost",
+		"EQ",
+		"High",
+		"AIRHigh",
+		"CurveAIR",
+		"DeEsser",
+		"Compressor",
+		"Limiter",
+		"AutoTune",
+		"PitchKey",
+		"AutoPitch",
+		"Stereo Converter",
+		"VHS",
+		"RetroVHS",
+		"SuperReverb",
+		"RoomReverb",
+		"StudioReverb",
+		"EQReverb",
+		"DelayReverb",
+		"Delay",
+		"AIrVoice",
+	};
 }
 
 }  // namespace Engine::Audio::FX

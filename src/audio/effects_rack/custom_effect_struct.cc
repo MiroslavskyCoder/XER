@@ -50,12 +50,30 @@ std::string CustomEffectAlgorithmToString(CustomEffectAlgorithm algorithm) {
 		return "passthrough";
 	case CustomEffectAlgorithm::kCompressor:
 		return "compressor";
+	case CustomEffectAlgorithm::kExpander:
+		return "expander";
+	case CustomEffectAlgorithm::kGate:
+		return "gate";
 	case CustomEffectAlgorithm::kChorus:
 		return "chorus";
+	case CustomEffectAlgorithm::kFlanger:
+		return "flanger";
+	case CustomEffectAlgorithm::kPhaser:
+		return "phaser";
 	case CustomEffectAlgorithm::kParametricEq:
 		return "parametric_eq";
 	case CustomEffectAlgorithm::kLimiter:
 		return "limiter";
+	case CustomEffectAlgorithm::kBitcrush:
+		return "bitcrush";
+	case CustomEffectAlgorithm::kTube:
+		return "tube";
+	case CustomEffectAlgorithm::kReverbAlgorithmic:
+		return "reverb_algorithmic";
+	case CustomEffectAlgorithm::kPitchShift:
+		return "pitch_shift";
+	case CustomEffectAlgorithm::kDelay:
+		return "delay";
 	case CustomEffectAlgorithm::kPlugin:
 		return "plugin";
 	case CustomEffectAlgorithm::kUnknown:
@@ -77,8 +95,24 @@ bool ParseCustomEffectAlgorithm(const std::string& text, CustomEffectAlgorithm* 
 		*algorithm_out = CustomEffectAlgorithm::kCompressor;
 		return true;
 	}
+	if (normalized == "expander") {
+		*algorithm_out = CustomEffectAlgorithm::kExpander;
+		return true;
+	}
+	if (normalized == "gate") {
+		*algorithm_out = CustomEffectAlgorithm::kGate;
+		return true;
+	}
 	if (normalized == "chorus") {
 		*algorithm_out = CustomEffectAlgorithm::kChorus;
+		return true;
+	}
+	if (normalized == "flanger") {
+		*algorithm_out = CustomEffectAlgorithm::kFlanger;
+		return true;
+	}
+	if (normalized == "phaser") {
+		*algorithm_out = CustomEffectAlgorithm::kPhaser;
 		return true;
 	}
 	if (normalized == "parametric_eq" || normalized == "eq") {
@@ -87,6 +121,26 @@ bool ParseCustomEffectAlgorithm(const std::string& text, CustomEffectAlgorithm* 
 	}
 	if (normalized == "limiter") {
 		*algorithm_out = CustomEffectAlgorithm::kLimiter;
+		return true;
+	}
+	if (normalized == "bitcrush") {
+		*algorithm_out = CustomEffectAlgorithm::kBitcrush;
+		return true;
+	}
+	if (normalized == "tube") {
+		*algorithm_out = CustomEffectAlgorithm::kTube;
+		return true;
+	}
+	if (normalized == "reverb_algorithmic" || normalized == "reverb") {
+		*algorithm_out = CustomEffectAlgorithm::kReverbAlgorithmic;
+		return true;
+	}
+	if (normalized == "pitch_shift" || normalized == "pitch") {
+		*algorithm_out = CustomEffectAlgorithm::kPitchShift;
+		return true;
+	}
+	if (normalized == "delay") {
+		*algorithm_out = CustomEffectAlgorithm::kDelay;
 		return true;
 	}
 	if (normalized == "plugin" || normalized == "clap_plugin") {
