@@ -1,0 +1,28 @@
+#pragma once
+
+#include <cstddef>
+#include <string>
+#include <vector>
+
+#include "custom_effect_flow.h"
+
+namespace Engine::Audio::FX {
+
+CustomEffectPackage BuildSmokeCustomEffectPackage();
+CustomEffectPackage BuildExampleCustomEffectPackage(const std::string& clap_plugin_reference = "builtin://gain");
+bool RenderCustomEffectExample(
+	float sample_rate,
+	const std::vector<float>& input,
+	std::vector<float>* output,
+	CustomEffectReport* report_out,
+	std::string* error_out = nullptr);
+
+bool RunCustomEffectPackage(
+	const CustomEffectPackage& package,
+	float sample_rate,
+	const std::vector<float>& input,
+	std::vector<float>* output,
+	CustomEffectReport* report_out,
+	std::string* error_out = nullptr);
+
+}  // namespace Engine::Audio::FX
