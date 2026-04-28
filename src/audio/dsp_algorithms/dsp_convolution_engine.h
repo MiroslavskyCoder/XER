@@ -24,6 +24,7 @@ public:
 private:
 	std::vector<float> impulse_response_;
 	std::vector<float> history_;
+	size_t history_cursor_ = 0;
 	IO::AsyncIO::AsyncBufferPool buffer_pool_;
 	AsyncIO::IO::LogDebug::PerformanceCounter perf_counter_;
 };

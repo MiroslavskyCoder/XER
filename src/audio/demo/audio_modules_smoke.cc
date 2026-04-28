@@ -16,6 +16,7 @@
 #include "audio/file_io_codecs/codec_ogg_vorbis.h"
 #include "audio/file_io_codecs/codec_wav_float.h"
 #include "audio/file_io_codecs/codec_wav_pcm.h"
+#include "audio/effects_rack/fx_reverb_convolution.h"
 #include "audio/midi_sequencing/midi_clock_generator.h"
 #include "audio/midi_sequencing/midi_controller_mapping.h"
 #include "audio/midi_sequencing/midi_event_dispatcher.h"
@@ -25,6 +26,7 @@
 #include "audio/plugin_wrappers/au_host_interface.h"
 #include "audio/plugin_wrappers/clap_host_interface.h"
 #include "audio/plugin_wrappers/vst3_host_interface.h"
+#include "audio/synth_engine/synth_voice_manager.h"
 #include "wrapper/ffmpeg/ffmpeg_engine_bridge.h"
 #include <cmath>
 
@@ -35,6 +37,12 @@ namespace {
 struct SignalStats {
 	float peak = 0.0f;
 	double rms = 0.0;
+};
+
+struct SynthSmokeResult {
+	std::vector<float> output;
+	size_t active_voice_count = 0;
+	size_t resident_voice_count = 0;
 };
 
 SignalStats ComputeSignalStats(const std::vector<float>& samples) {
@@ -132,6 +140,77 @@ bool WriteWaveArtifact(const std::filesystem::path& path, const std::vector<floa
 	return static_cast<bool>(output);
 }
 
+std::vector<float> BuildSyntheticImpulseResponse(size_t ir_size) {
+	std::vector<float> impulse_response(ir_size, 0.0f);
+	if (impulse_response.empty()) {
+		return impulse_response;
+	}
+	impulse_response[0] = 1.0f;
+	for (size_t index = 1; index < impulse_response.size(); ++index) {
+		const float t = static_cast<float>(index) / static_cast<float>(impulse_response.size() - 1);
+		impulse_response[index] = 0.45f * std::exp(-5.0f * t);
+	}
+	return impulse_response;
+}
+
+float MidiNoteToFrequency(uint8_t note) {
+	return 440.0f * std::pow(2.0f, (static_cast<float>(note) - 69.0f) / 12.0f);
+}
+
+SynthSmokeResult RunSynthVoiceManagerSmoke(int sample_rate) {
+	SynthSmokeResult result;
+	if (sample_rate <= 0) {
+		return result;
+	}
+	Engine::Audio::Synth::SynthVoiceManager synth;
+	synth.SetMaxVoices(3u);
+	const size_t total_frames = static_cast<size_t>(sample_rate) + static_cast<size_t>(sample_rate / 4);
+	result.output.assign(total_frames, 0.0f);
+	for (size_t frame = 0; frame < total_frames; ++frame) {
+		if (frame == 0u) {
+			synth.NoteOn(60u, MidiNoteToFrequency(60u));
+		}
+		if (frame == static_cast<size_t>(sample_rate / 8)) {
+			synth.NoteOn(64u, MidiNoteToFrequency(64u));
+		}
+		if (frame == static_cast<size_t>(sample_rate / 4)) {
+			synth.NoteOn(67u, MidiNoteToFrequency(67u));
+		}
+		if (frame == static_cast<size_t>((sample_rate * 3) / 8)) {
+			synth.NoteOn(72u, MidiNoteToFrequency(72u));
+		}
+		if (frame == static_cast<size_t>(sample_rate / 2)) {
+			synth.NoteOff(64u);
+		}
+		if (frame == static_cast<size_t>((sample_rate * 5) / 8)) {
+			synth.NoteOff(67u);
+		}
+		if (frame == static_cast<size_t>((sample_rate * 3) / 4)) {
+			synth.NoteOff(72u);
+		}
+		result.output[frame] = synth.RenderSample(static_cast<float>(sample_rate));
+	}
+	result.active_voice_count = synth.GetActiveVoiceCount();
+	result.resident_voice_count = synth.GetResidentVoiceCount();
+	return result;
+}
+
+bool ProcessEffectInBlocks(Engine::Audio::FX::ReverbConvolution* effect, const std::vector<float>& input, std::vector<float>* output, size_t block_size) {
+	if (effect == nullptr || output == nullptr || block_size == 0) {
+		return false;
+	}
+	output->assign(input.size(), 0.0f);
+	std::vector<float> scratch(block_size, 0.0f);
+	for (size_t cursor = 0; cursor < input.size(); cursor += block_size) {
+		const size_t frames = std::min(block_size, input.size() - cursor);
+		if (!effect->ProcessBlock(input.data() + static_cast<std::ptrdiff_t>(cursor), frames, scratch.data())) {
+			return false;
+		}
+		std::copy(scratch.begin(), scratch.begin() + static_cast<std::ptrdiff_t>(frames), output->begin() + static_cast<std::ptrdiff_t>(cursor));
+	}
+	return true;
+}
+
 std::filesystem::path ResolveExternalClapSmokePluginPath() {
 	std::error_code path_error;
 	const std::filesystem::path executable_path = std::filesystem::read_symlink("/proc/self/exe", path_error);
@@ -183,6 +262,7 @@ bool RunAudioModulesSmoke(
 		}
 		return false;
 	}
+	const std::vector<float>& processing_input = options.output_dir.empty() ? smoke_input : decoded_mono;
 
 	Engine::Audio::MIDI::MidiParser midi_parser;
 	const std::vector<uint8_t> midi_bytes = {
@@ -260,7 +340,7 @@ bool RunAudioModulesSmoke(
 		return false;
 	}
 	std::vector<float> vst3_output;
-	if (!ProcessInBlocks(&vst3_host, smoke_input, &vst3_output, 1024u)) {
+	if (!ProcessInBlocks(&vst3_host, processing_input, &vst3_output, 1024u)) {
 		if (error_out != nullptr) {
 			*error_out = "VST3 built-in smoke processing failed";
 		}
@@ -280,7 +360,7 @@ bool RunAudioModulesSmoke(
 		return false;
 	}
 	std::vector<float> clap_output;
-	if (!ProcessInBlocks(&clap_host, smoke_input, &clap_output, 1024u)) {
+	if (!ProcessInBlocks(&clap_host, processing_input, &clap_output, 1024u)) {
 		if (error_out != nullptr) {
 			*error_out = "CLAP built-in smoke processing failed";
 		}
@@ -299,9 +379,34 @@ bool RunAudioModulesSmoke(
 		return false;
 	}
 	std::vector<float> au_output;
-	if (!ProcessInBlocks(&au_host, smoke_input, &au_output, 1024u)) {
+	if (!ProcessInBlocks(&au_host, processing_input, &au_output, 1024u)) {
 		if (error_out != nullptr) {
 			*error_out = "AU built-in smoke processing failed";
+		}
+		return false;
+	}
+
+	Engine::Audio::FX::ReverbConvolution convolution_reverb;
+	const std::vector<float> convolution_ir = BuildSyntheticImpulseResponse(128u);
+	if (!convolution_reverb.LoadImpulseResponse(convolution_ir.data(), convolution_ir.size())) {
+		if (error_out != nullptr) {
+			*error_out = "convolution reverb IR load failed";
+		}
+		return false;
+	}
+	convolution_reverb.SetMix(0.35f);
+	std::vector<float> convolution_output;
+	if (!ProcessEffectInBlocks(&convolution_reverb, processing_input, &convolution_output, 1024u)) {
+		if (error_out != nullptr) {
+			*error_out = "convolution reverb smoke processing failed";
+		}
+		return false;
+	}
+
+	const SynthSmokeResult synth_smoke = RunSynthVoiceManagerSmoke(sample_rate);
+	if (synth_smoke.output.empty()) {
+		if (error_out != nullptr) {
+			*error_out = "synth voice-manager smoke generation failed";
 		}
 		return false;
 	}
@@ -376,7 +481,9 @@ bool RunAudioModulesSmoke(
 		}
 		if (!WriteWaveArtifact(options.output_dir / "vst3_gain.wav", vst3_output, sample_rate)
 			|| !WriteWaveArtifact(options.output_dir / "clap_chorus.wav", clap_output, sample_rate)
-			|| !WriteWaveArtifact(options.output_dir / "au_parametric_eq.wav", au_output, sample_rate)) {
+			|| !WriteWaveArtifact(options.output_dir / "au_parametric_eq.wav", au_output, sample_rate)
+			|| !WriteWaveArtifact(options.output_dir / "convolution_reverb.wav", convolution_output, sample_rate)
+			|| !WriteWaveArtifact(options.output_dir / "synth_polyphony.wav", synth_smoke.output, sample_rate)) {
 			if (error_out != nullptr) {
 				*error_out = "failed to write smoke wave artifacts";
 			}
@@ -384,10 +491,12 @@ bool RunAudioModulesSmoke(
 		}
 	}
 
-	const SignalStats input_stats = ComputeSignalStats(smoke_input);
+	const SignalStats input_stats = ComputeSignalStats(processing_input);
 	const SignalStats vst3_stats = ComputeSignalStats(vst3_output);
 	const SignalStats clap_stats = ComputeSignalStats(clap_output);
 	const SignalStats au_stats = ComputeSignalStats(au_output);
+	const SignalStats convolution_stats = ComputeSignalStats(convolution_output);
+	const SignalStats synth_stats = ComputeSignalStats(synth_smoke.output);
 
 	std::ostringstream output;
 	output << std::fixed << std::setprecision(6);
@@ -396,6 +505,7 @@ bool RunAudioModulesSmoke(
 	output << "sample_rate=" << sample_rate << "\n";
 	output << "decoded_frames=" << decoded_mono.size() << "\n";
 	output << "smoke_frames=" << smoke_input.size() << "\n";
+	output << "processed_frames=" << processing_input.size() << "\n";
 	output << "input_peak=" << input_stats.peak << "\n";
 	output << "input_rms=" << input_stats.rms << "\n";
 	output << "midi_event_count=" << midi_events.size() << "\n";
@@ -406,6 +516,7 @@ bool RunAudioModulesSmoke(
 	output << "mapped_param_id=" << mapped_param_id << "\n";
 	output << "mapped_gain_db=" << mapped_gain_db << "\n";
 	output << "vst3_plugin=" << vst3_host.GetLoadedPluginId() << "\n";
+	output << "vst3_mode=" << vst3_host.GetBackendMode() << "\n";
 	output << "vst3_peak=" << vst3_stats.peak << "\n";
 	output << "vst3_rms=" << vst3_stats.rms << "\n";
 	output << "clap_plugin=" << clap_host.GetLoadedPluginId() << "\n";
@@ -413,8 +524,16 @@ bool RunAudioModulesSmoke(
 	output << "clap_peak=" << clap_stats.peak << "\n";
 	output << "clap_rms=" << clap_stats.rms << "\n";
 	output << "au_plugin=" << au_host.GetLoadedComponentId() << "\n";
+	output << "au_mode=" << au_host.GetBackendMode() << "\n";
 	output << "au_peak=" << au_stats.peak << "\n";
 	output << "au_rms=" << au_stats.rms << "\n";
+	output << "convolution_ir_frames=" << convolution_ir.size() << "\n";
+	output << "convolution_peak=" << convolution_stats.peak << "\n";
+	output << "convolution_rms=" << convolution_stats.rms << "\n";
+	output << "synth_active_voices=" << synth_smoke.active_voice_count << "\n";
+	output << "synth_resident_voices=" << synth_smoke.resident_voice_count << "\n";
+	output << "synth_peak=" << synth_stats.peak << "\n";
+	output << "synth_rms=" << synth_stats.rms << "\n";
 	output << "wav_float_roundtrip_frames=" << wav_float_roundtrip.size() << "\n";
 	output << "aac_encoded_bytes=" << aac_bytes.size() << "\n";
 	output << "aac_roundtrip_frames=" << aac_roundtrip.size() << "\n";

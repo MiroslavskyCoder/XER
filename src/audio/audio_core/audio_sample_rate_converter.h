@@ -57,7 +57,9 @@ private:
     IO::AsyncIO::AsyncBufferPool buffer_pool_;
 
     void GenerateFilterKernel();
+    size_t GetKernelRadius() const;
     float InterpolateLinear(const float* buffer, double pos) const;
+    float InterpolateWindowedSinc(const float* buffer, size_t frame_count, double pos) const;
 };
 
 }  // namespace Engine::Audio::Core

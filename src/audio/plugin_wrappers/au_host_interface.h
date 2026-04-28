@@ -10,6 +10,12 @@ namespace Engine::Audio::Plugin {
 
 class AuHostInterface {
 public:
+	enum class BackendMode {
+		kNone,
+		kBuiltin,
+		kUnsupportedExternal,
+	};
+
     bool Initialize(double sample_rate, uint32_t max_block_size);
     bool LoadComponent(const std::string& component_id);
     bool Process(const float* input, float* output, uint32_t frames);
@@ -17,6 +23,7 @@ public:
     bool GetParameter(uint32_t id, float* value) const;
     std::vector<PluginParameterInfo> GetParameters() const;
     std::string GetLoadedComponentId() const;
+	std::string GetBackendMode() const;
 
 private:
     mutable AsyncIO::IO::Sync::MutexWrapper mutex_{"au_host"};
@@ -24,6 +31,7 @@ private:
     double sample_rate_ = 44100.0;
     uint32_t max_block_size_ = 512;
     std::string component_id_;
+	BackendMode backend_mode_ = BackendMode::kNone;
 };
 
 }  // namespace Engine::Audio::Plugin
