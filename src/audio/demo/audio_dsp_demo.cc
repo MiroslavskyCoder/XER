@@ -15,6 +15,11 @@ namespace Engine::Audio::Demo {
 
 namespace {
 
+constexpr float kSpectralShaperRmsThreshold = 1.0e-3f;
+constexpr float kSpectralShaperPeakThreshold = 1.0e-2f;
+constexpr float kPhaseVocoderRmsThreshold = 2.0e-3f;
+constexpr float kPhaseVocoderPeakThreshold = 5.0e-3f;
+
 struct ErrorMetrics {
 	float rms = 0.0f;
 	float peak = 0.0f;
@@ -178,6 +183,11 @@ bool RunAudioDSPDemo(
 
 	const ErrorMetrics shaper_metrics = ComputeErrorMetrics(input, shaper_output, latency_samples);
 	const ErrorMetrics vocoder_metrics = ComputeErrorMetrics(input, vocoder_output, latency_samples);
+	const bool spectral_shaper_ok = shaper_metrics.rms <= kSpectralShaperRmsThreshold
+		&& shaper_metrics.peak <= kSpectralShaperPeakThreshold;
+	const bool phase_vocoder_ok = vocoder_metrics.rms <= kPhaseVocoderRmsThreshold
+		&& vocoder_metrics.peak <= kPhaseVocoderPeakThreshold;
+	const bool smoke_ok = spectral_shaper_ok && phase_vocoder_ok;
 
 	const std::filesystem::path input_path = output_dir / "input.wav";
 	const std::filesystem::path shaper_path = output_dir / "spectral_shaper_unity.wav";
@@ -190,28 +200,41 @@ bool RunAudioDSPDemo(
 
 	*report_out = absl::StrFormat(
 		"Audio DSP demo\n"
+		"smoke_status=%s\n"
 		"sample_rate=%d\n"
 		"fft_size=%zu\n"
 		"hop_size=%zu\n"
 		"latency_samples=%zu\n"
+		"spectral_shaper_status=%s\n"
 		"spectral_shaper_rms=%0.6f\n"
 		"spectral_shaper_peak=%0.6f\n"
+		"phase_vocoder_status=%s\n"
 		"phase_vocoder_rms=%0.6f\n"
 		"phase_vocoder_peak=%0.6f\n"
 		"input_wav=%s\n"
 		"spectral_shaper_wav=%s\n"
 		"phase_vocoder_wav=%s\n",
+		smoke_ok ? "pass" : "fail",
 		kSampleRate,
 		kFFTSize,
 		kHopSize,
 		latency_samples,
+		spectral_shaper_ok ? "pass" : "fail",
 		shaper_metrics.rms,
 		shaper_metrics.peak,
+		phase_vocoder_ok ? "pass" : "fail",
 		vocoder_metrics.rms,
 		vocoder_metrics.peak,
 		input_path.string(),
 		shaper_path.string(),
 		vocoder_path.string());
+
+	if (!smoke_ok) {
+		if (error_out != nullptr) {
+			*error_out = "audio dsp smoke thresholds exceeded";
+		}
+		return false;
+	}
 
 	if (error_out != nullptr) {
 		error_out->clear();

@@ -9,7 +9,7 @@
 #include "async_io/log_and_debug/io_dump_helper.h"
 #include "async_io/log_and_debug/io_perf_counter.h"
 
-#include "audio_fft_analyzer.h"
+#include "audio/dsp_algorithms/dsp_stft_processor.h"
 
 namespace Engine::Audio::AnalysisAI {
 
@@ -24,13 +24,13 @@ public:
 
 	const std::vector<std::vector<float>>& GetMagnitudeMatrix() const { return magnitude_matrix_; }
 	size_t GetFrameCount() const { return magnitude_matrix_.size(); }
-	size_t GetBinCount() const { return fft_size_ / 2; }
+	size_t GetBinCount() const { return (fft_size_ / 2) + 1; }
 	std::string GetReport() const;
 
 private:
 	size_t fft_size_;
 	size_t hop_size_;
-	AudioFFTAnalyzer fft_analyzer_;
+	Engine::Audio::DSP::STFTProcessor stft_processor_;
 	IO::AsyncIO::AsyncBufferPool buffer_pool_;
 	AsyncIO::IO::LogDebug::PerformanceCounter perf_counter_;
 	std::vector<std::vector<float>> magnitude_matrix_;

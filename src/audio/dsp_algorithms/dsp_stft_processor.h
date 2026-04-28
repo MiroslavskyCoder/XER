@@ -27,6 +27,7 @@ public:
 		STFTWindowMode synthesis_window_mode = STFTWindowMode::kSqrtHann);
 	~STFTProcessor();
 
+	bool AnalyzeFrame(const float* input, size_t frame_count);
 	bool Analyze(const float* input, size_t frame_count);
 	bool Synthesize(float* output, size_t frame_count);
 	void RebuildHermitianSpectrum();

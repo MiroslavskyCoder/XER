@@ -7,7 +7,7 @@
 #include "async_io/log_and_debug/io_perf_counter.h"
 #include "async_io/sync_primitives/mutex_wrapper.h"
 
-#include "audio_fft_analyzer.h"
+#include "audio/dsp_algorithms/dsp_stft_processor.h"
 
 namespace Engine::Audio::AnalysisAI {
 
@@ -30,7 +30,7 @@ private:
 	size_t hop_size_;
 	AsyncIO::IO::LogDebug::PerformanceCounter perf_counter_;
 	AsyncIO::IO::Sync::MutexWrapper mutex_;
-	AudioFFTAnalyzer fft_analyzer_;
+	Engine::Audio::DSP::STFTProcessor stft_processor_;
 	std::vector<size_t> onset_frames_;
 	std::vector<float> onset_strengths_;
 	std::vector<float> flux_curve_;

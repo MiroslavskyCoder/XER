@@ -1,6 +1,7 @@
 #include "anal_onset_detection.h"
 
 #include <algorithm>
+#include <cmath>
 #include <numeric>
 #include <vector>
 
@@ -10,7 +11,7 @@ OnsetDetector::OnsetDetector(size_t window_size, size_t hop_size)
 	: window_size_(window_size),
 	  hop_size_(hop_size),
 	  mutex_("onset_detector"),
-	  fft_analyzer_(window_size) {
+	  stft_processor_(window_size, hop_size) {
 	perf_counter_.Enable();
 }
 
@@ -27,24 +28,24 @@ bool OnsetDetector::DetectOnsets(const float* audio, size_t frame_count, int sam
 	onset_frames_.clear();
 	onset_strengths_.clear();
 	flux_curve_.clear();
+	stft_processor_.Reset();
 
-	std::vector<float> previous_spectrum(window_size_ / 2, 0.0f);
-	std::vector<float> window(window_size_, 0.0f);
+	std::vector<float> previous_spectrum(stft_processor_.GetPositiveBinCount(), 0.0f);
 
 	for (size_t offset = 0; offset + window_size_ <= frame_count; offset += hop_size_) {
-		std::copy(audio + offset, audio + offset + window_size_, window.begin());
-		if (!fft_analyzer_.AnalyzeSpectrum(window.data(), window.size())) {
+		if (!stft_processor_.AnalyzeFrame(audio + offset, window_size_)) {
 			continue;
 		}
 
-		const std::vector<float>& magnitude = fft_analyzer_.GetMagnitudeSpectrum();
+		const auto& spectrum = stft_processor_.GetSpectrum();
 		float flux = 0.0f;
-		for (size_t index = 0; index < magnitude.size(); ++index) {
-			const float delta = magnitude[index] - previous_spectrum[index];
+		for (size_t index = 0; index < previous_spectrum.size(); ++index) {
+			const float magnitude = std::abs(spectrum[index]);
+			const float delta = magnitude - previous_spectrum[index];
 			if (delta > 0.0f) {
 				flux += delta;
 			}
-			previous_spectrum[index] = magnitude[index];
+			previous_spectrum[index] = magnitude;
 		}
 
 		flux_curve_.push_back(flux);
@@ -64,6 +65,7 @@ void OnsetDetector::Reset() {
 	onset_frames_.clear();
 	onset_strengths_.clear();
 	flux_curve_.clear();
+	stft_processor_.Reset();
 }
 
 std::vector<double> OnsetDetector::GetOnsetTimesSeconds(int sample_rate) const {

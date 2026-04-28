@@ -28,6 +28,17 @@ STFTProcessor::STFTProcessor(
 
 STFTProcessor::~STFTProcessor() = default;
 
+bool STFTProcessor::AnalyzeFrame(const float* input, size_t frame_count) {
+	if (input == nullptr || frame_count != fft_size_ || fft_size_ == 0) {
+		return false;
+	}
+
+	std::copy(input, input + fft_size_, analysis_buffer_.begin());
+	time_domain_buffer_ = analysis_buffer_;
+	WindowingFunctions::ApplyWindow(analysis_window_, time_domain_buffer_.data(), time_domain_buffer_.size());
+	return fft_engine_.Forward(time_domain_buffer_.data(), time_domain_buffer_.size());
+}
+
 bool STFTProcessor::Analyze(const float* input, size_t frame_count) {
 	if (input == nullptr || frame_count != hop_size_ || fft_size_ == 0 || hop_size_ == 0) {
 		return false;
@@ -38,9 +49,7 @@ bool STFTProcessor::Analyze(const float* input, size_t frame_count) {
 	}
 	std::copy(input, input + hop_size_, analysis_buffer_.end() - static_cast<std::ptrdiff_t>(hop_size_));
 
-	time_domain_buffer_ = analysis_buffer_;
-	WindowingFunctions::ApplyWindow(analysis_window_, time_domain_buffer_.data(), time_domain_buffer_.size());
-	return fft_engine_.Forward(time_domain_buffer_.data(), time_domain_buffer_.size());
+	return AnalyzeFrame(analysis_buffer_.data(), analysis_buffer_.size());
 }
 
 bool STFTProcessor::Synthesize(float* output, size_t frame_count) {
