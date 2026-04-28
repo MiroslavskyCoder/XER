@@ -68,12 +68,7 @@ std::vector<float> AudioFFTAnalyzer::GetFrequencyBands() const {
 }
 
 void AudioFFTAnalyzer::GenerateWindow() {
-    window_.resize(fft_size_);
-    
-    // Hann window
-    for (size_t i = 0; i < fft_size_; ++i) {
-        window_[i] = 0.5f * (1.0f - std::cos(2.0f * PI * i / (fft_size_ - 1)));
-    }
+    window_ = Engine::Audio::DSP::WindowingFunctions::GenerateHann(fft_size_);
 }
 
 void AudioFFTAnalyzer::ComputeMagnitudePhase() {

@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "app_command.h"
+#include "audio/demo/audio_dsp_demo.h"
 #include "crash/crash_handler.h"
 #include "ecosystem/ecosystem_manifest_loader.h"
 #include "engine_params.h"
@@ -226,6 +227,20 @@ int main(int argc, char** argv) {
 			std::cout << "  tsc                : " << (has_tsc  ? "ok" : "missing") << "\n";
 		}
 		return (has_default_script && has_build_dir) ? 0 : 1;
+	}
+
+	if (parsed.type == AppCommand::Type::kAudioDemo) {
+		const std::filesystem::path output_dir = parsed.output_dir.empty()
+			? std::filesystem::path("out/audio_demo")
+			: std::filesystem::path(parsed.output_dir);
+		std::string report;
+		std::string demo_error;
+		if (!Engine::Audio::Demo::RunAudioDSPDemo(output_dir, &report, &demo_error)) {
+			std::cerr << "Audio demo failed: " << demo_error << "\n";
+			return 1;
+		}
+		std::cout << report;
+		return 0;
 	}
 
 	// Load .env file first so command-line flags can override it.

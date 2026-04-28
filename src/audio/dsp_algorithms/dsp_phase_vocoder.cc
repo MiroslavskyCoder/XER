@@ -26,7 +26,7 @@ PhaseVocoder::PhaseVocoder(size_t fft_size, size_t hop_size)
 	  hop_size_(hop_size),
 	  sample_rate_(44100.0f),
 	  time_stretch_ratio_(1.0f),
-	  fft_engine_(fft_size),
+	  stft_processor_(fft_size, hop_size),
 	  previous_phase_((fft_size / 2) + 1, 0.0f),
 	  phase_accumulator_((fft_size / 2) + 1, 0.0f) {
 	perf_counter_.Enable();
@@ -54,46 +54,38 @@ void PhaseVocoder::SetTimeStretchRatio(float ratio) {
 }
 
 bool PhaseVocoder::ProcessBlock(const float* input, size_t frame_count, float* output) {
-	if (input == nullptr || output == nullptr || frame_count != fft_size_) {
+	if (input == nullptr || output == nullptr || hop_size_ == 0 || frame_count == 0 || (frame_count % hop_size_) != 0) {
 		return false;
 	}
 
 	perf_counter_.StartCounter("phase_vocoder");
-
-	if (!fft_engine_.Forward(input, frame_count)) {
-		perf_counter_.StopCounter("phase_vocoder");
-		return false;
-	}
-
-	auto& spectrum = fft_engine_.MutableSpectrum();
-	const size_t positive_bins = (fft_size_ / 2) + 1;
+	const size_t positive_bins = stft_processor_.GetPositiveBinCount();
 	const float analysis_hop = static_cast<float>(hop_size_);
 	const float synthesis_hop = analysis_hop * time_stretch_ratio_;
-	for (size_t bin = 0; bin < positive_bins; ++bin) {
-		const float magnitude = std::abs(spectrum[bin]);
-		const float phase = std::arg(spectrum[bin]);
-		const float expected_advance = kTwoPi * static_cast<float>(bin) * analysis_hop / static_cast<float>(fft_size_);
-		const float delta = WrapPhase(phase - previous_phase_[bin] - expected_advance);
-		const float true_frequency = (kTwoPi * static_cast<float>(bin) / static_cast<float>(fft_size_)) + (delta / std::max(analysis_hop, 1.0f));
+	for (size_t offset = 0; offset < frame_count; offset += hop_size_) {
+		if (!stft_processor_.Analyze(input + offset, hop_size_)) {
+			perf_counter_.StopCounter("phase_vocoder");
+			return false;
+		}
 
-		phase_accumulator_[bin] += true_frequency * synthesis_hop;
-		previous_phase_[bin] = phase;
-		spectrum[bin] = std::polar(magnitude, phase_accumulator_[bin]);
-	}
+		auto& spectrum = stft_processor_.MutableSpectrum();
+		for (size_t bin = 0; bin < positive_bins; ++bin) {
+			const float magnitude = std::abs(spectrum[bin]);
+			const float phase = std::arg(spectrum[bin]);
+			const float expected_advance = kTwoPi * static_cast<float>(bin) * analysis_hop / static_cast<float>(fft_size_);
+			const float delta = WrapPhase(phase - previous_phase_[bin] - expected_advance);
+			const float true_frequency = (kTwoPi * static_cast<float>(bin) / static_cast<float>(fft_size_))
+				+ (delta / std::max(analysis_hop, 1.0f));
 
-	for (size_t bin = positive_bins; bin < fft_size_; ++bin) {
-		const size_t mirrored = fft_size_ - bin;
-		spectrum[bin] = std::conj(spectrum[mirrored]);
-	}
+			phase_accumulator_[bin] += true_frequency * synthesis_hop;
+			previous_phase_[bin] = phase;
+			spectrum[bin] = std::polar(magnitude, phase_accumulator_[bin]);
+		}
 
-	if (!fft_engine_.Inverse(output, frame_count)) {
-		perf_counter_.StopCounter("phase_vocoder");
-		return false;
-	}
-
-	const float gain = 1.0f / std::sqrt(std::max(time_stretch_ratio_, 0.0001f));
-	for (size_t i = 0; i < frame_count; ++i) {
-		output[i] *= gain;
+		if (!stft_processor_.Synthesize(output + offset, hop_size_)) {
+			perf_counter_.StopCounter("phase_vocoder");
+			return false;
+		}
 	}
 
 	perf_counter_.StopCounter("phase_vocoder");
@@ -103,12 +95,14 @@ bool PhaseVocoder::ProcessBlock(const float* input, size_t frame_count, float* o
 void PhaseVocoder::Reset() {
 	std::fill(previous_phase_.begin(), previous_phase_.end(), 0.0f);
 	std::fill(phase_accumulator_.begin(), phase_accumulator_.end(), 0.0f);
+	stft_processor_.Reset();
 }
 
 std::string PhaseVocoder::GetReport() const {
 	return "PhaseVocoder: fft=" + std::to_string(fft_size_) +
 		", hop=" + std::to_string(hop_size_) +
-		", stretch=" + std::to_string(time_stretch_ratio_);
+		", stretch=" + std::to_string(time_stretch_ratio_) +
+		", stft_latency=" + std::to_string(stft_processor_.GetLatencySamples());
 }
 
 }  // namespace Engine::Audio::DSP

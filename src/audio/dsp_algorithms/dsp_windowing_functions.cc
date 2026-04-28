@@ -21,6 +21,14 @@ std::vector<float> WindowingFunctions::GenerateHann(size_t size) {
 	return window;
 }
 
+std::vector<float> WindowingFunctions::GenerateSqrtHann(size_t size) {
+	std::vector<float> window = GenerateHann(size);
+	for (float& value : window) {
+		value = std::sqrt(std::max(value, 0.0f));
+	}
+	return window;
+}
+
 std::vector<float> WindowingFunctions::GenerateHamming(size_t size) {
 	std::vector<float> window(size, 0.0f);
 	if (size == 0) {

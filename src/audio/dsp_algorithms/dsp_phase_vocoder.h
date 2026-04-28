@@ -6,7 +6,7 @@
 
 #include "async_io/log_and_debug/io_perf_counter.h"
 
-#include "dsp_fft_engine.h"
+#include "dsp_stft_processor.h"
 
 namespace Engine::Audio::DSP {
 
@@ -28,7 +28,7 @@ private:
 	size_t hop_size_;
 	float sample_rate_;
 	float time_stretch_ratio_;
-	FFTEngine fft_engine_;
+	STFTProcessor stft_processor_;
 	std::vector<float> previous_phase_;
 	std::vector<float> phase_accumulator_;
 	AsyncIO::IO::LogDebug::PerformanceCounter perf_counter_;

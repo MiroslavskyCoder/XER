@@ -115,6 +115,10 @@ AppCommand::Parsed AppCommand::Parse(int argc, char** argv) {
         parsed.type = Type::kInspect;
     }
 
+    if (command == "audio_demo") {
+        parsed.type = Type::kAudioDemo;
+    }
+
     if (command == "doctor") {
         parsed.type = Type::kDoctor;
         // allow --verbose after doctor
@@ -129,6 +133,9 @@ AppCommand::Parsed AppCommand::Parse(int argc, char** argv) {
         script_index = 2;
     } else if (command == "inspect") {
         parsed.type = Type::kInspect;
+        script_index = 2;
+    } else if (command == "audio_demo") {
+        parsed.type = Type::kAudioDemo;
         script_index = 2;
     } else if (command != "doctor") {
         script_index = 1;
@@ -496,6 +503,7 @@ std::string AppCommand::BuildHelpText(const std::string& binary_name) {
     out << "  " << binary_name << " run [script.js] [options]\n";
     out << "  " << binary_name << " compile [script.xer] [options]\n";
     out << "  " << binary_name << " inspect [artifact.bin|artifact.bak]\n";
+    out << "  " << binary_name << " audio_demo [--output_dir dir]\n";
     out << "  " << binary_name << " run --script path/to/script.js [options]\n";
     out << "\nScript:\n";
     out << "  --script, -s <path>          Entry-point JS/TS/XER file\n";
@@ -568,6 +576,7 @@ std::string AppCommand::BuildHelpText(const std::string& binary_name) {
     out << "\nCommands:\n";
     out << "  " << binary_name << " compile <script.xer> [--output_dir dir] [--xer_key_file path]   Build .bin/.bak only\n";
     out << "  " << binary_name << " inspect <artifact.bin|artifact.bak>   Print XER metadata without execution\n";
+    out << "  " << binary_name << " audio_demo [--output_dir dir]   Run STFT smoke demo and write WAV files\n";
     out << "  " << binary_name << " doctor [--doctor_verbose]   Check environment\n";
     out << "  " << binary_name << " version\n";
     out << "  " << binary_name << " help\n";

@@ -8,6 +8,7 @@ public:
         kRun,
         kCompile,
         kInspect,
+        kAudioDemo,
         kHelp,
         kVersion,
         kDoctor,

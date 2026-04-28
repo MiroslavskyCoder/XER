@@ -11,6 +11,7 @@ namespace Engine::Audio::DSP {
 class WindowingFunctions {
 public:
 	static std::vector<float> GenerateHann(size_t size);
+	static std::vector<float> GenerateSqrtHann(size_t size);
 	static std::vector<float> GenerateHamming(size_t size);
 	static std::vector<float> GenerateBlackman(size_t size);
 

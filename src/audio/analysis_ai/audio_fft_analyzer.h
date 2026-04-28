@@ -1,6 +1,7 @@
 #pragma once
 
 #include "audio/dsp_algorithms/dsp_fft_engine.h"
+#include "audio/dsp_algorithms/dsp_windowing_functions.h"
 
 #include <vector>
 #include <complex>
