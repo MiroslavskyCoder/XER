@@ -11,13 +11,16 @@ bool AuHostInterface::Initialize(double sample_rate, uint32_t max_block_size) {
     AsyncIO::IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
     sample_rate_ = sample_rate;
     max_block_size_ = max_block_size;
-    return true;
+    return builtin_host_.Initialize(sample_rate, max_block_size);
 }
 
 bool AuHostInterface::LoadComponent(const std::string& component_id) {
     AsyncIO::IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
-    component_id_ = component_id;
-    return !component_id_.empty();
+    if (!builtin_host_.Load(component_id)) {
+        return false;
+    }
+    component_id_ = builtin_host_.GetLoadedIdentifier();
+    return true;
 }
 
 bool AuHostInterface::Process(const float* input, float* output, uint32_t frames) {
@@ -25,10 +28,27 @@ bool AuHostInterface::Process(const float* input, float* output, uint32_t frames
         return false;
     }
     AsyncIO::IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
-    for (uint32_t i = 0; i < frames; ++i) {
-        output[i] = input[i];
-    }
-    return true;
+    return builtin_host_.Process(input, output, frames);
+}
+
+bool AuHostInterface::SetParameter(uint32_t id, float value) {
+	AsyncIO::IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
+	return builtin_host_.SetParameter(id, value);
+}
+
+bool AuHostInterface::GetParameter(uint32_t id, float* value) const {
+	AsyncIO::IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
+	return builtin_host_.GetParameter(id, value);
+}
+
+std::vector<PluginParameterInfo> AuHostInterface::GetParameters() const {
+	AsyncIO::IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
+	return builtin_host_.GetParameters();
+}
+
+std::string AuHostInterface::GetLoadedComponentId() const {
+	AsyncIO::IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
+	return component_id_;
 }
 
 }  // namespace Engine::Audio::Plugin
