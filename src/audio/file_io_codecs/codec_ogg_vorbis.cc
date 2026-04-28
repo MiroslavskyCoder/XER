@@ -1,6 +1,7 @@
 #include "codec_ogg_vorbis.h"
 
 #include "codec_ffmpeg_decode_helper.h"
+#include "codec_ffmpeg_encode_helper.h"
 
 namespace Engine::Audio::CodecIO {
 
@@ -8,8 +9,13 @@ bool OggVorbisCodec::Encode(const float* input, size_t frames, std::vector<uint8
     if (input == nullptr || frames == 0) {
         return false;
     }
-	(void)input;
-	(void)frames;
+	std::string error;
+	if (detail::EncodeMonoAudioBufferWithFfmpeg(input, frames, 44100, ".ogg", "libvorbis", &out, &error)) {
+		return true;
+	}
+	if (detail::EncodeMonoAudioBufferWithFfmpeg(input, frames, 44100, ".ogg", "vorbis", &out, &error)) {
+		return true;
+	}
 	out.clear();
 	return false;
 }

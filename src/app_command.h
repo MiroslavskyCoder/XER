@@ -9,6 +9,7 @@ public:
         kCompile,
         kInspect,
         kAudioInspect,
+        kAudioModulesSmoke,
         kAudioDemo,
         kSpectrogram,
         kOnset,

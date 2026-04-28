@@ -55,6 +55,10 @@ target_link_libraries(EngineBuilder PRIVATE
     ${LLVM_ALL_COMPONENT_LIBS}
     ${CLANG_AVAILABLE_LIBS})
 
+if(CMAKE_DL_LIBS)
+    target_link_libraries(EngineBuilder PRIVATE ${CMAKE_DL_LIBS})
+endif()
+
 # ── Optional system libs ─────────────────────────────────────
 if(ENGINE_HAS_ZSTD)
     target_link_libraries(EngineBuilder PRIVATE ${ZSTD_LIBRARY})
@@ -159,3 +163,11 @@ if(ENGINE_QT6_FOUND_TARGETS)
     add_library(EngineQt6All INTERFACE)
     target_link_libraries(EngineQt6All INTERFACE ${ENGINE_QT6_FOUND_TARGETS})
 endif()
+
+add_library(EngineClapSmokePlugin MODULE
+    ${CMAKE_CURRENT_SOURCE_DIR}/demo_app/clap_smoke_plugin.cc)
+target_include_directories(EngineClapSmokePlugin PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src)
+set_target_properties(EngineClapSmokePlugin PROPERTIES
+    PREFIX ""
+    SUFFIX ".clap")

@@ -1,0 +1,19 @@
+#pragma once
+
+#include <cstddef>
+#include <cstdint>
+#include <string>
+#include <vector>
+
+namespace Engine::Audio::CodecIO::detail {
+
+bool EncodeMonoAudioBufferWithFfmpeg(
+	const float* input,
+	size_t frames,
+	int sample_rate,
+	const std::string& extension,
+	const std::string& codec_name,
+	std::vector<uint8_t>* encoded_bytes,
+	std::string* error_out = nullptr);
+
+}  // namespace Engine::Audio::CodecIO::detail

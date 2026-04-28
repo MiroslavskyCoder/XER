@@ -17,6 +17,7 @@
 #include "audio/analysis_ai/anal_onset_detection.h"
 #include "audio/analysis_ai/anal_spectrogram_generator.h"
 #include "audio/audio_core/audio_source_loader.h"
+#include "audio/demo/audio_modules_smoke.h"
 #include "audio/file_io_codecs/codec_wav_pcm.h"
 #include "audio/demo/audio_dsp_demo.h"
 #include "crash/crash_handler.h"
@@ -476,6 +477,25 @@ int main(int argc, char** argv) {
 		std::string demo_error;
 		if (!Engine::Audio::Demo::RunAudioDSPDemo(demo_options, &report, &demo_error)) {
 			std::cerr << "Audio demo failed: " << demo_error << "\n";
+			return 1;
+		}
+		std::cout << report;
+		return 0;
+	}
+
+	if (parsed.type == AppCommand::Type::kAudioModulesSmoke) {
+		Engine::Audio::Demo::AudioModulesSmokeOptions smoke_options;
+		smoke_options.input_path = parsed.audio_input_path.empty()
+			? std::filesystem::path()
+			: std::filesystem::path(parsed.audio_input_path);
+		smoke_options.output_dir = parsed.output_dir.empty()
+			? std::filesystem::path("out/audio_modules_smoke")
+			: std::filesystem::path(parsed.output_dir);
+
+		std::string report;
+		std::string smoke_error;
+		if (!Engine::Audio::Demo::RunAudioModulesSmoke(smoke_options, &report, &smoke_error)) {
+			std::cerr << "Audio modules smoke failed: " << smoke_error << "\n";
 			return 1;
 		}
 		std::cout << report;

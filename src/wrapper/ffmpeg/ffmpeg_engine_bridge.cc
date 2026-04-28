@@ -1,6 +1,8 @@
 #include "wrapper/ffmpeg/ffmpeg_engine_bridge.h"
 
 #include <algorithm>
+#include <cmath>
+#include <cstring>
 #include <set>
 #include <sstream>
 #include <string_view>
@@ -15,6 +17,8 @@ extern "C" {
 #include <libavformat/avformat.h>
 #include <libavformat/avio.h>
 #include <libavutil/avutil.h>
+#include <libavutil/audio_fifo.h>
+#include <libavutil/channel_layout.h>
 #include <libavutil/dict.h>
 #include <libavutil/imgutils.h>
 #include <libavutil/pixdesc.h>
@@ -102,6 +106,191 @@ std::string SampleFormatName(int format) {
     }
     const char* name = av_get_sample_fmt_name(static_cast<AVSampleFormat>(format));
     return name != nullptr ? std::string(name) : std::string();
+}
+
+AVSampleFormat ResolveSampleFormat(std::string sample_format, bool planar) {
+    std::transform(sample_format.begin(), sample_format.end(), sample_format.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    if (!sample_format.empty() && sample_format.back() == 'p') {
+        planar = true;
+        sample_format.pop_back();
+    }
+    if (sample_format == "u8") {
+        return planar ? AV_SAMPLE_FMT_U8P : AV_SAMPLE_FMT_U8;
+    }
+    if (sample_format == "s16") {
+        return planar ? AV_SAMPLE_FMT_S16P : AV_SAMPLE_FMT_S16;
+    }
+    if (sample_format == "s32") {
+        return planar ? AV_SAMPLE_FMT_S32P : AV_SAMPLE_FMT_S32;
+    }
+    if (sample_format == "flt") {
+        return planar ? AV_SAMPLE_FMT_FLTP : AV_SAMPLE_FMT_FLT;
+    }
+    if (sample_format == "dbl") {
+        return planar ? AV_SAMPLE_FMT_DBLP : AV_SAMPLE_FMT_DBL;
+    }
+    return AV_SAMPLE_FMT_NONE;
+}
+
+bool SetDefaultChannelLayout(int channels, AVChannelLayout* out_layout, std::string* out_error) {
+    if (out_layout == nullptr || channels <= 0) {
+        SetError(out_error, "invalid channel layout request");
+        return false;
+    }
+    av_channel_layout_default(out_layout, channels);
+    if (out_layout->nb_channels != channels) {
+        SetError(out_error, "av_channel_layout_default failed");
+        return false;
+    }
+    return true;
+}
+
+bool EncoderSupportsSampleFormat(const AVCodec* codec, AVSampleFormat sample_format) {
+    if (codec == nullptr || sample_format == AV_SAMPLE_FMT_NONE) {
+        return false;
+    }
+    if (codec->sample_fmts == nullptr) {
+        return true;
+    }
+    for (const AVSampleFormat* current = codec->sample_fmts; *current != AV_SAMPLE_FMT_NONE; ++current) {
+        if (*current == sample_format) {
+            return true;
+        }
+    }
+    return false;
+}
+
+AVSampleFormat SelectEncoderSampleFormat(const AVCodec* codec, const std::string& requested_format) {
+    if (codec == nullptr) {
+        return AV_SAMPLE_FMT_NONE;
+    }
+    if (!requested_format.empty()) {
+        const AVSampleFormat requested = ResolveSampleFormat(requested_format, false);
+        if (EncoderSupportsSampleFormat(codec, requested)) {
+            return requested;
+        }
+    }
+    return codec->sample_fmts != nullptr ? codec->sample_fmts[0] : AV_SAMPLE_FMT_FLTP;
+}
+
+int SelectEncoderSampleRate(const AVCodec* codec, int requested_sample_rate) {
+    if (requested_sample_rate <= 0) {
+        return 44100;
+    }
+    if (codec == nullptr || codec->supported_samplerates == nullptr) {
+        return requested_sample_rate;
+    }
+    int best_rate = codec->supported_samplerates[0];
+    for (const int* current = codec->supported_samplerates; *current != 0; ++current) {
+        if (*current == requested_sample_rate) {
+            return *current;
+        }
+        if (std::abs(*current - requested_sample_rate) < std::abs(best_rate - requested_sample_rate)) {
+            best_rate = *current;
+        }
+    }
+    return best_rate;
+}
+
+int SelectEncoderChannels(const AVCodec* codec, int requested_channels) {
+    if (requested_channels <= 0) {
+        return 1;
+    }
+    if (codec == nullptr || codec->ch_layouts == nullptr) {
+        return requested_channels;
+    }
+    for (const AVChannelLayout* layout = codec->ch_layouts; layout->nb_channels != 0; ++layout) {
+        if (layout->nb_channels == requested_channels) {
+            return requested_channels;
+        }
+    }
+    return codec->ch_layouts[0].nb_channels > 0 ? codec->ch_layouts[0].nb_channels : requested_channels;
+}
+
+bool CopyAudioFrameToAvFrame(const AudioFrameInfo& input, AVFrame* frame, std::string* out_error) {
+    if (frame == nullptr || input.sample_count <= 0 || input.channels <= 0) {
+        SetError(out_error, "invalid audio frame copy request");
+        return false;
+    }
+    const AVSampleFormat sample_format = ResolveSampleFormat(input.sample_format, input.planar);
+    if (sample_format == AV_SAMPLE_FMT_NONE) {
+        SetError(out_error, "unsupported input audio sample format: " + input.sample_format);
+        return false;
+    }
+
+    frame->format = sample_format;
+    frame->nb_samples = input.sample_count;
+    frame->sample_rate = input.sample_rate;
+    if (!SetDefaultChannelLayout(input.channels, &frame->ch_layout, out_error)) {
+        return false;
+    }
+    const int allocation_result = av_frame_get_buffer(frame, 0);
+    if (allocation_result < 0) {
+        SetError(out_error, "av_frame_get_buffer failed: " + ErrorString(allocation_result));
+        return false;
+    }
+    if (av_frame_make_writable(frame) < 0) {
+        SetError(out_error, "av_frame_make_writable failed");
+        return false;
+    }
+
+    const int bytes_per_sample = av_get_bytes_per_sample(sample_format);
+    if (bytes_per_sample <= 0) {
+        SetError(out_error, "av_get_bytes_per_sample failed for input frame");
+        return false;
+    }
+    if (input.planar) {
+        if (input.plane_sizes.size() < static_cast<size_t>(input.channels)) {
+            SetError(out_error, "planar input frame is missing plane size metadata");
+            return false;
+        }
+        size_t cursor = 0;
+        for (int channel = 0; channel < input.channels; ++channel) {
+            const size_t plane_size = static_cast<size_t>(input.plane_sizes[static_cast<size_t>(channel)]);
+            if (cursor + plane_size > input.data.size()) {
+                SetError(out_error, "planar input frame payload is truncated");
+                return false;
+            }
+            std::memcpy(frame->extended_data[channel], input.data.data() + cursor, plane_size);
+            cursor += plane_size;
+        }
+        return true;
+    }
+
+    const size_t required_bytes = static_cast<size_t>(input.sample_count) * static_cast<size_t>(input.channels) * static_cast<size_t>(bytes_per_sample);
+    if (input.data.size() < required_bytes) {
+        SetError(out_error, "interleaved input frame payload is truncated");
+        return false;
+    }
+    std::memcpy(frame->data[0], input.data.data(), required_bytes);
+    return true;
+}
+
+bool PushEncoderPackets(AVFormatContext* output_context,
+    AVCodecContext* codec_context,
+    AVStream* stream,
+    AVPacket* packet,
+    std::string* out_error) {
+    while (true) {
+        const int receive_result = avcodec_receive_packet(codec_context, packet);
+        if (receive_result == AVERROR(EAGAIN) || receive_result == AVERROR_EOF) {
+            return true;
+        }
+        if (receive_result < 0) {
+            SetError(out_error, "avcodec_receive_packet failed: " + ErrorString(receive_result));
+            return false;
+        }
+        av_packet_rescale_ts(packet, codec_context->time_base, stream->time_base);
+        packet->stream_index = stream->index;
+        const int write_result = av_interleaved_write_frame(output_context, packet);
+        av_packet_unref(packet);
+        if (write_result < 0) {
+            SetError(out_error, "av_interleaved_write_frame failed: " + ErrorString(write_result));
+            return false;
+        }
+    }
 }
 
 std::string PixelFormatName(int format) {
@@ -1139,13 +1328,351 @@ bool EncodeAudioFrames(const EncodeAudioParams& params,
         SetError(out_error, "No audio frames to encode");
         return false;
     }
+    if (params.output_path.empty()) {
+        SetError(out_error, "EncodeAudioFrames requires an output path");
+        return false;
+    }
 
-    auto pts_sums = ranges::views::transform(frames, [](const AudioFrameInfo& f) { return f.pts; })
-                    | ranges::to<std::vector<std::int64_t>>();
-    
-    SetError(out_error, absl::StrFormat("EncodeAudioFrames: mock implementation processed %d frames (rate: %d, channels: %d)",
-                                        frames.size(), params.sample_rate, params.channels));
-    return true;
+    const int input_sample_rate = params.sample_rate > 0 ? params.sample_rate : frames.front().sample_rate;
+    const int input_channels = params.channels > 0 ? params.channels : frames.front().channels;
+    if (input_sample_rate <= 0 || input_channels <= 0) {
+        SetError(out_error, "EncodeAudioFrames received invalid sample rate or channel count");
+        return false;
+    }
+    const bool consistent_stream = ranges::all_of(frames, [input_sample_rate, input_channels](const AudioFrameInfo& frame) {
+        return frame.sample_rate == input_sample_rate && frame.channels == input_channels && frame.sample_count > 0;
+    });
+    if (!consistent_stream) {
+        SetError(out_error, "EncodeAudioFrames requires a consistent audio stream");
+        return false;
+    }
+
+    AVFormatContext* output_context = nullptr;
+    int result = avformat_alloc_output_context2(&output_context, nullptr, nullptr, params.output_path.c_str());
+    if (result < 0 || output_context == nullptr) {
+        SetError(out_error, "avformat_alloc_output_context2 failed: " + ErrorString(result));
+        return false;
+    }
+
+    const AVCodec* codec = params.codec_name.empty()
+        ? avcodec_find_encoder(output_context->oformat->audio_codec)
+        : avcodec_find_encoder_by_name(params.codec_name.c_str());
+    if (codec == nullptr) {
+        avformat_free_context(output_context);
+        SetError(out_error, "audio encoder not found: " + params.codec_name);
+        return false;
+    }
+
+    AVStream* stream = avformat_new_stream(output_context, nullptr);
+    AVCodecContext* codec_context = avcodec_alloc_context3(codec);
+    if (stream == nullptr || codec_context == nullptr) {
+        avcodec_free_context(&codec_context);
+        avformat_free_context(output_context);
+        SetError(out_error, "failed to allocate audio encoder stream/context");
+        return false;
+    }
+
+    codec_context->codec_type = AVMEDIA_TYPE_AUDIO;
+    codec_context->sample_rate = SelectEncoderSampleRate(codec, input_sample_rate);
+    codec_context->sample_fmt = SelectEncoderSampleFormat(codec, params.sample_format);
+    codec_context->bit_rate = params.bit_rate > 0 ? params.bit_rate : 192000;
+    codec_context->time_base = AVRational{1, codec_context->sample_rate};
+    const int encoder_channels = SelectEncoderChannels(codec, input_channels);
+    if (!SetDefaultChannelLayout(encoder_channels, &codec_context->ch_layout, out_error)) {
+        avcodec_free_context(&codec_context);
+        avformat_free_context(output_context);
+        return false;
+    }
+    if ((output_context->oformat->flags & AVFMT_GLOBALHEADER) != 0) {
+        codec_context->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+    }
+
+    result = avcodec_open2(codec_context, codec, nullptr);
+    if (result < 0) {
+        avcodec_free_context(&codec_context);
+        avformat_free_context(output_context);
+        SetError(out_error, "avcodec_open2 failed: " + ErrorString(result));
+        return false;
+    }
+    result = avcodec_parameters_from_context(stream->codecpar, codec_context);
+    if (result < 0) {
+        avcodec_free_context(&codec_context);
+        avformat_free_context(output_context);
+        SetError(out_error, "avcodec_parameters_from_context failed: " + ErrorString(result));
+        return false;
+    }
+    stream->time_base = codec_context->time_base;
+
+    if ((output_context->oformat->flags & AVFMT_NOFILE) == 0) {
+        result = avio_open(&output_context->pb, params.output_path.c_str(), AVIO_FLAG_WRITE);
+        if (result < 0) {
+            avcodec_free_context(&codec_context);
+            avformat_free_context(output_context);
+            SetError(out_error, "avio_open failed: " + ErrorString(result));
+            return false;
+        }
+    }
+    result = avformat_write_header(output_context, nullptr);
+    if (result < 0) {
+        if ((output_context->oformat->flags & AVFMT_NOFILE) == 0) {
+            avio_closep(&output_context->pb);
+        }
+        avcodec_free_context(&codec_context);
+        avformat_free_context(output_context);
+        SetError(out_error, "avformat_write_header failed: " + ErrorString(result));
+        return false;
+    }
+
+    const AVSampleFormat input_sample_format = ResolveSampleFormat(frames.front().sample_format, frames.front().planar);
+    if (input_sample_format == AV_SAMPLE_FMT_NONE) {
+        av_write_trailer(output_context);
+        if ((output_context->oformat->flags & AVFMT_NOFILE) == 0) {
+            avio_closep(&output_context->pb);
+        }
+        avcodec_free_context(&codec_context);
+        avformat_free_context(output_context);
+        SetError(out_error, "unsupported input audio sample format: " + frames.front().sample_format);
+        return false;
+    }
+
+    AVChannelLayout input_layout{};
+    if (!SetDefaultChannelLayout(input_channels, &input_layout, out_error)) {
+        av_write_trailer(output_context);
+        if ((output_context->oformat->flags & AVFMT_NOFILE) == 0) {
+            avio_closep(&output_context->pb);
+        }
+        avcodec_free_context(&codec_context);
+        avformat_free_context(output_context);
+        return false;
+    }
+    SwrContext* swr_context = nullptr;
+    result = swr_alloc_set_opts2(
+        &swr_context,
+        &codec_context->ch_layout,
+        codec_context->sample_fmt,
+        codec_context->sample_rate,
+        &input_layout,
+        input_sample_format,
+        input_sample_rate,
+        0,
+        nullptr);
+    av_channel_layout_uninit(&input_layout);
+    if (result < 0 || swr_context == nullptr) {
+        av_write_trailer(output_context);
+        if ((output_context->oformat->flags & AVFMT_NOFILE) == 0) {
+            avio_closep(&output_context->pb);
+        }
+        avcodec_free_context(&codec_context);
+        avformat_free_context(output_context);
+        SetError(out_error, "swr_alloc_set_opts2 failed: " + ErrorString(result));
+        return false;
+    }
+    result = swr_init(swr_context);
+    if (result < 0) {
+        swr_free(&swr_context);
+        av_write_trailer(output_context);
+        if ((output_context->oformat->flags & AVFMT_NOFILE) == 0) {
+            avio_closep(&output_context->pb);
+        }
+        avcodec_free_context(&codec_context);
+        avformat_free_context(output_context);
+        SetError(out_error, "swr_init failed: " + ErrorString(result));
+        return false;
+    }
+
+    const int fifo_channels = codec_context->ch_layout.nb_channels;
+    AVAudioFifo* fifo = av_audio_fifo_alloc(codec_context->sample_fmt, fifo_channels, 1);
+    AVPacket* packet = av_packet_alloc();
+    if (fifo == nullptr || packet == nullptr) {
+        av_packet_free(&packet);
+        av_audio_fifo_free(fifo);
+        swr_free(&swr_context);
+        av_write_trailer(output_context);
+        if ((output_context->oformat->flags & AVFMT_NOFILE) == 0) {
+            avio_closep(&output_context->pb);
+        }
+        avcodec_free_context(&codec_context);
+        avformat_free_context(output_context);
+        SetError(out_error, "failed to allocate audio FIFO or packet");
+        return false;
+    }
+
+    int64_t next_pts = 0;
+    bool success = true;
+    for (const auto& input_frame : frames) {
+        AVFrame* source_frame = av_frame_alloc();
+        if (source_frame == nullptr || !CopyAudioFrameToAvFrame(input_frame, source_frame, out_error)) {
+            av_frame_free(&source_frame);
+            success = false;
+            break;
+        }
+        const int destination_samples = av_rescale_rnd(
+            swr_get_delay(swr_context, input_sample_rate) + input_frame.sample_count,
+            codec_context->sample_rate,
+            input_sample_rate,
+            AV_ROUND_UP);
+        uint8_t** converted_data = nullptr;
+        int converted_linesize = 0;
+        result = av_samples_alloc_array_and_samples(
+            &converted_data,
+            &converted_linesize,
+            fifo_channels,
+            destination_samples,
+            codec_context->sample_fmt,
+            0);
+        if (result < 0) {
+            av_frame_free(&source_frame);
+            success = false;
+            SetError(out_error, "av_samples_alloc_array_and_samples failed: " + ErrorString(result));
+            break;
+        }
+        const int converted_samples = swr_convert(
+            swr_context,
+            converted_data,
+            destination_samples,
+            const_cast<const uint8_t**>(source_frame->extended_data),
+            source_frame->nb_samples);
+        av_frame_free(&source_frame);
+        if (converted_samples < 0) {
+            av_freep(&converted_data[0]);
+            av_freep(&converted_data);
+            success = false;
+            SetError(out_error, "swr_convert failed: " + ErrorString(converted_samples));
+            break;
+        }
+        if (av_audio_fifo_realloc(fifo, av_audio_fifo_size(fifo) + converted_samples) < 0) {
+            av_freep(&converted_data[0]);
+            av_freep(&converted_data);
+            success = false;
+            SetError(out_error, "av_audio_fifo_realloc failed");
+            break;
+        }
+        if (av_audio_fifo_write(fifo, reinterpret_cast<void**>(converted_data), converted_samples) < converted_samples) {
+            av_freep(&converted_data[0]);
+            av_freep(&converted_data);
+            success = false;
+            SetError(out_error, "av_audio_fifo_write failed");
+            break;
+        }
+        av_freep(&converted_data[0]);
+        av_freep(&converted_data);
+
+        while (success && av_audio_fifo_size(fifo) >= std::max(codec_context->frame_size, 1)) {
+            const int frame_samples = codec_context->frame_size > 0 ? codec_context->frame_size : av_audio_fifo_size(fifo);
+            AVFrame* encoded_frame = av_frame_alloc();
+            if (encoded_frame == nullptr) {
+                success = false;
+                SetError(out_error, "av_frame_alloc failed for encoder frame");
+                break;
+            }
+            encoded_frame->nb_samples = frame_samples;
+            encoded_frame->format = codec_context->sample_fmt;
+            encoded_frame->sample_rate = codec_context->sample_rate;
+            av_channel_layout_copy(&encoded_frame->ch_layout, &codec_context->ch_layout);
+            if (av_frame_get_buffer(encoded_frame, 0) < 0 || av_frame_make_writable(encoded_frame) < 0) {
+                av_frame_free(&encoded_frame);
+                success = false;
+                SetError(out_error, "failed to allocate encoder frame buffer");
+                break;
+            }
+            if (av_audio_fifo_read(fifo, reinterpret_cast<void**>(encoded_frame->data), frame_samples) < frame_samples) {
+                av_frame_free(&encoded_frame);
+                success = false;
+                SetError(out_error, "av_audio_fifo_read failed");
+                break;
+            }
+            encoded_frame->pts = next_pts;
+            next_pts += frame_samples;
+            result = avcodec_send_frame(codec_context, encoded_frame);
+            av_frame_free(&encoded_frame);
+            if (result < 0) {
+                success = false;
+                SetError(out_error, "avcodec_send_frame failed: " + ErrorString(result));
+                break;
+            }
+            if (!PushEncoderPackets(output_context, codec_context, stream, packet, out_error)) {
+                success = false;
+                break;
+            }
+        }
+    }
+
+    while (success && av_audio_fifo_size(fifo) > 0) {
+        const bool variable_frame_size = (codec->capabilities & AV_CODEC_CAP_VARIABLE_FRAME_SIZE) != 0;
+        const int remaining = av_audio_fifo_size(fifo);
+        const int frame_samples = (codec_context->frame_size > 0 && !variable_frame_size)
+            ? codec_context->frame_size
+            : remaining;
+        AVFrame* encoded_frame = av_frame_alloc();
+        if (encoded_frame == nullptr) {
+            success = false;
+            SetError(out_error, "av_frame_alloc failed for final encoder frame");
+            break;
+        }
+        encoded_frame->nb_samples = frame_samples;
+        encoded_frame->format = codec_context->sample_fmt;
+        encoded_frame->sample_rate = codec_context->sample_rate;
+        av_channel_layout_copy(&encoded_frame->ch_layout, &codec_context->ch_layout);
+        if (av_frame_get_buffer(encoded_frame, 0) < 0 || av_frame_make_writable(encoded_frame) < 0) {
+            av_frame_free(&encoded_frame);
+            success = false;
+            SetError(out_error, "failed to allocate final encoder frame buffer");
+            break;
+        }
+        const int samples_to_read = std::min(frame_samples, remaining);
+        if (av_audio_fifo_read(fifo, reinterpret_cast<void**>(encoded_frame->data), samples_to_read) < samples_to_read) {
+            av_frame_free(&encoded_frame);
+            success = false;
+            SetError(out_error, "av_audio_fifo_read failed during flush");
+            break;
+        }
+        encoded_frame->pts = next_pts;
+        next_pts += samples_to_read;
+        const int bytes_per_sample = av_get_bytes_per_sample(codec_context->sample_fmt);
+        for (int channel = 0; samples_to_read < frame_samples && channel < fifo_channels; ++channel) {
+            std::memset(
+                encoded_frame->extended_data[channel] + static_cast<size_t>(samples_to_read) * static_cast<size_t>(bytes_per_sample),
+                0,
+                static_cast<size_t>(frame_samples - samples_to_read) * static_cast<size_t>(bytes_per_sample));
+        }
+        result = avcodec_send_frame(codec_context, encoded_frame);
+        av_frame_free(&encoded_frame);
+        if (result < 0) {
+            success = false;
+            SetError(out_error, "avcodec_send_frame failed during flush: " + ErrorString(result));
+            break;
+        }
+        if (!PushEncoderPackets(output_context, codec_context, stream, packet, out_error)) {
+            success = false;
+            break;
+        }
+    }
+
+    if (success) {
+        result = avcodec_send_frame(codec_context, nullptr);
+        if (result < 0) {
+            success = false;
+            SetError(out_error, "avcodec_send_frame(nullptr) failed: " + ErrorString(result));
+        } else if (!PushEncoderPackets(output_context, codec_context, stream, packet, out_error)) {
+            success = false;
+        }
+    }
+
+    const int trailer_result = av_write_trailer(output_context);
+    if (success && trailer_result < 0) {
+        success = false;
+        SetError(out_error, "av_write_trailer failed: " + ErrorString(trailer_result));
+    }
+
+    av_packet_free(&packet);
+    av_audio_fifo_free(fifo);
+    swr_free(&swr_context);
+    if ((output_context->oformat->flags & AVFMT_NOFILE) == 0) {
+        avio_closep(&output_context->pb);
+    }
+    avcodec_free_context(&codec_context);
+    avformat_free_context(output_context);
+    return success;
 #else
     SetError(out_error, "FFmpeg bridge unavailable");
     return false;

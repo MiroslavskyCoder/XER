@@ -138,6 +138,10 @@ AppCommand::Parsed AppCommand::Parse(int argc, char** argv) {
         parsed.type = Type::kAudioInspect;
     }
 
+    if (command == "audio_modules_smoke") {
+		parsed.type = Type::kAudioModulesSmoke;
+	}
+
     if (command == "audio_demo") {
         parsed.type = Type::kAudioDemo;
     }
@@ -168,6 +172,9 @@ AppCommand::Parsed AppCommand::Parse(int argc, char** argv) {
     } else if (command == "audio_inspect") {
         parsed.type = Type::kAudioInspect;
         script_index = 2;
+        } else if (command == "audio_modules_smoke") {
+		parsed.type = Type::kAudioModulesSmoke;
+		script_index = 2;
     } else if (command == "audio_demo") {
         parsed.type = Type::kAudioDemo;
         script_index = 2;
@@ -595,7 +602,7 @@ AppCommand::Parsed AppCommand::Parse(int argc, char** argv) {
             return parsed;
         }
 
-        if (parsed.type == Type::kAudioInspect || parsed.type == Type::kAudioDemo || parsed.type == Type::kSpectrogram || parsed.type == Type::kOnset) {
+        if (parsed.type == Type::kAudioInspect || parsed.type == Type::kAudioModulesSmoke || parsed.type == Type::kAudioDemo || parsed.type == Type::kSpectrogram || parsed.type == Type::kOnset) {
             if (parsed.audio_input_path.empty()) {
                 parsed.audio_input_path = arg;
                 continue;
@@ -604,9 +611,11 @@ AppCommand::Parsed AppCommand::Parse(int argc, char** argv) {
             parsed.valid = false;
             const char* command_name = parsed.type == Type::kAudioInspect
                 ? "audio_inspect"
+                : (parsed.type == Type::kAudioModulesSmoke
+					? "audio_modules_smoke"
                 : (parsed.type == Type::kAudioDemo
                     ? "audio_demo"
-                    : (parsed.type == Type::kSpectrogram ? "spectrogram" : "onset"));
+                    : (parsed.type == Type::kSpectrogram ? "spectrogram" : "onset")));
             parsed.error_message = std::string("Unexpected extra ") + command_name + " argument: " + arg;
             return parsed;
         }
@@ -630,6 +639,7 @@ std::string AppCommand::BuildHelpText(const std::string& binary_name) {
     out << "  " << binary_name << " compile [script.xer] [options]\n";
     out << "  " << binary_name << " inspect [artifact.bin|artifact.bak]\n";
     out << "  " << binary_name << " audio_inspect <input_audio> [--output_dir dir] [--target_sample_rate hz] [--json]\n";
+    out << "  " << binary_name << " audio_modules_smoke <input_audio> [--output_dir dir]\n";
     out << "  " << binary_name << " audio_demo [input_audio] [--output_dir dir] [--audio_processor name]\n";
     out << "  " << binary_name << " spectrogram <input_audio> [--output_dir dir] [--target_sample_rate hz]\n";
     out << "  " << binary_name << " onset <input_audio> [--output_dir dir] [--target_sample_rate hz]\n";
@@ -642,7 +652,7 @@ std::string AppCommand::BuildHelpText(const std::string& binary_name) {
     out << "  --noemit                     Dry-run: parse and validate only\n";
     out << "  --emit_source_map            Write source-maps alongside compiled output\n";
     out << "  --output_dir <path>          Write generated compile artifacts into directory\n";
-    out << "  --audio_input <path>         Audio file for audio_inspect/audio_demo/spectrogram/onset\n";
+    out << "  --audio_input <path>         Audio file for audio_inspect/audio_modules_smoke/audio_demo/spectrogram/onset\n";
     out << "  --audio_processor <name>     spectral_shaper|phase_vocoder\n";
     out << "  --audio_shaper_profile <n>   unity|tilt|bright\n";
     out << "  --audio_stretch_ratio <x>    Phase vocoder time-stretch ratio (> 0)\n";
@@ -713,6 +723,7 @@ std::string AppCommand::BuildHelpText(const std::string& binary_name) {
     out << "  " << binary_name << " compile <script.xer> [--output_dir dir] [--xer_key_file path]   Build .bin/.bak only\n";
     out << "  " << binary_name << " inspect <artifact.bin|artifact.bak>   Print XER metadata without execution\n";
     out << "  " << binary_name << " audio_inspect <input_audio> [--output_dir dir] [--target_sample_rate hz] [--json]   Load, normalize, and print audio metadata without DSP\n";
+    out << "  " << binary_name << " audio_modules_smoke <input_audio> [--output_dir dir]   Run plugin/MIDI/codec smoke validation on one input\n";
     out << "  " << binary_name << " audio_demo [input_audio] [--audio_processor name] [--output_dir dir]   Run STFT smoke demo or file-based processing\n";
     out << "  " << binary_name << " spectrogram <input_audio> [--output_dir dir] [--target_sample_rate hz]   Build a spectrogram raw dump from normalized audio\n";
     out << "  " << binary_name << " onset <input_audio> [--output_dir dir] [--target_sample_rate hz]   Detect onset times from normalized audio\n";

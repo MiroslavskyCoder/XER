@@ -1,38 +1,22 @@
 #include "codec_aac_adts.h"
 
 #include "codec_ffmpeg_decode_helper.h"
+#include "codec_ffmpeg_encode_helper.h"
 
-#include <algorithm>
 #include <cstdint>
 
 namespace Engine::Audio::CodecIO {
-
-namespace {
-
-void WriteAdtsHeader(std::uint8_t* h, std::uint16_t frame_length) {
-    const std::uint8_t profile = 1;      // AAC LC -> profile index in ADTS is 1
-    const std::uint8_t sf_index = 4;     // 44.1kHz
-    const std::uint8_t channel_cfg = 1;  // mono
-
-    h[0] = 0xFF;
-    h[1] = 0xF1;
-    h[2] = static_cast<std::uint8_t>(((profile & 0x03u) << 6) | ((sf_index & 0x0Fu) << 2) | ((channel_cfg >> 2) & 0x01u));
-    h[3] = static_cast<std::uint8_t>(((channel_cfg & 0x03u) << 6) | ((frame_length >> 11) & 0x03u));
-    h[4] = static_cast<std::uint8_t>((frame_length >> 3) & 0xFFu);
-    h[5] = static_cast<std::uint8_t>(((frame_length & 0x07u) << 5) | 0x1Fu);
-    h[6] = 0xFC;
-}
-
-} // namespace
 
 bool AacAdtsCodec::Encode(const float* input, size_t frames, std::vector<uint8_t>& out) const {
     if (input == nullptr || frames == 0) {
         return false;
     }
-	(void)input;
-	(void)frames;
-	out.clear();
-	return false;
+    std::string error;
+    if (!detail::EncodeMonoAudioBufferWithFfmpeg(input, frames, 44100, ".aac", "aac", &out, &error)) {
+        out.clear();
+        return false;
+    }
+    return true;
 }
 
 bool AacAdtsCodec::Decode(const uint8_t* data, size_t bytes, std::vector<float>& out) const {
