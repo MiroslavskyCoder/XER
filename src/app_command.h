@@ -9,6 +9,7 @@ public:
         kCompile,
         kInspect,
         kAudioInspect,
+        kAudioFxCustom,
         kAudioModulesSmoke,
         kAudioAnalysisSmoke,
         kAudioDemo,
@@ -31,11 +32,13 @@ public:
         bool emit_source_map  = false;
         std::string output_dir;
         std::string audio_input_path;
+        std::string audio_effect_name;
         std::string audio_processor;
         std::string audio_shaper_profile = "tilt";
         float audio_stretch_ratio = 1.0f;
         int audio_raw_sample_rate = 44100;
         int target_sample_rate = 44100;
+        int audio_target_channels = -1;
         bool json_output = false;
         std::string xer_key;
         std::string xer_key_file;
