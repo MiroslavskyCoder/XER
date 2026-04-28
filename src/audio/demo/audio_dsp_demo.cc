@@ -229,12 +229,8 @@ bool BuildSpectralShaperCurve(
 
 bool RunSelectedProcessorDemo(
 	const AudioDSPDemoOptions& options,
-	const std::vector<float>& input,
-	int sample_rate,
+	const Engine::Audio::Core::AudioSourceBuffer& input_audio,
 	const std::string& mode,
-	const std::string& source_format,
-	const std::string& codec_name,
-	const std::string& decode_backend,
 	std::string* report_out,
 	std::string* error_out) {
 	if (report_out == nullptr) {
@@ -243,7 +239,7 @@ bool RunSelectedProcessorDemo(
 		}
 		return false;
 	}
-	if (input.empty() || sample_rate <= 0) {
+	if (input_audio.samples.empty() || input_audio.sample_rate <= 0 || input_audio.channels <= 0) {
 		if (error_out != nullptr) {
 			*error_out = "input audio buffer is empty";
 		}
@@ -285,20 +281,20 @@ bool RunSelectedProcessorDemo(
 			}
 			return false;
 		}
-		processed_signal = ProcessSignal(&shaper, input, kHopSize, latency_samples, &processing_error);
+		processed_signal = ProcessSignal(&shaper, input_audio.samples, kHopSize, latency_samples, &processing_error);
 	} else {
 		processor_label = "phase_vocoder";
 		processor_detail = absl::StrFormat("%0.3f", options.phase_vocoder_ratio);
 
 		Engine::Audio::DSP::PhaseVocoder vocoder(kFFTSize, kHopSize);
-		if (!vocoder.Initialize(static_cast<float>(sample_rate))) {
+		if (!vocoder.Initialize(static_cast<float>(input_audio.sample_rate))) {
 			if (error_out != nullptr) {
 				*error_out = "failed to initialize phase vocoder";
 			}
 			return false;
 		}
 		vocoder.SetTimeStretchRatio(options.phase_vocoder_ratio);
-		processed_signal = ProcessSignal(&vocoder, input, kHopSize, latency_samples, &processing_error);
+		processed_signal = ProcessSignal(&vocoder, input_audio.samples, kHopSize, latency_samples, &processing_error);
 	}
 
 	if (processed_signal.empty()) {
@@ -308,7 +304,7 @@ bool RunSelectedProcessorDemo(
 		return false;
 	}
 
-	const std::vector<float> aligned_output = TrimLatency(processed_signal, latency_samples, input.size());
+	const std::vector<float> aligned_output = TrimLatency(processed_signal, latency_samples, input_audio.samples.size());
 	if (aligned_output.empty()) {
 		if (error_out != nullptr) {
 			*error_out = "failed to trim processed audio latency";
@@ -318,8 +314,8 @@ bool RunSelectedProcessorDemo(
 
 	const std::filesystem::path input_wav = options.output_dir / "decoded_input.wav";
 	const std::filesystem::path processed_wav = options.output_dir / (processor_label + std::string(".wav"));
-	if (!EncodeWave(input_wav, input, sample_rate, error_out)
-		|| !EncodeWave(processed_wav, aligned_output, sample_rate, error_out)) {
+	if (!EncodeWave(input_wav, input_audio.samples, input_audio.sample_rate, error_out)
+		|| !EncodeWave(processed_wav, aligned_output, input_audio.sample_rate, error_out)) {
 		return false;
 	}
 
@@ -330,8 +326,11 @@ bool RunSelectedProcessorDemo(
 		"source_format=%s\n"
 		"codec=%s\n"
 		"decode_backend=%s\n"
-		"channel_mix=mono\n"
+		"original_sample_rate=%d\n"
+		"original_channels=%d\n"
 		"sample_rate=%d\n"
+		"normalized_channels=%d\n"
+		"original_frames=%zu\n"
 		"input_frames=%zu\n"
 		"processed_frames=%zu\n"
 		"fft_size=%zu\n"
@@ -343,11 +342,15 @@ bool RunSelectedProcessorDemo(
 		"processed_wav=%s\n",
 		mode,
 		options.input_path.empty() ? "<synthetic>" : options.input_path.string(),
-		source_format.empty() ? "unknown" : source_format,
-		codec_name.empty() ? "unknown" : codec_name,
-		decode_backend.empty() ? "generated" : decode_backend,
-		sample_rate,
-		input.size(),
+		input_audio.source_format.empty() ? "unknown" : input_audio.source_format,
+		input_audio.codec_name.empty() ? "unknown" : input_audio.codec_name,
+		input_audio.decode_backend.empty() ? "generated" : input_audio.decode_backend,
+		input_audio.original_sample_rate,
+		input_audio.original_channels,
+		input_audio.sample_rate,
+		input_audio.channels,
+		input_audio.original_frame_count,
+		input_audio.frame_count,
 		aligned_output.size(),
 		kFFTSize,
 		kHopSize,
@@ -502,21 +505,32 @@ bool RunAudioDSPDemo(
 	}
 
 	if (options.input_path.empty()) {
-		const std::vector<float> synthetic_input = GenerateInputSignal(kSyntheticSignalSamples, kDefaultSampleRate);
+		const int target_sample_rate = options.target_sample_rate > 0 ? options.target_sample_rate : kDefaultSampleRate;
+		Engine::Audio::Core::AudioSourceBuffer synthetic_input;
+		synthetic_input.samples = GenerateInputSignal(kSyntheticSignalSamples, target_sample_rate);
+		synthetic_input.sample_rate = target_sample_rate;
+		synthetic_input.channels = 1;
+		synthetic_input.original_sample_rate = target_sample_rate;
+		synthetic_input.original_channels = 1;
+		synthetic_input.frame_count = synthetic_input.samples.size();
+		synthetic_input.original_frame_count = synthetic_input.samples.size();
+		synthetic_input.source_format = "synthetic_tone_mix";
+		synthetic_input.codec_name = "generated";
+		synthetic_input.decode_backend = "generated";
 		return RunSelectedProcessorDemo(
 			options,
 			synthetic_input,
-			kDefaultSampleRate,
 			"synthetic",
-			"synthetic_tone_mix",
-			"generated",
-			"generated",
 			report_out,
 			error_out);
 	}
 
-	DecodedAudio decoded_audio;
-	if (!LoadAudioInput(options, &decoded_audio, error_out)) {
+	Engine::Audio::Core::AudioSourceLoadOptions load_options;
+	load_options.input_path = options.input_path;
+	load_options.raw_sample_rate = options.raw_sample_rate;
+	load_options.target_sample_rate = options.target_sample_rate;
+	Engine::Audio::Core::AudioSourceBuffer decoded_audio;
+	if (!Engine::Audio::Core::AudioSourceLoader::Load(load_options, &decoded_audio, error_out)) {
 		return false;
 	}
 
@@ -526,12 +540,8 @@ bool RunAudioDSPDemo(
 	}
 	return RunSelectedProcessorDemo(
 		normalized_options,
-		decoded_audio.samples,
-		decoded_audio.sample_rate,
+		decoded_audio,
 		"file",
-		decoded_audio.source_format,
-		decoded_audio.codec_name,
-		decoded_audio.decode_backend,
 		report_out,
 		error_out);
 }

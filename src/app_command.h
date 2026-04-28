@@ -8,7 +8,10 @@ public:
         kRun,
         kCompile,
         kInspect,
+        kAudioInspect,
         kAudioDemo,
+        kSpectrogram,
+        kOnset,
         kHelp,
         kVersion,
         kDoctor,
@@ -30,6 +33,8 @@ public:
         std::string audio_shaper_profile = "tilt";
         float audio_stretch_ratio = 1.0f;
         int audio_raw_sample_rate = 44100;
+        int target_sample_rate = 44100;
+        bool json_output = false;
         std::string xer_key;
         std::string xer_key_file;
         std::string xer_key_env;

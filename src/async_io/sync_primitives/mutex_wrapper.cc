@@ -1,5 +1,7 @@
 #include "mutex_wrapper.h"
 
+#include <thread>
+
 namespace AsyncIO::IO::Sync {
 
 MutexWrapper::MutexWrapper(const std::string& name)
@@ -24,22 +26,17 @@ bool MutexWrapper::TryLock() {
 }
 
 bool MutexWrapper::TryLockFor(const std::chrono::milliseconds& timeout) {
-    bool success = false;
-    
-    auto timed_mutex_ptr = dynamic_cast<std::timed_mutex*>(&mutex_);
-    if (timed_mutex_ptr) {
-        success = timed_mutex_ptr->try_lock_for(timeout);
-    } else {
-        success = TryLock();
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    while (std::chrono::steady_clock::now() <= deadline) {
+        if (mutex_.try_lock()) {
+            lock_count_++;
+            return true;
+        }
+        std::this_thread::yield();
     }
-    
-    if (success) {
-        lock_count_++;
-    } else {
-        contention_count_++;
-    }
-    
-    return success;
+
+    contention_count_++;
+    return false;
 }
 
 void MutexWrapper::Unlock() {

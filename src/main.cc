@@ -1,7 +1,11 @@
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
+#include <cmath>
+#include <iomanip>
 #include <iostream>
+#include <json/json.h>
 #include <range/v3/range/conversion.hpp>
 #include <range/v3/view/transform.hpp>
 #include <sstream>
@@ -10,6 +14,10 @@
 #include <vector>
 
 #include "app_command.h"
+#include "audio/analysis_ai/anal_onset_detection.h"
+#include "audio/analysis_ai/anal_spectrogram_generator.h"
+#include "audio/audio_core/audio_source_loader.h"
+#include "audio/file_io_codecs/codec_wav_pcm.h"
 #include "audio/demo/audio_dsp_demo.h"
 #include "crash/crash_handler.h"
 #include "ecosystem/ecosystem_manifest_loader.h"
@@ -164,6 +172,228 @@ bool ParseCommandFromTokens(const std::vector<std::string>& tokens,
 	return out->valid;
 }
 
+bool WriteFloatVectorBinary(
+	const std::filesystem::path& path,
+	const std::vector<float>& values,
+	std::string* error_out) {
+	std::ofstream output(path, std::ios::binary);
+	if (!output.is_open()) {
+		if (error_out != nullptr) {
+			*error_out = "Failed to open output file: " + path.string();
+		}
+		return false;
+	}
+
+	if (!values.empty()) {
+		output.write(reinterpret_cast<const char*>(values.data()), static_cast<std::streamsize>(values.size() * sizeof(float)));
+	}
+	if (!output) {
+		if (error_out != nullptr) {
+			*error_out = "Failed to write output file: " + path.string();
+		}
+		return false;
+	}
+	return true;
+}
+
+bool WriteTextFile(
+	const std::filesystem::path& path,
+	const std::string& text,
+	std::string* error_out) {
+	std::ofstream output(path);
+	if (!output.is_open()) {
+		if (error_out != nullptr) {
+			*error_out = "Failed to open text output file: " + path.string();
+		}
+		return false;
+	}
+
+	output << text;
+	if (!output) {
+		if (error_out != nullptr) {
+			*error_out = "Failed to write text output file: " + path.string();
+		}
+		return false;
+	}
+	return true;
+}
+
+bool WriteWaveFile(
+	const std::filesystem::path& path,
+	const std::vector<float>& samples,
+	int sample_rate,
+	std::string* error_out) {
+	Engine::Audio::CodecIO::WavPcmCodec codec;
+	std::vector<std::uint8_t> encoded;
+	if (!codec.Encode16(samples.data(), samples.size(), encoded, sample_rate)) {
+		if (error_out != nullptr) {
+			*error_out = "Failed to encode wave output";
+		}
+		return false;
+	}
+
+	std::ofstream output(path, std::ios::binary);
+	if (!output.is_open()) {
+		if (error_out != nullptr) {
+			*error_out = "Failed to open wave output file: " + path.string();
+		}
+		return false;
+	}
+
+	output.write(reinterpret_cast<const char*>(encoded.data()), static_cast<std::streamsize>(encoded.size()));
+	if (!output) {
+		if (error_out != nullptr) {
+			*error_out = "Failed to write wave output file: " + path.string();
+		}
+		return false;
+	}
+	return true;
+}
+
+struct AudioSignalStats {
+	double rms = 0.0;
+	float peak = 0.0f;
+};
+
+AudioSignalStats ComputeAudioSignalStats(const std::vector<float>& samples) {
+	AudioSignalStats stats;
+	if (samples.empty()) {
+		return stats;
+	}
+
+	double sum_squared = 0.0;
+	for (float sample : samples) {
+		const float absolute = std::abs(sample);
+		stats.peak = std::max(stats.peak, absolute);
+		sum_squared += static_cast<double>(sample) * static_cast<double>(sample);
+	}
+	stats.rms = std::sqrt(sum_squared / static_cast<double>(samples.size()));
+	return stats;
+}
+
+double SecondsFromFrames(size_t frame_count, int sample_rate) {
+	if (sample_rate <= 0) {
+		return 0.0;
+	}
+	return static_cast<double>(frame_count) / static_cast<double>(sample_rate);
+}
+
+Json::Value BuildAudioInspectReportJson(
+	const AppCommand::Parsed& parsed,
+	const Engine::Audio::Core::AudioSourceBuffer& audio_buffer,
+	const AudioSignalStats& stats) {
+	Json::Value report(Json::objectValue);
+	report["command"] = "audio_inspect";
+	report["input_path"] = parsed.audio_input_path;
+
+	Json::Value source(Json::objectValue);
+	source["format"] = audio_buffer.source_format.empty() ? "unknown" : audio_buffer.source_format;
+	source["codec"] = audio_buffer.codec_name.empty() ? "unknown" : audio_buffer.codec_name;
+	source["decode_backend"] = audio_buffer.decode_backend.empty() ? "unknown" : audio_buffer.decode_backend;
+	source["sample_rate"] = audio_buffer.original_sample_rate;
+	source["channels"] = audio_buffer.original_channels;
+	source["frames"] = static_cast<Json::UInt64>(audio_buffer.original_frame_count);
+	source["duration_seconds"] = SecondsFromFrames(audio_buffer.original_frame_count, audio_buffer.original_sample_rate);
+	report["source"] = source;
+
+	Json::Value normalized(Json::objectValue);
+	normalized["sample_rate"] = audio_buffer.sample_rate;
+	normalized["channels"] = audio_buffer.channels;
+	normalized["frames"] = static_cast<Json::UInt64>(audio_buffer.frame_count);
+	normalized["duration_seconds"] = SecondsFromFrames(audio_buffer.frame_count, audio_buffer.sample_rate);
+	normalized["peak"] = stats.peak;
+	normalized["rms"] = stats.rms;
+	report["normalized"] = normalized;
+
+	Json::Value options(Json::objectValue);
+	options["target_sample_rate"] = parsed.target_sample_rate;
+	options["raw_sample_rate"] = parsed.audio_raw_sample_rate;
+	options["json_output"] = parsed.json_output;
+	report["options"] = options;
+
+	return report;
+}
+
+std::string SerializeJson(const Json::Value& value) {
+	Json::StreamWriterBuilder builder;
+	builder["commentStyle"] = "None";
+	builder["indentation"] = "  ";
+	builder["precision"] = 10;
+	std::string text = Json::writeString(builder, value);
+	if (text.empty() || text.back() != '\n') {
+		text.push_back('\n');
+	}
+	return text;
+}
+
+std::string BuildAudioInspectTextReport(const Json::Value& report) {
+	std::ostringstream output;
+	output << std::fixed << std::setprecision(6);
+	output << "Audio Inspect CLI\n";
+	output << "input_path=" << report["input_path"].asString() << "\n";
+	output << "source_format=" << report["source"]["format"].asString() << "\n";
+	output << "codec=" << report["source"]["codec"].asString() << "\n";
+	output << "decode_backend=" << report["source"]["decode_backend"].asString() << "\n";
+	output << "original_sample_rate=" << report["source"]["sample_rate"].asInt() << "\n";
+	output << "original_channels=" << report["source"]["channels"].asInt() << "\n";
+	output << "original_frames=" << report["source"]["frames"].asUInt64() << "\n";
+	output << "original_duration_seconds=" << report["source"]["duration_seconds"].asDouble() << "\n";
+	output << "sample_rate=" << report["normalized"]["sample_rate"].asInt() << "\n";
+	output << "normalized_channels=" << report["normalized"]["channels"].asInt() << "\n";
+	output << "normalized_frames=" << report["normalized"]["frames"].asUInt64() << "\n";
+	output << "normalized_duration_seconds=" << report["normalized"]["duration_seconds"].asDouble() << "\n";
+	output << "normalized_peak=" << report["normalized"]["peak"].asDouble() << "\n";
+	output << "normalized_rms=" << report["normalized"]["rms"].asDouble() << "\n";
+	output << "target_sample_rate=" << report["options"]["target_sample_rate"].asInt() << "\n";
+	const Json::Value& artifacts = report["artifacts"];
+	if (artifacts.isObject()) {
+		if (artifacts.isMember("report_path")) {
+			output << "report_path=" << artifacts["report_path"].asString() << "\n";
+		}
+		if (artifacts.isMember("normalized_wav")) {
+			output << "normalized_wav=" << artifacts["normalized_wav"].asString() << "\n";
+		}
+	}
+	return output.str();
+}
+
+bool WriteOnsetTimes(
+	const std::filesystem::path& path,
+	const std::vector<size_t>& onset_frames,
+	const std::vector<double>& onset_times,
+	std::string* error_out) {
+	std::ofstream output(path);
+	if (!output.is_open()) {
+		if (error_out != nullptr) {
+			*error_out = "Failed to open onset output file: " + path.string();
+		}
+		return false;
+	}
+
+	output << "frame,time_seconds\n";
+	output << std::fixed << std::setprecision(6);
+	for (size_t index = 0; index < onset_frames.size() && index < onset_times.size(); ++index) {
+		output << onset_frames[index] << "," << onset_times[index] << "\n";
+	}
+	if (!output) {
+		if (error_out != nullptr) {
+			*error_out = "Failed to write onset output file: " + path.string();
+		}
+		return false;
+	}
+	return true;
+}
+
+Engine::Audio::Core::AudioSourceLoadOptions BuildAudioLoadOptions(const AppCommand::Parsed& parsed) {
+	Engine::Audio::Core::AudioSourceLoadOptions load_options;
+	load_options.input_path = parsed.audio_input_path.empty()
+		? std::filesystem::path()
+		: std::filesystem::path(parsed.audio_input_path);
+	load_options.raw_sample_rate = parsed.audio_raw_sample_rate;
+	load_options.target_sample_rate = parsed.target_sample_rate;
+	return load_options;
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -241,6 +471,7 @@ int main(int argc, char** argv) {
 		demo_options.phase_vocoder_ratio = parsed.audio_stretch_ratio;
 		demo_options.spectral_shaper_profile = parsed.audio_shaper_profile;
 		demo_options.raw_sample_rate = parsed.audio_raw_sample_rate;
+		demo_options.target_sample_rate = parsed.target_sample_rate;
 		std::string report;
 		std::string demo_error;
 		if (!Engine::Audio::Demo::RunAudioDSPDemo(demo_options, &report, &demo_error)) {
@@ -248,6 +479,134 @@ int main(int argc, char** argv) {
 			return 1;
 		}
 		std::cout << report;
+		return 0;
+	}
+
+	if (parsed.type == AppCommand::Type::kAudioInspect) {
+		if (parsed.audio_input_path.empty()) {
+			std::cerr << "Audio inspect command requires an input audio path\n";
+			return 2;
+		}
+
+		std::string inspect_error;
+		const auto load_options = BuildAudioLoadOptions(parsed);
+		Engine::Audio::Core::AudioSourceBuffer audio_buffer;
+		if (!Engine::Audio::Core::AudioSourceLoader::Load(load_options, &audio_buffer, &inspect_error)) {
+			std::cerr << "Audio inspect failed: " << inspect_error << "\n";
+			return 1;
+		}
+
+		const AudioSignalStats stats = ComputeAudioSignalStats(audio_buffer.samples);
+		Json::Value report_json = BuildAudioInspectReportJson(parsed, audio_buffer, stats);
+
+		if (!parsed.output_dir.empty()) {
+			const std::filesystem::path output_dir = parsed.output_dir;
+			std::error_code fs_error;
+			std::filesystem::create_directories(output_dir, fs_error);
+			if (fs_error) {
+				std::cerr << "Audio inspect failed: could not create output directory\n";
+				return 1;
+			}
+
+			const std::filesystem::path report_path = output_dir / (parsed.json_output ? "audio_inspect.json" : "audio_inspect.txt");
+			const std::filesystem::path wav_path = output_dir / "normalized_input.wav";
+			report_json["artifacts"]["report_path"] = report_path.string();
+			report_json["artifacts"]["normalized_wav"] = wav_path.string();
+			const std::string serialized_report = parsed.json_output
+				? SerializeJson(report_json)
+				: BuildAudioInspectTextReport(report_json);
+			std::string io_error;
+			if (!WriteTextFile(report_path, serialized_report, &io_error)
+				|| !WriteWaveFile(wav_path, audio_buffer.samples, audio_buffer.sample_rate, &io_error)) {
+				std::cerr << "Audio inspect failed: " << io_error << "\n";
+				return 1;
+			}
+		}
+
+		std::cout << (parsed.json_output ? SerializeJson(report_json) : BuildAudioInspectTextReport(report_json));
+		return 0;
+	}
+
+	if (parsed.type == AppCommand::Type::kSpectrogram) {
+		if (parsed.audio_input_path.empty()) {
+			std::cerr << "Spectrogram command requires an input audio path\n";
+			return 2;
+		}
+
+		const std::filesystem::path output_dir = parsed.output_dir.empty()
+			? std::filesystem::path("out/audio_spectrogram")
+			: std::filesystem::path(parsed.output_dir);
+		std::error_code fs_error;
+		std::filesystem::create_directories(output_dir, fs_error);
+		if (fs_error) {
+			std::cerr << "Failed to create spectrogram output directory\n";
+			return 1;
+		}
+
+		Engine::Audio::AnalysisAI::SpectrogramGenerator generator;
+		std::string analysis_error;
+		const auto load_options = BuildAudioLoadOptions(parsed);
+		if (!generator.GenerateFromFile(load_options, &analysis_error)) {
+			std::cerr << "Spectrogram command failed: " << analysis_error << "\n";
+			return 1;
+		}
+
+		const std::filesystem::path raw_output_path = output_dir / "spectrogram.raw";
+		if (!generator.ExportAsRaw(raw_output_path.string())) {
+			std::cerr << "Spectrogram command failed: could not export raw spectrogram\n";
+			return 1;
+		}
+
+		std::cout << "Spectrogram CLI\n";
+		std::cout << "input_path=" << parsed.audio_input_path << "\n";
+		std::cout << "target_sample_rate=" << parsed.target_sample_rate << "\n";
+		std::cout << "frame_count=" << generator.GetFrameCount() << "\n";
+		std::cout << "bin_count=" << generator.GetBinCount() << "\n";
+		std::cout << "raw_output=" << raw_output_path.string() << "\n";
+		std::cout << generator.GetReport() << "\n";
+		return 0;
+	}
+
+	if (parsed.type == AppCommand::Type::kOnset) {
+		if (parsed.audio_input_path.empty()) {
+			std::cerr << "Onset command requires an input audio path\n";
+			return 2;
+		}
+
+		const std::filesystem::path output_dir = parsed.output_dir.empty()
+			? std::filesystem::path("out/audio_onset")
+			: std::filesystem::path(parsed.output_dir);
+		std::error_code fs_error;
+		std::filesystem::create_directories(output_dir, fs_error);
+		if (fs_error) {
+			std::cerr << "Failed to create onset output directory\n";
+			return 1;
+		}
+
+		Engine::Audio::AnalysisAI::OnsetDetector detector;
+		std::string analysis_error;
+		const auto load_options = BuildAudioLoadOptions(parsed);
+		if (!detector.DetectOnsetsFromFile(load_options, &analysis_error)) {
+			std::cerr << "Onset command failed: " << analysis_error << "\n";
+			return 1;
+		}
+
+		const auto onset_times = detector.GetOnsetTimesSeconds(parsed.target_sample_rate);
+		const std::filesystem::path onset_times_path = output_dir / "onsets.csv";
+		const std::filesystem::path flux_curve_path = output_dir / "flux_curve.raw";
+		if (!WriteOnsetTimes(onset_times_path, detector.GetOnsetFrames(), onset_times, &analysis_error)
+			|| !WriteFloatVectorBinary(flux_curve_path, detector.GetFluxCurve(), &analysis_error)) {
+			std::cerr << "Onset command failed: " << analysis_error << "\n";
+			return 1;
+		}
+
+		std::cout << "Onset CLI\n";
+		std::cout << "input_path=" << parsed.audio_input_path << "\n";
+		std::cout << "target_sample_rate=" << parsed.target_sample_rate << "\n";
+		std::cout << "onset_count=" << detector.GetOnsetFrames().size() << "\n";
+		std::cout << "onset_times_csv=" << onset_times_path.string() << "\n";
+		std::cout << "flux_curve_raw=" << flux_curve_path.string() << "\n";
+		std::cout << detector.GetReport() << "\n";
 		return 0;
 	}
 

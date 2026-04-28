@@ -134,8 +134,20 @@ AppCommand::Parsed AppCommand::Parse(int argc, char** argv) {
         parsed.type = Type::kInspect;
     }
 
+    if (command == "audio_inspect") {
+        parsed.type = Type::kAudioInspect;
+    }
+
     if (command == "audio_demo") {
         parsed.type = Type::kAudioDemo;
+    }
+
+    if (command == "spectrogram") {
+        parsed.type = Type::kSpectrogram;
+    }
+
+    if (command == "onset") {
+        parsed.type = Type::kOnset;
     }
 
     if (command == "doctor") {
@@ -153,8 +165,17 @@ AppCommand::Parsed AppCommand::Parse(int argc, char** argv) {
     } else if (command == "inspect") {
         parsed.type = Type::kInspect;
         script_index = 2;
+    } else if (command == "audio_inspect") {
+        parsed.type = Type::kAudioInspect;
+        script_index = 2;
     } else if (command == "audio_demo") {
         parsed.type = Type::kAudioDemo;
+        script_index = 2;
+    } else if (command == "spectrogram") {
+        parsed.type = Type::kSpectrogram;
+        script_index = 2;
+    } else if (command == "onset") {
+        parsed.type = Type::kOnset;
         script_index = 2;
     } else if (command != "doctor") {
         script_index = 1;
@@ -239,6 +260,20 @@ AppCommand::Parsed AppCommand::Parse(int argc, char** argv) {
                 continue;
             }
         }
+        {
+            std::string value; bool inline_v = false;
+            if (ParseValueFlag(arg, "--target_sample_rate", &value, &inline_v)) {
+                if (!inline_v && !ConsumeStringValue("--target_sample_rate", argc, argv, &i, &value, &parsed))
+                    return parsed;
+                if (!ParsePositiveInt(value, &parsed.target_sample_rate)) {
+                    parsed.valid = false;
+                    parsed.error_message = "Invalid value for --target_sample_rate: " + value;
+                    return parsed;
+                }
+                continue;
+            }
+        }
+        if (arg == "--json")                    { parsed.json_output = true;         continue; }
         {
             std::string value; bool inline_v = false;
             if (ParseValueFlag(arg, "--xer_key", &value, &inline_v)) {
@@ -560,18 +595,29 @@ AppCommand::Parsed AppCommand::Parse(int argc, char** argv) {
             return parsed;
         }
 
-        if (parsed.type == Type::kAudioDemo) {
+        if (parsed.type == Type::kAudioInspect || parsed.type == Type::kAudioDemo || parsed.type == Type::kSpectrogram || parsed.type == Type::kOnset) {
             if (parsed.audio_input_path.empty()) {
                 parsed.audio_input_path = arg;
                 continue;
             }
 
             parsed.valid = false;
-            parsed.error_message = "Unexpected extra audio_demo argument: " + arg;
+            const char* command_name = parsed.type == Type::kAudioInspect
+                ? "audio_inspect"
+                : (parsed.type == Type::kAudioDemo
+                    ? "audio_demo"
+                    : (parsed.type == Type::kSpectrogram ? "spectrogram" : "onset"));
+            parsed.error_message = std::string("Unexpected extra ") + command_name + " argument: " + arg;
             return parsed;
         }
 
         parsed.script_path = arg;
+    }
+
+    if (parsed.json_output && parsed.type != Type::kAudioInspect) {
+        parsed.valid = false;
+        parsed.error_message = "--json is currently supported only for audio_inspect";
+        return parsed;
     }
 
     return parsed;
@@ -583,7 +629,10 @@ std::string AppCommand::BuildHelpText(const std::string& binary_name) {
     out << "  " << binary_name << " run [script.js] [options]\n";
     out << "  " << binary_name << " compile [script.xer] [options]\n";
     out << "  " << binary_name << " inspect [artifact.bin|artifact.bak]\n";
+    out << "  " << binary_name << " audio_inspect <input_audio> [--output_dir dir] [--target_sample_rate hz] [--json]\n";
     out << "  " << binary_name << " audio_demo [input_audio] [--output_dir dir] [--audio_processor name]\n";
+    out << "  " << binary_name << " spectrogram <input_audio> [--output_dir dir] [--target_sample_rate hz]\n";
+    out << "  " << binary_name << " onset <input_audio> [--output_dir dir] [--target_sample_rate hz]\n";
     out << "  " << binary_name << " run --script path/to/script.js [options]\n";
     out << "\nScript:\n";
     out << "  --script, -s <path>          Entry-point JS/TS/XER file\n";
@@ -593,11 +642,13 @@ std::string AppCommand::BuildHelpText(const std::string& binary_name) {
     out << "  --noemit                     Dry-run: parse and validate only\n";
     out << "  --emit_source_map            Write source-maps alongside compiled output\n";
     out << "  --output_dir <path>          Write generated compile artifacts into directory\n";
-    out << "  --audio_input <path>         Audio file for audio_demo file mode\n";
+    out << "  --audio_input <path>         Audio file for audio_inspect/audio_demo/spectrogram/onset\n";
     out << "  --audio_processor <name>     spectral_shaper|phase_vocoder\n";
     out << "  --audio_shaper_profile <n>   unity|tilt|bright\n";
     out << "  --audio_stretch_ratio <x>    Phase vocoder time-stretch ratio (> 0)\n";
     out << "  --audio_raw_sample_rate <n>  Sample rate for headerless .raw/.pcm input\n";
+    out << "  --target_sample_rate <n>     Normalize file-based audio commands to target sample rate\n";
+    out << "  --json                       Emit audio_inspect report as JSON\n";
     out << "\nXER protection:\n";
     out << "  --xer_key <secret>           Encrypt XER .bin payloads with AES-256-GCM\n";
     out << "  --xer_key_file <path>        Read XER encryption key from file\n";
@@ -661,7 +712,10 @@ std::string AppCommand::BuildHelpText(const std::string& binary_name) {
     out << "\nCommands:\n";
     out << "  " << binary_name << " compile <script.xer> [--output_dir dir] [--xer_key_file path]   Build .bin/.bak only\n";
     out << "  " << binary_name << " inspect <artifact.bin|artifact.bak>   Print XER metadata without execution\n";
+    out << "  " << binary_name << " audio_inspect <input_audio> [--output_dir dir] [--target_sample_rate hz] [--json]   Load, normalize, and print audio metadata without DSP\n";
     out << "  " << binary_name << " audio_demo [input_audio] [--audio_processor name] [--output_dir dir]   Run STFT smoke demo or file-based processing\n";
+    out << "  " << binary_name << " spectrogram <input_audio> [--output_dir dir] [--target_sample_rate hz]   Build a spectrogram raw dump from normalized audio\n";
+    out << "  " << binary_name << " onset <input_audio> [--output_dir dir] [--target_sample_rate hz]   Detect onset times from normalized audio\n";
     out << "  " << binary_name << " doctor [--doctor_verbose]   Check environment\n";
     out << "  " << binary_name << " version\n";
     out << "  " << binary_name << " help\n";
