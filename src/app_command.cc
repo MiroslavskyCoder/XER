@@ -1,6 +1,9 @@
 #include "app_command.h"
 
+#include <cerrno>
 #include <cctype>
+#include <cmath>
+#include <cstdlib>
 #include <sstream>
 #include <string>
 
@@ -23,6 +26,22 @@ bool ParsePositiveInt(const std::string& text, int* out) {
         value = value * 10 + (ch - '0');
     }
     if (value <= 0) {
+        return false;
+    }
+
+    *out = value;
+    return true;
+}
+
+bool ParsePositiveFloat(const std::string& text, float* out) {
+    if (text.empty()) {
+        return false;
+    }
+
+    char* end = nullptr;
+    errno = 0;
+    const float value = std::strtof(text.c_str(), &end);
+    if (errno != 0 || end == text.c_str() || end == nullptr || *end != '\0' || !std::isfinite(value) || value <= 0.0f) {
         return false;
     }
 
@@ -168,6 +187,56 @@ AppCommand::Parsed AppCommand::Parse(int argc, char** argv) {
                 if (!inline_v && !ConsumeStringValue("--output_dir", argc, argv, &i, &value, &parsed))
                     return parsed;
                 parsed.output_dir = value; continue;
+            }
+        }
+        {
+            std::string value; bool inline_v = false;
+            if (ParseValueFlag(arg, "--audio_input", &value, &inline_v)) {
+                if (!inline_v && !ConsumeStringValue("--audio_input", argc, argv, &i, &value, &parsed))
+                    return parsed;
+                parsed.audio_input_path = value; continue;
+            }
+        }
+        {
+            std::string value; bool inline_v = false;
+            if (ParseValueFlag(arg, "--audio_processor", &value, &inline_v)) {
+                if (!inline_v && !ConsumeStringValue("--audio_processor", argc, argv, &i, &value, &parsed))
+                    return parsed;
+                parsed.audio_processor = value; continue;
+            }
+        }
+        {
+            std::string value; bool inline_v = false;
+            if (ParseValueFlag(arg, "--audio_shaper_profile", &value, &inline_v)) {
+                if (!inline_v && !ConsumeStringValue("--audio_shaper_profile", argc, argv, &i, &value, &parsed))
+                    return parsed;
+                parsed.audio_shaper_profile = value; continue;
+            }
+        }
+        {
+            std::string value; bool inline_v = false;
+            if (ParseValueFlag(arg, "--audio_stretch_ratio", &value, &inline_v)) {
+                if (!inline_v && !ConsumeStringValue("--audio_stretch_ratio", argc, argv, &i, &value, &parsed))
+                    return parsed;
+                if (!ParsePositiveFloat(value, &parsed.audio_stretch_ratio)) {
+                    parsed.valid = false;
+                    parsed.error_message = "Invalid value for --audio_stretch_ratio: " + value;
+                    return parsed;
+                }
+                continue;
+            }
+        }
+        {
+            std::string value; bool inline_v = false;
+            if (ParseValueFlag(arg, "--audio_raw_sample_rate", &value, &inline_v)) {
+                if (!inline_v && !ConsumeStringValue("--audio_raw_sample_rate", argc, argv, &i, &value, &parsed))
+                    return parsed;
+                if (!ParsePositiveInt(value, &parsed.audio_raw_sample_rate)) {
+                    parsed.valid = false;
+                    parsed.error_message = "Invalid value for --audio_raw_sample_rate: " + value;
+                    return parsed;
+                }
+                continue;
             }
         }
         {
@@ -491,6 +560,17 @@ AppCommand::Parsed AppCommand::Parse(int argc, char** argv) {
             return parsed;
         }
 
+        if (parsed.type == Type::kAudioDemo) {
+            if (parsed.audio_input_path.empty()) {
+                parsed.audio_input_path = arg;
+                continue;
+            }
+
+            parsed.valid = false;
+            parsed.error_message = "Unexpected extra audio_demo argument: " + arg;
+            return parsed;
+        }
+
         parsed.script_path = arg;
     }
 
@@ -503,7 +583,7 @@ std::string AppCommand::BuildHelpText(const std::string& binary_name) {
     out << "  " << binary_name << " run [script.js] [options]\n";
     out << "  " << binary_name << " compile [script.xer] [options]\n";
     out << "  " << binary_name << " inspect [artifact.bin|artifact.bak]\n";
-    out << "  " << binary_name << " audio_demo [--output_dir dir]\n";
+    out << "  " << binary_name << " audio_demo [input_audio] [--output_dir dir] [--audio_processor name]\n";
     out << "  " << binary_name << " run --script path/to/script.js [options]\n";
     out << "\nScript:\n";
     out << "  --script, -s <path>          Entry-point JS/TS/XER file\n";
@@ -513,6 +593,11 @@ std::string AppCommand::BuildHelpText(const std::string& binary_name) {
     out << "  --noemit                     Dry-run: parse and validate only\n";
     out << "  --emit_source_map            Write source-maps alongside compiled output\n";
     out << "  --output_dir <path>          Write generated compile artifacts into directory\n";
+    out << "  --audio_input <path>         Audio file for audio_demo file mode\n";
+    out << "  --audio_processor <name>     spectral_shaper|phase_vocoder\n";
+    out << "  --audio_shaper_profile <n>   unity|tilt|bright\n";
+    out << "  --audio_stretch_ratio <x>    Phase vocoder time-stretch ratio (> 0)\n";
+    out << "  --audio_raw_sample_rate <n>  Sample rate for headerless .raw/.pcm input\n";
     out << "\nXER protection:\n";
     out << "  --xer_key <secret>           Encrypt XER .bin payloads with AES-256-GCM\n";
     out << "  --xer_key_file <path>        Read XER encryption key from file\n";
@@ -576,7 +661,7 @@ std::string AppCommand::BuildHelpText(const std::string& binary_name) {
     out << "\nCommands:\n";
     out << "  " << binary_name << " compile <script.xer> [--output_dir dir] [--xer_key_file path]   Build .bin/.bak only\n";
     out << "  " << binary_name << " inspect <artifact.bin|artifact.bak>   Print XER metadata without execution\n";
-    out << "  " << binary_name << " audio_demo [--output_dir dir]   Run STFT smoke demo and write WAV files\n";
+    out << "  " << binary_name << " audio_demo [input_audio] [--audio_processor name] [--output_dir dir]   Run STFT smoke demo or file-based processing\n";
     out << "  " << binary_name << " doctor [--doctor_verbose]   Check environment\n";
     out << "  " << binary_name << " version\n";
     out << "  " << binary_name << " help\n";

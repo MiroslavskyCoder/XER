@@ -230,12 +230,20 @@ int main(int argc, char** argv) {
 	}
 
 	if (parsed.type == AppCommand::Type::kAudioDemo) {
-		const std::filesystem::path output_dir = parsed.output_dir.empty()
+		Engine::Audio::Demo::AudioDSPDemoOptions demo_options;
+		demo_options.output_dir = parsed.output_dir.empty()
 			? std::filesystem::path("out/audio_demo")
 			: std::filesystem::path(parsed.output_dir);
+		demo_options.input_path = parsed.audio_input_path.empty()
+			? std::filesystem::path()
+			: std::filesystem::path(parsed.audio_input_path);
+		demo_options.processor = parsed.audio_processor;
+		demo_options.phase_vocoder_ratio = parsed.audio_stretch_ratio;
+		demo_options.spectral_shaper_profile = parsed.audio_shaper_profile;
+		demo_options.raw_sample_rate = parsed.audio_raw_sample_rate;
 		std::string report;
 		std::string demo_error;
-		if (!Engine::Audio::Demo::RunAudioDSPDemo(output_dir, &report, &demo_error)) {
+		if (!Engine::Audio::Demo::RunAudioDSPDemo(demo_options, &report, &demo_error)) {
 			std::cerr << "Audio demo failed: " << demo_error << "\n";
 			return 1;
 		}

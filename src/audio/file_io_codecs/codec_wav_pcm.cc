@@ -36,16 +36,16 @@ std::uint32_t ReadLe32(const uint8_t* ptr) {
 
 } // namespace
 
-bool WavPcmCodec::Encode16(const float* input, size_t frames, std::vector<uint8_t>& out) const {
-    if (input == nullptr || frames == 0) {
+bool WavPcmCodec::Encode16(const float* input, size_t frames, std::vector<uint8_t>& out, int sample_rate) const {
+    if (input == nullptr || frames == 0 || sample_rate <= 0) {
         return false;
     }
 
     const std::uint16_t channels = 1;
-    const std::uint32_t sample_rate = 44100;
+    const std::uint32_t wav_sample_rate = static_cast<std::uint32_t>(sample_rate);
     const std::uint16_t bits_per_sample = 16;
     const std::uint16_t block_align = static_cast<std::uint16_t>(channels * (bits_per_sample / 8));
-    const std::uint32_t byte_rate = sample_rate * block_align;
+    const std::uint32_t byte_rate = wav_sample_rate * block_align;
     const std::uint32_t data_size = static_cast<std::uint32_t>(frames * block_align);
 
     out.assign(kWavHeaderBytes + data_size, 0);
@@ -56,7 +56,7 @@ bool WavPcmCodec::Encode16(const float* input, size_t frames, std::vector<uint8_
     WriteLe32(out, 16, 16u);
     WriteLe16(out, 20, 1u);
     WriteLe16(out, 22, channels);
-    WriteLe32(out, 24, sample_rate);
+    WriteLe32(out, 24, wav_sample_rate);
     WriteLe32(out, 28, byte_rate);
     WriteLe16(out, 32, block_align);
     WriteLe16(out, 34, bits_per_sample);
@@ -73,7 +73,7 @@ bool WavPcmCodec::Encode16(const float* input, size_t frames, std::vector<uint8_
     return true;
 }
 
-bool WavPcmCodec::Decode16(const uint8_t* data, size_t bytes, std::vector<float>& out) const {
+bool WavPcmCodec::Decode16(const uint8_t* data, size_t bytes, std::vector<float>& out, int* sample_rate_out) const {
     if (data == nullptr || bytes < kWavHeaderBytes) {
         return false;
     }
@@ -91,6 +91,7 @@ bool WavPcmCodec::Decode16(const uint8_t* data, size_t bytes, std::vector<float>
     std::uint16_t audio_format = 0;
     std::uint16_t channels = 0;
     std::uint16_t bits_per_sample = 0;
+    std::uint32_t sample_rate = 0;
     while (cursor + 8 <= bytes) {
         const char* chunk_id = reinterpret_cast<const char*>(data + cursor);
         const std::uint32_t chunk_size = ReadLe32(data + cursor + 4);
@@ -101,6 +102,7 @@ bool WavPcmCodec::Decode16(const uint8_t* data, size_t bytes, std::vector<float>
         if (std::memcmp(chunk_id, "fmt ", 4) == 0 && chunk_size >= 16) {
             audio_format = ReadLe16(data + chunk_data + 0);
             channels = ReadLe16(data + chunk_data + 2);
+            sample_rate = ReadLe32(data + chunk_data + 4);
             bits_per_sample = ReadLe16(data + chunk_data + 14);
         } else if (std::memcmp(chunk_id, "data", 4) == 0) {
             data_offset = chunk_data;
@@ -128,6 +130,10 @@ bool WavPcmCodec::Decode16(const uint8_t* data, size_t bytes, std::vector<float>
             accum += s;
         }
         out[frame] = static_cast<float>(accum / static_cast<double>(channels)) / 32768.0f;
+    }
+
+    if (sample_rate_out != nullptr) {
+        *sample_rate_out = static_cast<int>(sample_rate);
     }
 
     return true;

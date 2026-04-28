@@ -25,6 +25,11 @@ public:
         bool noemit           = false;
         bool emit_source_map  = false;
         std::string output_dir;
+        std::string audio_input_path;
+        std::string audio_processor;
+        std::string audio_shaper_profile = "tilt";
+        float audio_stretch_ratio = 1.0f;
+        int audio_raw_sample_rate = 44100;
         std::string xer_key;
         std::string xer_key_file;
         std::string xer_key_env;
