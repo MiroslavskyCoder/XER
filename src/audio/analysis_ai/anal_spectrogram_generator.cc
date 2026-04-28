@@ -16,6 +16,16 @@ SpectrogramGenerator::SpectrogramGenerator(size_t fft_size, size_t hop_size)
 
 SpectrogramGenerator::~SpectrogramGenerator() = default;
 
+bool SpectrogramGenerator::GenerateFromFile(
+	const Engine::Audio::Core::AudioSourceLoadOptions& load_options,
+	std::string* error_out) {
+	Engine::Audio::Core::AudioSourceBuffer source_buffer;
+	if (!Engine::Audio::Core::AudioSourceLoader::Load(load_options, &source_buffer, error_out)) {
+		return false;
+	}
+	return Generate(source_buffer.samples.data(), source_buffer.samples.size());
+}
+
 bool SpectrogramGenerator::Generate(const float* audio, size_t frame_count) {
 	if (audio == nullptr || frame_count < fft_size_) {
 		return false;

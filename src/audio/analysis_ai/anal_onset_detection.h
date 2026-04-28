@@ -7,6 +7,7 @@
 #include "async_io/log_and_debug/io_perf_counter.h"
 #include "async_io/sync_primitives/mutex_wrapper.h"
 
+#include "audio/audio_core/audio_source_loader.h"
 #include "audio/dsp_algorithms/dsp_stft_processor.h"
 
 namespace Engine::Audio::AnalysisAI {
@@ -17,6 +18,7 @@ public:
 	~OnsetDetector();
 
 	bool DetectOnsets(const float* audio, size_t frame_count, int sample_rate);
+	bool DetectOnsetsFromFile(const Engine::Audio::Core::AudioSourceLoadOptions& load_options, std::string* error_out = nullptr);
 	void Reset();
 
 	const std::vector<size_t>& GetOnsetFrames() const { return onset_frames_; }

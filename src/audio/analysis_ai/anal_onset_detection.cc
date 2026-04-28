@@ -17,6 +17,16 @@ OnsetDetector::OnsetDetector(size_t window_size, size_t hop_size)
 
 OnsetDetector::~OnsetDetector() = default;
 
+bool OnsetDetector::DetectOnsetsFromFile(
+	const Engine::Audio::Core::AudioSourceLoadOptions& load_options,
+	std::string* error_out) {
+	Engine::Audio::Core::AudioSourceBuffer source_buffer;
+	if (!Engine::Audio::Core::AudioSourceLoader::Load(load_options, &source_buffer, error_out)) {
+		return false;
+	}
+	return DetectOnsets(source_buffer.samples.data(), source_buffer.samples.size(), source_buffer.sample_rate);
+}
+
 bool OnsetDetector::DetectOnsets(const float* audio, size_t frame_count, int sample_rate) {
 	if (audio == nullptr || frame_count < window_size_ || sample_rate <= 0) {
 		return false;

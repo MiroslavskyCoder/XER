@@ -12,6 +12,7 @@ struct AudioDSPDemoOptions {
 	float phase_vocoder_ratio = 1.0f;
 	std::string spectral_shaper_profile = "tilt";
 	int raw_sample_rate = 44100;
+	int target_sample_rate = 44100;
 };
 
 bool RunAudioDSPDemo(

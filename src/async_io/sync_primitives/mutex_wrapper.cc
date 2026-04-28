@@ -26,18 +26,18 @@ bool MutexWrapper::TryLock() {
 bool MutexWrapper::TryLockFor(const std::chrono::milliseconds& timeout) {
     bool success = false;
     
-    // auto timed_mutex_ptr = dynamic_cast<std::timed_mutex*>(&mutex_);
-    // if (timed_mutex_ptr) {
-    //     success = timed_mutex_ptr->try_lock_for(timeout);
-    // } else {
-    //     success = TryLock();
-    // }
+    auto timed_mutex_ptr = dynamic_cast<std::timed_mutex*>(&mutex_);
+    if (timed_mutex_ptr) {
+        success = timed_mutex_ptr->try_lock_for(timeout);
+    } else {
+        success = TryLock();
+    }
     
-    // if (success) {
-    //     lock_count_++;
-    // } else {
-    //     contention_count_++;
-    // }
+    if (success) {
+        lock_count_++;
+    } else {
+        contention_count_++;
+    }
     
     return success;
 }

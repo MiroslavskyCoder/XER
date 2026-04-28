@@ -9,6 +9,7 @@
 #include "async_io/log_and_debug/io_dump_helper.h"
 #include "async_io/log_and_debug/io_perf_counter.h"
 
+#include "audio/audio_core/audio_source_loader.h"
 #include "audio/dsp_algorithms/dsp_stft_processor.h"
 
 namespace Engine::Audio::AnalysisAI {
@@ -19,6 +20,7 @@ public:
 	~SpectrogramGenerator();
 
 	bool Generate(const float* audio, size_t frame_count);
+	bool GenerateFromFile(const Engine::Audio::Core::AudioSourceLoadOptions& load_options, std::string* error_out = nullptr);
 	bool ExportAsRaw(const std::string& filepath) const;
 	void Reset();
 
