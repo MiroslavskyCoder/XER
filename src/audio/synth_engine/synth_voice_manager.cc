@@ -34,7 +34,9 @@ float SynthVoiceManager::RenderSample(float sample_rate) {
         auto& v = it->second;
         const float env = v.env.Process(sample_rate);
         if (!polyphony_.IsAllocated(v.note) && env <= 1.0e-5f) {
-            it = voices_.erase(it);
+            auto erase_it = it;
+            ++it;
+            voices_.erase(erase_it);
             continue;
         }
         const float osc = v.osc.Process(sample_rate);
