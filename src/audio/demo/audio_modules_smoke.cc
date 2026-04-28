@@ -17,6 +17,8 @@
 #include "audio/file_io_codecs/codec_wav_float.h"
 #include "audio/file_io_codecs/codec_wav_pcm.h"
 #include "audio/dsp_algorithms/dsp_pitch_shifter_granular.h"
+#include "audio/effects_rack/custom_effect.h"
+#include "audio/effects_rack/custom_effect_package.h"
 #include "audio/effects_rack/fx_reverb_convolution.h"
 #include "audio/midi_sequencing/midi_clock_generator.h"
 #include "audio/midi_sequencing/midi_controller_mapping.h"
@@ -142,6 +144,15 @@ bool WriteWaveArtifact(const std::filesystem::path& path, const std::vector<floa
 		return false;
 	}
 	output.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+	return static_cast<bool>(output);
+}
+
+bool WriteTextArtifact(const std::filesystem::path& path, const std::string& text) {
+	std::ofstream output(path);
+	if (!output.is_open()) {
+		return false;
+	}
+	output << text;
 	return static_cast<bool>(output);
 }
 
@@ -449,6 +460,36 @@ bool RunAudioModulesSmoke(
 		return false;
 	}
 
+	const Engine::Audio::FX::CustomEffectPackage custom_effect_package =
+		Engine::Audio::FX::BuildExampleCustomEffectPackage("builtin://gain");
+	std::vector<float> custom_effect_output;
+	Engine::Audio::FX::CustomEffectReport custom_effect_report;
+	if (!Engine::Audio::FX::RunCustomEffectPackage(
+			custom_effect_package,
+			static_cast<float>(sample_rate),
+			processing_input,
+			&custom_effect_output,
+			&custom_effect_report,
+			error_out)) {
+		if (error_out != nullptr && error_out->empty()) {
+			*error_out = "custom effect example render failed";
+		}
+		return false;
+	}
+	std::string custom_effect_package_text;
+	std::string custom_effect_package_error;
+	if (!Engine::Audio::FX::SerializeCustomEffectPackage(
+			custom_effect_package,
+			&custom_effect_package_text,
+			&custom_effect_package_error)) {
+		if (error_out != nullptr) {
+			*error_out = custom_effect_package_error.empty()
+				? std::string("custom effect example serialization failed")
+				: custom_effect_package_error;
+		}
+		return false;
+	}
+
 	const SynthSmokeResult synth_smoke = RunSynthVoiceManagerSmoke(sample_rate);
 	if (synth_smoke.output.empty()) {
 		if (error_out != nullptr) {
@@ -545,8 +586,10 @@ bool RunAudioModulesSmoke(
 			|| !WriteWaveArtifact(options.output_dir / "clap_chorus.wav", clap_output, sample_rate)
 			|| !WriteWaveArtifact(options.output_dir / "au_parametric_eq.wav", au_output, sample_rate)
 			|| !WriteWaveArtifact(options.output_dir / "convolution_reverb.wav", convolution_output, sample_rate)
+			|| !WriteWaveArtifact(options.output_dir / "custom_effect_example.wav", custom_effect_output, sample_rate)
 			|| !WriteWaveArtifact(options.output_dir / "synth_polyphony.wav", synth_smoke.output, sample_rate)
-			|| !WriteWaveArtifact(options.output_dir / "granular_pitch_shift.wav", granular_output, sample_rate)) {
+			|| !WriteWaveArtifact(options.output_dir / "granular_pitch_shift.wav", granular_output, sample_rate)
+			|| !WriteTextArtifact(options.output_dir / "custom_effect_example.txt", custom_effect_package_text)) {
 			if (error_out != nullptr) {
 				*error_out = "failed to write smoke wave artifacts";
 			}
@@ -559,6 +602,7 @@ bool RunAudioModulesSmoke(
 	const SignalStats clap_stats = ComputeSignalStats(clap_output);
 	const SignalStats au_stats = ComputeSignalStats(au_output);
 	const SignalStats convolution_stats = ComputeSignalStats(convolution_output);
+	const SignalStats custom_effect_stats = ComputeSignalStats(custom_effect_output);
 	const SignalStats synth_stats = ComputeSignalStats(synth_smoke.output);
 	const SignalStats granular_stats = ComputeSignalStats(granular_output);
 
@@ -594,6 +638,12 @@ bool RunAudioModulesSmoke(
 	output << "convolution_ir_frames=" << convolution_ir.size() << "\n";
 	output << "convolution_peak=" << convolution_stats.peak << "\n";
 	output << "convolution_rms=" << convolution_stats.rms << "\n";
+	output << "custom_effect_peak=" << custom_effect_stats.peak << "\n";
+	output << "custom_effect_rms=" << custom_effect_stats.rms << "\n";
+	output << "custom_effect_nodes=" << custom_effect_report.node_count << "\n";
+	output << "custom_effect_stages=" << custom_effect_report.stage_count << "\n";
+	output << "custom_effect_workers=" << custom_effect_report.worker_count_used << "\n";
+	output << "custom_effect_summary=" << custom_effect_report.label << "\n";
 	output << "granular_ratio=" << granular_shifter.GetPitchRatio() << "\n";
 	output << "granular_peak=" << granular_stats.peak << "\n";
 	output << "granular_rms=" << granular_stats.rms << "\n";
@@ -613,6 +663,12 @@ bool RunAudioModulesSmoke(
 	output << "id3_title=" << parsed_tag.title << "\n";
 	output << "id3_artist=" << parsed_tag.artist << "\n";
 	output << "id3_album=" << parsed_tag.album << "\n";
+	for (size_t index = 0; index < custom_effect_report.stage_reports.size(); ++index) {
+		output << "custom_effect_stage_" << index << "=" << custom_effect_report.stage_reports[index] << "\n";
+	}
+	for (size_t index = 0; index < custom_effect_report.node_reports.size(); ++index) {
+		output << "custom_effect_node_" << index << "=" << custom_effect_report.node_reports[index] << "\n";
+	}
 	output << "smoke_status=pass\n";
 
 	if (!options.output_dir.empty()) {
