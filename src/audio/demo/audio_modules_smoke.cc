@@ -16,6 +16,7 @@
 #include "audio/file_io_codecs/codec_ogg_vorbis.h"
 #include "audio/file_io_codecs/codec_wav_float.h"
 #include "audio/file_io_codecs/codec_wav_pcm.h"
+#include "audio/dsp_algorithms/dsp_pitch_shifter_granular.h"
 #include "audio/effects_rack/fx_reverb_convolution.h"
 #include "audio/midi_sequencing/midi_clock_generator.h"
 #include "audio/midi_sequencing/midi_controller_mapping.h"
@@ -26,6 +27,7 @@
 #include "audio/plugin_wrappers/au_host_interface.h"
 #include "audio/plugin_wrappers/clap_host_interface.h"
 #include "audio/plugin_wrappers/vst3_host_interface.h"
+#include "audio/synth_engine/synth_modulation_matrix.h"
 #include "audio/synth_engine/synth_voice_manager.h"
 #include "wrapper/ffmpeg/ffmpeg_engine_bridge.h"
 #include <cmath>
@@ -43,6 +45,9 @@ struct SynthSmokeResult {
 	std::vector<float> output;
 	size_t active_voice_count = 0;
 	size_t resident_voice_count = 0;
+	float gain_min = 0.0f;
+	float gain_max = 0.0f;
+	double gain_average = 0.0;
 };
 
 SignalStats ComputeSignalStats(const std::vector<float>& samples) {
@@ -163,9 +168,17 @@ SynthSmokeResult RunSynthVoiceManagerSmoke(int sample_rate) {
 		return result;
 	}
 	Engine::Audio::Synth::SynthVoiceManager synth;
+	Engine::Audio::Synth::SynthModulationMatrix modulation_matrix;
+	constexpr uint32_t kLfoSource = 1u;
+	constexpr uint32_t kDensitySource = 2u;
+	constexpr uint32_t kOutputGainDestination = 10u;
 	synth.SetMaxVoices(3u);
+	modulation_matrix.SetAmount(kLfoSource, kOutputGainDestination, 0.30f);
+	modulation_matrix.SetAmount(kDensitySource, kOutputGainDestination, 0.18f);
+	modulation_matrix.ConfigureDestination(kOutputGainDestination, 0.72f, 0.18f, 1.15f);
 	const size_t total_frames = static_cast<size_t>(sample_rate) + static_cast<size_t>(sample_rate / 4);
 	result.output.assign(total_frames, 0.0f);
+	result.gain_min = 1.15f;
 	for (size_t frame = 0; frame < total_frames; ++frame) {
 		if (frame == 0u) {
 			synth.NoteOn(60u, MidiNoteToFrequency(60u));
@@ -188,7 +201,20 @@ SynthSmokeResult RunSynthVoiceManagerSmoke(int sample_rate) {
 		if (frame == static_cast<size_t>((sample_rate * 3) / 4)) {
 			synth.NoteOff(72u);
 		}
-		result.output[frame] = synth.RenderSample(static_cast<float>(sample_rate));
+		const float time_seconds = static_cast<float>(frame) / static_cast<float>(sample_rate);
+		modulation_matrix.SetSourceValue(kLfoSource, std::sin(2.0f * static_cast<float>(M_PI) * 1.9f * time_seconds));
+		modulation_matrix.SetSourceValue(kDensitySource, static_cast<float>(synth.GetActiveVoiceCount()) / 3.0f);
+		float modulated_gain = 1.0f;
+		if (!modulation_matrix.Apply(kOutputGainDestination, &modulated_gain)) {
+			return {};
+		}
+		result.output[frame] = synth.RenderSample(static_cast<float>(sample_rate)) * modulated_gain;
+		result.gain_min = std::min(result.gain_min, modulated_gain);
+		result.gain_max = std::max(result.gain_max, modulated_gain);
+		result.gain_average += modulated_gain;
+	}
+	if (!result.output.empty()) {
+		result.gain_average /= static_cast<double>(result.output.size());
 	}
 	result.active_voice_count = synth.GetActiveVoiceCount();
 	result.resident_voice_count = synth.GetResidentVoiceCount();
@@ -204,6 +230,26 @@ bool ProcessEffectInBlocks(Engine::Audio::FX::ReverbConvolution* effect, const s
 	for (size_t cursor = 0; cursor < input.size(); cursor += block_size) {
 		const size_t frames = std::min(block_size, input.size() - cursor);
 		if (!effect->ProcessBlock(input.data() + static_cast<std::ptrdiff_t>(cursor), frames, scratch.data())) {
+			return false;
+		}
+		std::copy(scratch.begin(), scratch.begin() + static_cast<std::ptrdiff_t>(frames), output->begin() + static_cast<std::ptrdiff_t>(cursor));
+	}
+	return true;
+}
+
+bool ProcessGranularInBlocks(
+	Engine::Audio::DSP::GranularPitchShifter* shifter,
+	const std::vector<float>& input,
+	std::vector<float>* output,
+	size_t block_size) {
+	if (shifter == nullptr || output == nullptr || block_size == 0) {
+		return false;
+	}
+	output->assign(input.size(), 0.0f);
+	std::vector<float> scratch(block_size, 0.0f);
+	for (size_t cursor = 0; cursor < input.size(); cursor += block_size) {
+		const size_t frames = std::min(block_size, input.size() - cursor);
+		if (!shifter->ProcessBlock(input.data() + static_cast<std::ptrdiff_t>(cursor), frames, scratch.data())) {
 			return false;
 		}
 		std::copy(scratch.begin(), scratch.begin() + static_cast<std::ptrdiff_t>(frames), output->begin() + static_cast<std::ptrdiff_t>(cursor));
@@ -411,6 +457,22 @@ bool RunAudioModulesSmoke(
 		return false;
 	}
 
+	Engine::Audio::DSP::GranularPitchShifter granular_shifter;
+	if (!granular_shifter.Initialize(static_cast<float>(sample_rate), 384u, 4096u)) {
+		if (error_out != nullptr) {
+			*error_out = "granular pitch shifter initialization failed";
+		}
+		return false;
+	}
+	granular_shifter.SetPitchRatio(1.25f);
+	std::vector<float> granular_output;
+	if (!ProcessGranularInBlocks(&granular_shifter, processing_input, &granular_output, 512u)) {
+		if (error_out != nullptr) {
+			*error_out = "granular pitch shifter smoke processing failed";
+		}
+		return false;
+	}
+
 	Engine::Audio::CodecIO::WavFloatCodec wav_float_codec;
 	std::vector<uint8_t> wav_float_bytes;
 	if (!wav_float_codec.Encode32(smoke_input.data(), std::min<size_t>(smoke_input.size(), 4096u), wav_float_bytes)) {
@@ -483,7 +545,8 @@ bool RunAudioModulesSmoke(
 			|| !WriteWaveArtifact(options.output_dir / "clap_chorus.wav", clap_output, sample_rate)
 			|| !WriteWaveArtifact(options.output_dir / "au_parametric_eq.wav", au_output, sample_rate)
 			|| !WriteWaveArtifact(options.output_dir / "convolution_reverb.wav", convolution_output, sample_rate)
-			|| !WriteWaveArtifact(options.output_dir / "synth_polyphony.wav", synth_smoke.output, sample_rate)) {
+			|| !WriteWaveArtifact(options.output_dir / "synth_polyphony.wav", synth_smoke.output, sample_rate)
+			|| !WriteWaveArtifact(options.output_dir / "granular_pitch_shift.wav", granular_output, sample_rate)) {
 			if (error_out != nullptr) {
 				*error_out = "failed to write smoke wave artifacts";
 			}
@@ -497,6 +560,7 @@ bool RunAudioModulesSmoke(
 	const SignalStats au_stats = ComputeSignalStats(au_output);
 	const SignalStats convolution_stats = ComputeSignalStats(convolution_output);
 	const SignalStats synth_stats = ComputeSignalStats(synth_smoke.output);
+	const SignalStats granular_stats = ComputeSignalStats(granular_output);
 
 	std::ostringstream output;
 	output << std::fixed << std::setprecision(6);
@@ -530,10 +594,17 @@ bool RunAudioModulesSmoke(
 	output << "convolution_ir_frames=" << convolution_ir.size() << "\n";
 	output << "convolution_peak=" << convolution_stats.peak << "\n";
 	output << "convolution_rms=" << convolution_stats.rms << "\n";
+	output << "granular_ratio=" << granular_shifter.GetPitchRatio() << "\n";
+	output << "granular_peak=" << granular_stats.peak << "\n";
+	output << "granular_rms=" << granular_stats.rms << "\n";
+	output << "granular_report=" << granular_shifter.GetReport() << "\n";
 	output << "synth_active_voices=" << synth_smoke.active_voice_count << "\n";
 	output << "synth_resident_voices=" << synth_smoke.resident_voice_count << "\n";
 	output << "synth_peak=" << synth_stats.peak << "\n";
 	output << "synth_rms=" << synth_stats.rms << "\n";
+	output << "synth_gain_min=" << synth_smoke.gain_min << "\n";
+	output << "synth_gain_max=" << synth_smoke.gain_max << "\n";
+	output << "synth_gain_average=" << synth_smoke.gain_average << "\n";
 	output << "wav_float_roundtrip_frames=" << wav_float_roundtrip.size() << "\n";
 	output << "aac_encoded_bytes=" << aac_bytes.size() << "\n";
 	output << "aac_roundtrip_frames=" << aac_roundtrip.size() << "\n";

@@ -1,11 +1,11 @@
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <string>
 #include <vector>
 
 #include "async_io/log_and_debug/io_perf_counter.h"
-#include "dsp_delay_line_circular.h"
 #include "dsp_windowing_functions.h"
 
 namespace Engine::Audio::DSP {
@@ -24,12 +24,21 @@ public:
 	std::string GetReport() const;
 
 private:
+	struct GrainState {
+		double position = 0.0;
+	};
+
+	float ReadDelayedSample(double delay_samples) const;
+	void AdvanceGrain(GrainState* grain);
+
 	float sample_rate_;
 	float pitch_ratio_;
 	size_t grain_size_;
-	size_t grain_index_;
+	size_t max_delay_samples_;
+	size_t write_index_;
 	std::vector<float> grain_window_;
-	CircularDelayLine delay_line_;
+	std::vector<float> delay_buffer_;
+	std::array<GrainState, 2> grains_;
 	AsyncIO::IO::LogDebug::PerformanceCounter perf_counter_;
 };
 
