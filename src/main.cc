@@ -507,6 +507,28 @@ int main(int argc, char** argv) {
 		return 0;
 	}
 
+	if (parsed.type == AppCommand::Type::kAudioFxBatch) {
+		Engine::Audio::Demo::AudioFxCustomOptions fx_options;
+		fx_options.output_dir = parsed.output_dir.empty()
+			? std::filesystem::path("out/audio_fx_batch")
+			: std::filesystem::path(parsed.output_dir);
+		fx_options.input_path = parsed.audio_input_path.empty()
+			? std::filesystem::path()
+			: std::filesystem::path(parsed.audio_input_path);
+		fx_options.effect_names = parsed.audio_effect_names;
+		fx_options.raw_sample_rate = parsed.audio_raw_sample_rate;
+		fx_options.target_sample_rate = parsed.target_sample_rate;
+		fx_options.target_channels = parsed.audio_target_channels;
+		std::string report;
+		std::string fx_error;
+		if (!Engine::Audio::Demo::RunAudioFxBatch(fx_options, &report, &fx_error)) {
+			std::cerr << "Audio custom fx batch failed: " << fx_error << "\n";
+			return 1;
+		}
+		std::cout << report;
+		return 0;
+	}
+
 	if (parsed.type == AppCommand::Type::kAudioModulesSmoke) {
 		Engine::Audio::Demo::AudioModulesSmokeOptions smoke_options;
 		smoke_options.input_path = parsed.audio_input_path.empty()

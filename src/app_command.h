@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 class AppCommand {
 public:
@@ -10,6 +11,7 @@ public:
         kInspect,
         kAudioInspect,
         kAudioFxCustom,
+        kAudioFxBatch,
         kAudioModulesSmoke,
         kAudioAnalysisSmoke,
         kAudioDemo,
@@ -33,6 +35,7 @@ public:
         std::string output_dir;
         std::string audio_input_path;
         std::string audio_effect_name;
+        std::vector<std::string> audio_effect_names;
         std::string audio_processor;
         std::string audio_shaper_profile = "tilt";
         float audio_stretch_ratio = 1.0f;

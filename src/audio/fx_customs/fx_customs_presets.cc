@@ -9,6 +9,7 @@
 #include "audio/effects_rack/custom_effect_core.h"
 #include "audio/effects_rack/custom_effect_fxdata.h"
 #include "audio/effects_rack/custom_effect_invoke.h"
+#include "audio/effects_rack/fx_reverb_algorithmic.h"
 
 namespace Engine::Audio::FX::Customs {
 
@@ -31,6 +32,55 @@ float ChannelPan(int channel_index, int channel_count) {
 		return 0.0f;
 	}
 	return -1.0f + 2.0f * static_cast<float>(channel_index) / static_cast<float>(channel_count - 1);
+}
+
+struct SharedSpatialBusSettings {
+	float crossfeed = 0.0f;
+	float side_width = 1.0f;
+	float center_gain = 1.0f;
+	float shared_reverb_mix = 0.0f;
+	float shared_reverb_room = 0.6f;
+	float shared_reverb_damping = 0.3f;
+	float surround_send = 0.0f;
+};
+
+bool ResolveSharedSpatialBusSettings(const std::string& normalized_name, SharedSpatialBusSettings* settings_out) {
+	if (settings_out == nullptr) {
+		return false;
+	}
+	if (normalized_name == "stereoconverter") {
+		*settings_out = SharedSpatialBusSettings{0.12f, 1.35f, 0.98f, 0.0f, 0.5f, 0.2f, 0.0f};
+		return true;
+	}
+	if (normalized_name == "superreverb") {
+		*settings_out = SharedSpatialBusSettings{0.04f, 1.12f, 0.96f, 0.32f, 0.92f, 0.44f, 0.22f};
+		return true;
+	}
+	if (normalized_name == "roomreverb") {
+		*settings_out = SharedSpatialBusSettings{0.03f, 0.96f, 1.0f, 0.12f, 0.38f, 0.22f, 0.08f};
+		return true;
+	}
+	if (normalized_name == "studioreverb") {
+		*settings_out = SharedSpatialBusSettings{0.03f, 1.05f, 0.98f, 0.18f, 0.62f, 0.28f, 0.12f};
+		return true;
+	}
+	if (normalized_name == "eqreverb") {
+		*settings_out = SharedSpatialBusSettings{0.05f, 1.10f, 0.98f, 0.20f, 0.58f, 0.27f, 0.12f};
+		return true;
+	}
+	if (normalized_name == "delayreverb") {
+		*settings_out = SharedSpatialBusSettings{0.08f, 1.20f, 0.97f, 0.24f, 0.74f, 0.34f, 0.16f};
+		return true;
+	}
+	if (normalized_name == "delay") {
+		*settings_out = SharedSpatialBusSettings{0.10f, 1.24f, 0.98f, 0.08f, 0.48f, 0.22f, 0.08f};
+		return true;
+	}
+	if (normalized_name == "airvoice") {
+		*settings_out = SharedSpatialBusSettings{0.05f, 1.08f, 1.0f, 0.15f, 0.54f, 0.24f, 0.10f};
+		return true;
+	}
+	return false;
 }
 
 bool IsSpatialPreset(const std::string& normalized_name) {
@@ -98,6 +148,92 @@ void ApplySpatialVariant(CustomEffectPackage* package, const std::string& normal
 		SetCustomEffectParameterValue(&space.parameters, "damping", 0.24f + 0.08f * pan_abs);
 		package->nodes.push_back(std::move(space));
 	}
+}
+
+bool ApplySharedSpatialBus(
+	const std::string& normalized_name,
+	float sample_rate,
+	std::vector<std::vector<float>>* channels,
+	CustomEffectReport* aggregate_report,
+	std::string* error_out) {
+	if (channels == nullptr || channels->size() < 2u) {
+		return true;
+	}
+	SharedSpatialBusSettings settings;
+	if (!ResolveSharedSpatialBusSettings(normalized_name, &settings)) {
+		return true;
+	}
+	const size_t frame_count = channels->front().size();
+	for (const auto& channel : *channels) {
+		if (channel.size() != frame_count) {
+			if (error_out != nullptr) {
+				*error_out = "shared spatial bus channels are not aligned";
+			}
+			return false;
+		}
+	}
+
+	std::vector<float> mid(frame_count, 0.0f);
+	std::vector<float> side(frame_count, 0.0f);
+	std::vector<float> ambience_input(frame_count, 0.0f);
+	std::vector<float> ambience_output(frame_count, 0.0f);
+	for (size_t frame = 0; frame < frame_count; ++frame) {
+		const float left = (*channels)[0][frame];
+		const float right = (*channels)[1][frame];
+		const float cross_left = left * (1.0f - settings.crossfeed) + right * settings.crossfeed;
+		const float cross_right = right * (1.0f - settings.crossfeed) + left * settings.crossfeed;
+		mid[frame] = 0.5f * (cross_left + cross_right);
+		side[frame] = 0.5f * (cross_left - cross_right) * settings.side_width;
+		float shared_bus = 0.0f;
+		for (const auto& channel : *channels) {
+			shared_bus += channel[frame];
+		}
+		shared_bus /= static_cast<float>(channels->size());
+		ambience_input[frame] = 0.40f * shared_bus + 0.60f * side[frame];
+	}
+
+	if (settings.shared_reverb_mix > 0.0f) {
+		ReverbAlgorithmic shared_reverb;
+		if (!shared_reverb.Initialize(sample_rate, std::max<size_t>(4096u, frame_count / 2u + 2048u))) {
+			if (error_out != nullptr) {
+				*error_out = "failed to initialize shared spatial reverb";
+			}
+			return false;
+		}
+		shared_reverb.SetRoomSize(settings.shared_reverb_room);
+		shared_reverb.SetDamping(settings.shared_reverb_damping);
+		shared_reverb.SetMix(1.0f);
+		if (!shared_reverb.ProcessBlock(ambience_input.data(), frame_count, ambience_output.data())) {
+			if (error_out != nullptr) {
+				*error_out = "shared spatial reverb processing failed";
+			}
+			return false;
+		}
+		if (aggregate_report != nullptr) {
+			aggregate_report->stage_reports.push_back(
+				"shared_spatial_bus=crossfeed+ms+reverb,crossfeed=" + std::to_string(settings.crossfeed) +
+				",width=" + std::to_string(settings.side_width) +
+				",reverb_mix=" + std::to_string(settings.shared_reverb_mix));
+			aggregate_report->node_reports.push_back("shared_spatial_reverb:" + shared_reverb.GetReport());
+		}
+	} else if (aggregate_report != nullptr) {
+		aggregate_report->stage_reports.push_back(
+			"shared_spatial_bus=crossfeed+ms,crossfeed=" + std::to_string(settings.crossfeed) +
+			",width=" + std::to_string(settings.side_width));
+	}
+
+	for (size_t frame = 0; frame < frame_count; ++frame) {
+		const float wet = ambience_output[frame] * settings.shared_reverb_mix;
+		(*channels)[0][frame] = mid[frame] * settings.center_gain + side[frame] + wet * 0.45f;
+		(*channels)[1][frame] = mid[frame] * settings.center_gain - side[frame] + wet * 0.45f;
+		for (size_t channel_index = 2; channel_index < channels->size(); ++channel_index) {
+			const float position = ChannelPan(static_cast<int>(channel_index), static_cast<int>(channels->size()));
+			const float spread_weight = 0.70f - 0.30f * std::abs(position);
+			(*channels)[channel_index][frame] = (*channels)[channel_index][frame] * (1.0f - settings.surround_send * 0.35f)
+				+ wet * settings.surround_send * spread_weight;
+		}
+	}
+	return true;
 }
 
 }  // namespace
@@ -195,6 +331,9 @@ bool RenderFxCustomPresetInterleaved(
 		for (const auto& node_report : channel_report.node_reports) {
 			aggregate_report.node_reports.push_back("channel=" + std::to_string(channel_index) + "," + node_report);
 		}
+	}
+	if (IsSpatialPreset(normalized) && !ApplySharedSpatialBus(normalized, sample_rate, &output_channels, &aggregate_report, error_out)) {
+		return false;
 	}
 
 	output->assign(frame_count * static_cast<size_t>(channels), 0.0f);

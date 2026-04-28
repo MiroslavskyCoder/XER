@@ -49,6 +49,31 @@ bool ParsePositiveFloat(const std::string& text, float* out) {
     return true;
 }
 
+void AppendTrimmedCsvValues(const std::string& text, std::vector<std::string>* output) {
+    if (output == nullptr) {
+        return;
+    }
+    std::string token;
+    auto flush_token = [&token, output]() {
+        const auto first = token.find_first_not_of(" \t\r\n");
+        if (first == std::string::npos) {
+            token.clear();
+            return;
+        }
+        const auto last = token.find_last_not_of(" \t\r\n");
+        output->push_back(token.substr(first, last - first + 1));
+        token.clear();
+    };
+    for (char ch : text) {
+        if (ch == ',') {
+            flush_token();
+            continue;
+        }
+        token.push_back(ch);
+    }
+    flush_token();
+}
+
 // Matches both "--flag value" and "--flag=value" forms.
 // Returns true if the flag matched.
 // If --flag=value form matched, *value_out is filled and *consumed_inline = true.
@@ -138,9 +163,13 @@ AppCommand::Parsed AppCommand::Parse(int argc, char** argv) {
         parsed.type = Type::kAudioInspect;
     }
 
-        if (command == "audio_fx_custom") {
+    if (command == "audio_fx_custom") {
 		parsed.type = Type::kAudioFxCustom;
 	}
+
+    if (command == "audio_fx_batch") {
+        parsed.type = Type::kAudioFxBatch;
+    }
 
     if (command == "audio_modules_smoke") {
 		parsed.type = Type::kAudioModulesSmoke;
@@ -183,6 +212,9 @@ AppCommand::Parsed AppCommand::Parse(int argc, char** argv) {
 	} else if (command == "audio_fx_custom") {
 		parsed.type = Type::kAudioFxCustom;
 		script_index = 2;
+    } else if (command == "audio_fx_batch") {
+        parsed.type = Type::kAudioFxBatch;
+        script_index = 2;
         } else if (command == "audio_modules_smoke") {
 		parsed.type = Type::kAudioModulesSmoke;
 		script_index = 2;
@@ -244,7 +276,29 @@ AppCommand::Parsed AppCommand::Parse(int argc, char** argv) {
 			if (ParseValueFlag(arg, "--audio_effect", &value, &inline_v)) {
 				if (!inline_v && !ConsumeStringValue("--audio_effect", argc, argv, &i, &value, &parsed))
 					return parsed;
-				parsed.audio_effect_name = value; continue;
+                if (parsed.type == Type::kAudioFxBatch) {
+                    parsed.audio_effect_names.push_back(value);
+                } else {
+                    parsed.audio_effect_name = value;
+                }
+                continue;
+            }
+        }
+        {
+            std::string value; bool inline_v = false;
+            if (ParseValueFlag(arg, "--audio_effects", &value, &inline_v)) {
+                if (!inline_v && !ConsumeStringValue("--audio_effects", argc, argv, &i, &value, &parsed))
+                    return parsed;
+                if (parsed.type == Type::kAudioFxBatch) {
+                    AppendTrimmedCsvValues(value, &parsed.audio_effect_names);
+                } else {
+                    std::vector<std::string> single_values;
+                    AppendTrimmedCsvValues(value, &single_values);
+                    if (!single_values.empty()) {
+                        parsed.audio_effect_name = single_values.front();
+                    }
+                }
+                continue;
 			}
 		}
         {
@@ -652,6 +706,16 @@ AppCommand::Parsed AppCommand::Parse(int argc, char** argv) {
             return parsed;
         }
 
+        if (parsed.type == Type::kAudioFxBatch) {
+            if (parsed.audio_input_path.empty()) {
+                parsed.audio_input_path = arg;
+                continue;
+            }
+            parsed.valid = false;
+            parsed.error_message = std::string("Unexpected extra audio_fx_batch argument: ") + arg;
+            return parsed;
+        }
+
         if (parsed.type == Type::kAudioInspect || parsed.type == Type::kAudioModulesSmoke || parsed.type == Type::kAudioAnalysisSmoke || parsed.type == Type::kAudioDemo || parsed.type == Type::kSpectrogram || parsed.type == Type::kOnset) {
             if (parsed.audio_input_path.empty()) {
                 parsed.audio_input_path = arg;
@@ -692,6 +756,7 @@ std::string AppCommand::BuildHelpText(const std::string& binary_name) {
     out << "  " << binary_name << " inspect [artifact.bin|artifact.bak]\n";
     out << "  " << binary_name << " audio_inspect <input_audio> [--output_dir dir] [--target_sample_rate hz] [--json]\n";
     out << "  " << binary_name << " audio_fx_custom <effect_name> <input_audio> [--output_dir dir] [--target_sample_rate hz] [--target_channels n]\n";
+	out << "  " << binary_name << " audio_fx_batch <input_audio> --audio_effect <name> [--audio_effect <name> ...] [--output_dir dir] [--target_sample_rate hz] [--target_channels n]\n";
     out << "  " << binary_name << " audio_modules_smoke <input_audio> [--output_dir dir]\n";
     out << "  " << binary_name << " audio_analysis_smoke <input_audio> [--output_dir dir] [--target_sample_rate hz]\n";
     out << "  " << binary_name << " audio_demo [input_audio] [--output_dir dir] [--audio_processor name]\n";
@@ -706,8 +771,9 @@ std::string AppCommand::BuildHelpText(const std::string& binary_name) {
     out << "  --noemit                     Dry-run: parse and validate only\n";
     out << "  --emit_source_map            Write source-maps alongside compiled output\n";
     out << "  --output_dir <path>          Write generated compile artifacts into directory\n";
-    out << "  --audio_input <path>         Audio file for audio_inspect/audio_fx_custom/audio_modules_smoke/audio_analysis_smoke/audio_demo/spectrogram/onset\n";
-	out << "  --audio_effect <name>        Custom preset name for audio_fx_custom\n";
+    out << "  --audio_input <path>         Audio file for audio_inspect/audio_fx_custom/audio_fx_batch/audio_modules_smoke/audio_analysis_smoke/audio_demo/spectrogram/onset\n";
+    out << "  --audio_effect <name>        Custom preset name for audio_fx_custom or one batch item for audio_fx_batch\n";
+    out << "  --audio_effects <a,b,c>      Comma-separated effect list for audio_fx_batch\n";
     out << "  --audio_processor <name>     spectral_shaper|phase_vocoder\n";
     out << "  --audio_shaper_profile <n>   unity|tilt|bright\n";
     out << "  --audio_stretch_ratio <x>    Phase vocoder time-stretch ratio (> 0)\n";
@@ -780,6 +846,7 @@ std::string AppCommand::BuildHelpText(const std::string& binary_name) {
     out << "  " << binary_name << " inspect <artifact.bin|artifact.bak>   Print XER metadata without execution\n";
     out << "  " << binary_name << " audio_inspect <input_audio> [--output_dir dir] [--target_sample_rate hz] [--json]   Load, normalize, and print audio metadata without DSP\n";
 	out << "  " << binary_name << " audio_fx_custom <effect_name> <input_audio> [--output_dir dir] [--target_sample_rate hz] [--target_channels n]   Render one named custom FX preset directly to an output WAV\n";
+    out << "  " << binary_name << " audio_fx_batch <input_audio> --audio_effect <name> [--audio_effect <name> ...] [--output_dir dir] [--target_sample_rate hz] [--target_channels n]   Render multiple custom FX presets in one run and export a batch summary\n";
     out << "  " << binary_name << " audio_modules_smoke <input_audio> [--output_dir dir]   Run plugin/MIDI/codec smoke validation on one input\n";
     out << "  " << binary_name << " audio_analysis_smoke <input_audio> [--output_dir dir] [--target_sample_rate hz]   Run beat/pitch/loudness analysis and export report artifacts\n";
     out << "  " << binary_name << " audio_demo [input_audio] [--audio_processor name] [--output_dir dir]   Run STFT smoke demo or file-based processing\n";
