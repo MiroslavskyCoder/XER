@@ -294,10 +294,29 @@ bool DecodeWavPcmFile(
 
 	Engine::Audio::CodecIO::WavPcmCodec codec;
 	int sample_rate = 0;
-	decoded_audio->channels.assign(1, {});
-	if (!codec.Decode16(bytes.data(), bytes.size(), decoded_audio->channels.front(), &sample_rate)) {
+	int channel_count = 0;
+	std::vector<float> interleaved_samples;
+	if (!codec.Decode16(bytes.data(), bytes.size(), interleaved_samples, &sample_rate, &channel_count)) {
 		if (error_out != nullptr) {
 			*error_out = "failed to decode PCM WAV input";
+		}
+		return false;
+	}
+	if (channel_count <= 0 || interleaved_samples.empty() || (interleaved_samples.size() % static_cast<size_t>(channel_count)) != 0u) {
+		if (error_out != nullptr) {
+			*error_out = "decoded PCM WAV payload is invalid";
+		}
+		return false;
+	}
+
+	const size_t frame_count = interleaved_samples.size() / static_cast<size_t>(channel_count);
+	if (!AudioInterleaveProcessor::DeinterleavePlanar(
+			interleaved_samples.data(),
+			channel_count,
+			frame_count,
+			decoded_audio->channels)) {
+		if (error_out != nullptr) {
+			*error_out = "failed to deinterleave PCM WAV input";
 		}
 		return false;
 	}
@@ -306,7 +325,7 @@ bool DecodeWavPcmFile(
 	decoded_audio->source_format = "wav";
 	decoded_audio->codec_name = "pcm_s16le";
 	decoded_audio->decode_backend = "local_wav";
-	return !decoded_audio->channels.front().empty();
+	return decoded_audio->FrameCount() > 0;
 }
 
 bool DecodeWithFFmpeg(
@@ -471,6 +490,117 @@ bool ResampleMono(
 	return !output->empty();
 }
 
+bool ResamplePlanar(
+	const std::vector<std::vector<float>>& input_channels,
+	int input_sample_rate,
+	int output_sample_rate,
+	ResampleQuality quality,
+	std::vector<std::vector<float>>* output_channels,
+	std::string* error_out) {
+	if (output_channels == nullptr || input_channels.empty()) {
+		if (error_out != nullptr) {
+			*error_out = "audio planar resample target is invalid";
+		}
+		return false;
+	}
+
+	output_channels->assign(input_channels.size(), {});
+	for (size_t channel = 0; channel < input_channels.size(); ++channel) {
+		if (!ResampleMono(
+				input_channels[channel],
+				input_sample_rate,
+				output_sample_rate,
+				quality,
+				&(*output_channels)[channel],
+				error_out)) {
+			return false;
+		}
+	}
+	return true;
+}
+
+bool AdjustChannelCount(
+	const std::vector<std::vector<float>>& input_channels,
+	int target_channels,
+	std::vector<std::vector<float>>* output_channels,
+	std::string* error_out) {
+	if (output_channels == nullptr || input_channels.empty() || target_channels == 0) {
+		if (error_out != nullptr) {
+			*error_out = "audio channel conversion target is invalid";
+		}
+		return false;
+	}
+
+	const size_t input_channel_count = input_channels.size();
+	const size_t frame_count = input_channels.front().size();
+	for (const auto& channel : input_channels) {
+		if (channel.size() != frame_count) {
+			if (error_out != nullptr) {
+				*error_out = "normalized audio channels are not aligned";
+			}
+			return false;
+		}
+	}
+
+	if (target_channels < 0) {
+		*output_channels = input_channels;
+		return true;
+	}
+	if (target_channels == 1) {
+		std::vector<float> mono_output;
+		if (!MixToMono(input_channels, &mono_output, error_out)) {
+			return false;
+		}
+		output_channels->assign(1, std::move(mono_output));
+		return true;
+	}
+
+	output_channels->assign(static_cast<size_t>(target_channels), std::vector<float>(frame_count, 0.0f));
+	for (int channel = 0; channel < target_channels; ++channel) {
+		const size_t source_index = std::min(static_cast<size_t>(channel), input_channel_count - 1u);
+		(*output_channels)[static_cast<size_t>(channel)] = input_channels[source_index];
+	}
+	return true;
+}
+
+bool InterleaveChannels(
+	const std::vector<std::vector<float>>& input_channels,
+	std::vector<float>* interleaved_output,
+	std::string* error_out) {
+	if (interleaved_output == nullptr || input_channels.empty()) {
+		if (error_out != nullptr) {
+			*error_out = "audio interleave target is invalid";
+		}
+		return false;
+	}
+	const size_t frame_count = input_channels.front().size();
+	for (const auto& channel : input_channels) {
+		if (channel.size() != frame_count) {
+			if (error_out != nullptr) {
+				*error_out = "audio interleave channels are not aligned";
+			}
+			return false;
+		}
+	}
+
+	interleaved_output->assign(frame_count * input_channels.size(), 0.0f);
+	std::vector<const float*> channel_ptrs(input_channels.size(), nullptr);
+	for (size_t channel = 0; channel < input_channels.size(); ++channel) {
+		channel_ptrs[channel] = input_channels[channel].data();
+	}
+	if (!AudioInterleaveProcessor::Interleave(
+			channel_ptrs.data(),
+			static_cast<int>(input_channels.size()),
+			frame_count,
+			interleaved_output->data())) {
+		if (error_out != nullptr) {
+			*error_out = "failed to interleave normalized audio channels";
+		}
+		return false;
+	}
+	return true;
+}
+
 }  // namespace
 
 bool AudioSourceLoader::Load(
@@ -492,12 +622,6 @@ bool AudioSourceLoader::Load(
 	if (!std::filesystem::exists(options.input_path)) {
 		if (error_out != nullptr) {
 			*error_out = "audio input not found: " + options.input_path.string();
-		}
-		return false;
-	}
-	if (options.target_channels != 1) {
-		if (error_out != nullptr) {
-			*error_out = "only mono normalized audio is currently supported";
 		}
 		return false;
 	}
@@ -531,28 +655,43 @@ bool AudioSourceLoader::Load(
 		}
 	}
 
-	std::vector<float> mono_audio;
-	if (!MixToMono(decoded_audio.channels, &mono_audio, error_out)) {
+	const int target_channels = options.target_channels <= 0
+		? static_cast<int>(decoded_audio.channels.size())
+		: options.target_channels;
+	if (target_channels <= 0) {
+		if (error_out != nullptr) {
+			*error_out = "audio normalization target channel count is invalid";
+		}
+		return false;
+	}
+
+	std::vector<std::vector<float>> resampled_channels;
+	if (!ResamplePlanar(
+			decoded_audio.channels,
+			decoded_audio.sample_rate,
+			options.target_sample_rate,
+			options.resample_quality,
+			&resampled_channels,
+			error_out)) {
+		return false;
+	}
+
+	std::vector<std::vector<float>> normalized_channels;
+	if (!AdjustChannelCount(resampled_channels, target_channels, &normalized_channels, error_out)) {
 		return false;
 	}
 
 	std::vector<float> normalized_audio;
-	if (!ResampleMono(
-			mono_audio,
-			decoded_audio.sample_rate,
-			options.target_sample_rate,
-			options.resample_quality,
-			&normalized_audio,
-			error_out)) {
+	if (!InterleaveChannels(normalized_channels, &normalized_audio, error_out)) {
 		return false;
 	}
 
 	output->samples = std::move(normalized_audio);
 	output->sample_rate = options.target_sample_rate;
-	output->channels = options.target_channels;
+	output->channels = target_channels;
 	output->original_sample_rate = decoded_audio.sample_rate;
 	output->original_channels = static_cast<int>(decoded_audio.channels.size());
-	output->frame_count = output->samples.size();
+	output->frame_count = normalized_channels.empty() ? 0u : normalized_channels.front().size();
 	output->original_frame_count = decoded_audio.FrameCount();
 	output->source_format = decoded_audio.source_format;
 	output->codec_name = decoded_audio.codec_name;

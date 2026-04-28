@@ -1,10 +1,13 @@
 #include "custom_effect.h"
 
 #include "custom_effect_algorithms.h"
+#include "custom_effect_core.h"
 #include "custom_effect_eq_lite.h"
 #include "custom_effect_fxdata.h"
 #include "custom_effect_invoke.h"
 #include "custom_effect_list.h"
+
+#include "audio/audio_core/audio_interleave_processor.h"
 
 #include <algorithm>
 #include <cctype>
@@ -273,6 +276,85 @@ bool RunCustomEffectPackage(
 	}
 	if (report_out != nullptr) {
 		*report_out = flow.GetLastReport();
+	}
+	return true;
+}
+
+bool RunCustomEffectPackageInterleaved(
+	const CustomEffectPackage& package,
+	float sample_rate,
+	const std::vector<float>& input,
+	int channels,
+	std::vector<float>* output,
+	CustomEffectReport* report_out,
+	std::string* error_out) {
+	if (output == nullptr || channels <= 0 || input.empty() || (input.size() % static_cast<size_t>(channels)) != 0u) {
+		if (error_out != nullptr) {
+			*error_out = "custom effect interleaved buffer is invalid";
+		}
+		return false;
+	}
+
+	const size_t frame_count = input.size() / static_cast<size_t>(channels);
+	std::vector<std::vector<float>> input_channels;
+	if (!Engine::Audio::Core::AudioInterleaveProcessor::DeinterleavePlanar(
+			input.data(),
+			channels,
+			frame_count,
+			input_channels)) {
+		if (error_out != nullptr) {
+			*error_out = "failed to deinterleave custom effect input";
+		}
+		return false;
+	}
+
+	std::vector<std::vector<float>> output_channels(static_cast<size_t>(channels));
+	CustomEffectReport aggregate_report;
+	aggregate_report.label = package.label;
+	aggregate_report.stage_count = 0u;
+	aggregate_report.node_count = 0u;
+	aggregate_report.channel_count = static_cast<size_t>(channels);
+	aggregate_report.worker_count_used = 1u;
+	for (int channel_index = 0; channel_index < channels; ++channel_index) {
+		CustomEffectReport channel_report;
+		if (!RunCustomEffectPackage(
+				package,
+				sample_rate,
+				input_channels[static_cast<size_t>(channel_index)],
+				&output_channels[static_cast<size_t>(channel_index)],
+				&channel_report,
+				error_out)) {
+			return false;
+		}
+		aggregate_report.node_count += channel_report.node_count;
+		aggregate_report.stage_count = std::max(aggregate_report.stage_count, channel_report.stage_count);
+		aggregate_report.worker_count_used = std::max(aggregate_report.worker_count_used, channel_report.worker_count_used);
+		for (const auto& stage_report : channel_report.stage_reports) {
+			aggregate_report.stage_reports.push_back("channel=" + std::to_string(channel_index) + "," + stage_report);
+		}
+		for (const auto& node_report : channel_report.node_reports) {
+			aggregate_report.node_reports.push_back("channel=" + std::to_string(channel_index) + "," + node_report);
+		}
+	}
+
+	output->assign(frame_count * static_cast<size_t>(channels), 0.0f);
+	std::vector<const float*> channel_ptrs(static_cast<size_t>(channels), nullptr);
+	for (int channel_index = 0; channel_index < channels; ++channel_index) {
+		channel_ptrs[static_cast<size_t>(channel_index)] = output_channels[static_cast<size_t>(channel_index)].data();
+	}
+	if (!Engine::Audio::Core::AudioInterleaveProcessor::Interleave(
+			channel_ptrs.data(),
+			channels,
+			frame_count,
+			output->data())) {
+		if (error_out != nullptr) {
+			*error_out = "failed to interleave custom effect output";
+		}
+		return false;
+	}
+	ComputeCustomEffectReportStats(*output, &aggregate_report);
+	if (report_out != nullptr) {
+		*report_out = aggregate_report;
 	}
 	return true;
 }

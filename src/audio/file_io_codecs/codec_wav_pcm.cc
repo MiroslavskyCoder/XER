@@ -36,15 +36,20 @@ std::uint32_t ReadLe32(const uint8_t* ptr) {
 
 } // namespace
 
-bool WavPcmCodec::Encode16(const float* input, size_t frames, std::vector<uint8_t>& out, int sample_rate) const {
-    if (input == nullptr || frames == 0 || sample_rate <= 0) {
+bool WavPcmCodec::Encode16(
+	const float* input,
+	size_t frames,
+	std::vector<uint8_t>& out,
+	int sample_rate,
+	int channels) const {
+	if (input == nullptr || frames == 0 || sample_rate <= 0 || channels <= 0) {
         return false;
     }
 
-    const std::uint16_t channels = 1;
+	const std::uint16_t wav_channels = static_cast<std::uint16_t>(channels);
     const std::uint32_t wav_sample_rate = static_cast<std::uint32_t>(sample_rate);
     const std::uint16_t bits_per_sample = 16;
-    const std::uint16_t block_align = static_cast<std::uint16_t>(channels * (bits_per_sample / 8));
+	const std::uint16_t block_align = static_cast<std::uint16_t>(wav_channels * (bits_per_sample / 8));
     const std::uint32_t byte_rate = wav_sample_rate * block_align;
     const std::uint32_t data_size = static_cast<std::uint32_t>(frames * block_align);
 
@@ -55,7 +60,7 @@ bool WavPcmCodec::Encode16(const float* input, size_t frames, std::vector<uint8_
     std::memcpy(out.data() + 12, "fmt ", 4);
     WriteLe32(out, 16, 16u);
     WriteLe16(out, 20, 1u);
-    WriteLe16(out, 22, channels);
+	WriteLe16(out, 22, wav_channels);
     WriteLe32(out, 24, wav_sample_rate);
     WriteLe32(out, 28, byte_rate);
     WriteLe16(out, 32, block_align);
@@ -63,17 +68,25 @@ bool WavPcmCodec::Encode16(const float* input, size_t frames, std::vector<uint8_
     std::memcpy(out.data() + 36, "data", 4);
     WriteLe32(out, 40, data_size);
 
-    for (size_t i = 0; i < frames; ++i) {
-        const float clamped = std::clamp(input[i], -1.0f, 1.0f);
-        const int16_t s = static_cast<int16_t>(clamped * 32767.0f);
-        const std::size_t offset = kWavHeaderBytes + i * 2;
-        out[offset + 0] = static_cast<uint8_t>(s & 0xFF);
-        out[offset + 1] = static_cast<uint8_t>((s >> 8) & 0xFF);
+    for (size_t frame = 0; frame < frames; ++frame) {
+        for (int channel = 0; channel < channels; ++channel) {
+            const size_t sample_index = frame * static_cast<size_t>(channels) + static_cast<size_t>(channel);
+            const float clamped = std::clamp(input[sample_index], -1.0f, 1.0f);
+            const int16_t s = static_cast<int16_t>(clamped * 32767.0f);
+            const std::size_t offset = kWavHeaderBytes + sample_index * 2u;
+            out[offset + 0] = static_cast<uint8_t>(s & 0xFF);
+            out[offset + 1] = static_cast<uint8_t>((s >> 8) & 0xFF);
+        }
     }
     return true;
 }
 
-bool WavPcmCodec::Decode16(const uint8_t* data, size_t bytes, std::vector<float>& out, int* sample_rate_out) const {
+bool WavPcmCodec::Decode16(
+    const uint8_t* data,
+    size_t bytes,
+    std::vector<float>& out,
+    int* sample_rate_out,
+    int* channels_out) const {
     if (data == nullptr || bytes < kWavHeaderBytes) {
         return false;
     }
@@ -121,19 +134,20 @@ bool WavPcmCodec::Decode16(const uint8_t* data, size_t bytes, std::vector<float>
     }
 
     const std::size_t frames = data_size / (sample_bytes * channels);
-    out.resize(frames);
+    out.resize(frames * channels);
     for (std::size_t frame = 0; frame < frames; ++frame) {
-        std::int32_t accum = 0;
         for (std::size_t ch = 0; ch < channels; ++ch) {
             const std::size_t sample_offset = data_offset + (frame * channels + ch) * sample_bytes;
             const int16_t s = static_cast<int16_t>(data[sample_offset + 0] | (data[sample_offset + 1] << 8));
-            accum += s;
+            out[frame * channels + ch] = static_cast<float>(s) / 32768.0f;
         }
-        out[frame] = static_cast<float>(accum / static_cast<double>(channels)) / 32768.0f;
     }
 
     if (sample_rate_out != nullptr) {
         *sample_rate_out = static_cast<int>(sample_rate);
+    }
+    if (channels_out != nullptr) {
+        *channels_out = static_cast<int>(channels);
     }
 
     return true;

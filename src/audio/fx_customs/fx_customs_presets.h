@@ -23,6 +23,16 @@ bool RenderFxCustomPreset(
 	const std::string& clap_plugin_reference = "builtin://gain",
 	std::string* error_out = nullptr);
 
+bool RenderFxCustomPresetInterleaved(
+	const std::string& name,
+	float sample_rate,
+	const std::vector<float>& input,
+	int channels,
+	std::vector<float>* output,
+	CustomEffectReport* report_out,
+	const std::string& clap_plugin_reference = "builtin://gain",
+	std::string* error_out = nullptr);
+
 CustomEffectPackage BuildBassBoostEffect();
 CustomEffectPackage BuildEqEffect();
 CustomEffectPackage BuildHighEffect();

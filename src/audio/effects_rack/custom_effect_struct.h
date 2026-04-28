@@ -68,6 +68,7 @@ struct CustomEffectReport {
 	std::string label;
 	size_t node_count = 0;
 	size_t stage_count = 0;
+	size_t channel_count = 1;
 	size_t worker_count_used = 1;
 	float peak = 0.0f;
 	double rms = 0.0;

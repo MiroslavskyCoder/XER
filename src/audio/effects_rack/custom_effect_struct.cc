@@ -158,6 +158,7 @@ std::string BuildCustomEffectReportText(const CustomEffectReport& report) {
 	output << "label=" << report.label << "\n";
 	output << "node_count=" << report.node_count << "\n";
 	output << "stage_count=" << report.stage_count << "\n";
+	output << "channel_count=" << report.channel_count << "\n";
 	output << "worker_count_used=" << report.worker_count_used << "\n";
 	output << "peak=" << report.peak << "\n";
 	output << "rms=" << report.rms << "\n";

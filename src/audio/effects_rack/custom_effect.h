@@ -27,4 +27,13 @@ bool RunCustomEffectPackage(
 	CustomEffectReport* report_out,
 	std::string* error_out = nullptr);
 
+bool RunCustomEffectPackageInterleaved(
+	const CustomEffectPackage& package,
+	float sample_rate,
+	const std::vector<float>& input,
+	int channels,
+	std::vector<float>* output,
+	CustomEffectReport* report_out,
+	std::string* error_out = nullptr);
+
 }  // namespace Engine::Audio::FX

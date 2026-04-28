@@ -18,6 +18,7 @@
 #include "audio/analysis_ai/anal_spectrogram_generator.h"
 #include "audio/demo/audio_analysis_smoke.h"
 #include "audio/audio_core/audio_source_loader.h"
+#include "audio/demo/audio_fx_custom.h"
 #include "audio/demo/audio_modules_smoke.h"
 #include "audio/file_io_codecs/codec_wav_pcm.h"
 #include "audio/demo/audio_dsp_demo.h"
@@ -478,6 +479,28 @@ int main(int argc, char** argv) {
 		std::string demo_error;
 		if (!Engine::Audio::Demo::RunAudioDSPDemo(demo_options, &report, &demo_error)) {
 			std::cerr << "Audio demo failed: " << demo_error << "\n";
+			return 1;
+		}
+		std::cout << report;
+		return 0;
+	}
+
+	if (parsed.type == AppCommand::Type::kAudioFxCustom) {
+		Engine::Audio::Demo::AudioFxCustomOptions fx_options;
+		fx_options.output_dir = parsed.output_dir.empty()
+			? std::filesystem::path("out/audio_fx_custom")
+			: std::filesystem::path(parsed.output_dir);
+		fx_options.input_path = parsed.audio_input_path.empty()
+			? std::filesystem::path()
+			: std::filesystem::path(parsed.audio_input_path);
+		fx_options.effect_name = parsed.audio_effect_name;
+		fx_options.raw_sample_rate = parsed.audio_raw_sample_rate;
+		fx_options.target_sample_rate = parsed.target_sample_rate;
+		fx_options.target_channels = parsed.audio_target_channels;
+		std::string report;
+		std::string fx_error;
+		if (!Engine::Audio::Demo::RunAudioFxCustom(fx_options, &report, &fx_error)) {
+			std::cerr << "Audio custom fx failed: " << fx_error << "\n";
 			return 1;
 		}
 		std::cout << report;
