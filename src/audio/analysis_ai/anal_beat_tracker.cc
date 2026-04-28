@@ -104,9 +104,18 @@ void BeatTracker::UpdateTempoEstimate(int sample_rate) {
 		intervals.push_back(static_cast<double>(delta_frames) / sample_rate);
 	}
 
-	const double mean_interval = std::accumulate(intervals.begin(), intervals.end(), 0.0) /
-		static_cast<double>(intervals.size());
-	estimated_bpm_ = mean_interval > 0.0 ? 60.0 / mean_interval : 0.0;
+	std::sort(intervals.begin(), intervals.end());
+	const size_t median_index = intervals.size() / 2;
+	const double median_interval = intervals.size() % 2 == 0
+		? (intervals[median_index - 1] + intervals[median_index]) * 0.5
+		: intervals[median_index];
+	estimated_bpm_ = median_interval > 0.0 ? 60.0 / median_interval : 0.0;
+	while (estimated_bpm_ > 220.0) {
+		estimated_bpm_ *= 0.5;
+	}
+	while (estimated_bpm_ > 0.0 && estimated_bpm_ < 60.0) {
+		estimated_bpm_ *= 2.0;
+	}
 }
 
 }  // namespace AIToolsXPro::Audio::AnalysisAI

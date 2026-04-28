@@ -12,7 +12,8 @@
                 "/usr/include/libxml2",
                 "/usr/include/node",
                 "/usr/include/x86_64-linux-gnu/qt6/QtPdf",
-                "/usr/include/x86_64-linux-gnu/qt6/QtWebEngineWidgets"
+                "/usr/include/x86_64-linux-gnu/qt6/QtWebEngineWidgets",
+                "/usr/include/jsoncpp"
             ],
             "defines": [
                 "ENGINE_HAS_QT6=1",

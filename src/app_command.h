@@ -10,6 +10,7 @@ public:
         kInspect,
         kAudioInspect,
         kAudioModulesSmoke,
+        kAudioAnalysisSmoke,
         kAudioDemo,
         kSpectrogram,
         kOnset,

@@ -16,6 +16,7 @@
 #include "app_command.h"
 #include "audio/analysis_ai/anal_onset_detection.h"
 #include "audio/analysis_ai/anal_spectrogram_generator.h"
+#include "audio/demo/audio_analysis_smoke.h"
 #include "audio/audio_core/audio_source_loader.h"
 #include "audio/demo/audio_modules_smoke.h"
 #include "audio/file_io_codecs/codec_wav_pcm.h"
@@ -496,6 +497,27 @@ int main(int argc, char** argv) {
 		std::string smoke_error;
 		if (!Engine::Audio::Demo::RunAudioModulesSmoke(smoke_options, &report, &smoke_error)) {
 			std::cerr << "Audio modules smoke failed: " << smoke_error << "\n";
+			return 1;
+		}
+		std::cout << report;
+		return 0;
+	}
+
+	if (parsed.type == AppCommand::Type::kAudioAnalysisSmoke) {
+		Engine::Audio::Demo::AudioAnalysisSmokeOptions analysis_options;
+		analysis_options.input_path = parsed.audio_input_path.empty()
+			? std::filesystem::path()
+			: std::filesystem::path(parsed.audio_input_path);
+		analysis_options.output_dir = parsed.output_dir.empty()
+			? std::filesystem::path("out/audio_analysis_smoke")
+			: std::filesystem::path(parsed.output_dir);
+		analysis_options.raw_sample_rate = parsed.audio_raw_sample_rate;
+		analysis_options.target_sample_rate = parsed.target_sample_rate;
+
+		std::string report;
+		std::string analysis_error;
+		if (!Engine::Audio::Demo::RunAudioAnalysisSmoke(analysis_options, &report, &analysis_error)) {
+			std::cerr << "Audio analysis smoke failed: " << analysis_error << "\n";
 			return 1;
 		}
 		std::cout << report;
