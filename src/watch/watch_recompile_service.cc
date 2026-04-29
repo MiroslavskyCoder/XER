@@ -1,6 +1,6 @@
 #include "watch/watch_recompile_service.h"
 
-#include "crash/crash_handler.h"
+#include "error_handler/err_capture.h"
 #include "watch/watch_lock_recovery.h"
 
 #include <filesystem>
@@ -50,8 +50,7 @@ bool WatchRecompileService::Recompile(const std::string& script_path,
         return false;
     }
 
-    CrashHandler::SetScriptPath(script_path);
-    CrashHandler::SetDumpDir(".");
+	Engine::ErrorHandler::UpdateCrashContext(script_path, ".");
 
     return const_cast<WatchRecompileService*>(this)->SpawnChild(script_path, error_message);
 }

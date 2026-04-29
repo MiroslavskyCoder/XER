@@ -17,6 +17,7 @@
 #include "cache/cache_constants.h"
 #include "cache/cache_encryption_handler.h"
 #include "cache/cache_manager.h"
+#include "cache/cache_scan_and_lock.h"
 #include "cache/persistent_storage.h"
 #include "engine_params.h"
 #include "flux/terminal/terminal_output_renderer.h"
@@ -27,23 +28,6 @@
 namespace flow_script_detail::require_support {
 
 namespace {
-
-std::filesystem::path LockPathForScript(const std::filesystem::path& script_path) {
-    const std::string lock_name = script_path.filename().string() + ".flowcache.lock";
-    return script_path.parent_path() / lock_name;
-}
-
-std::filesystem::path TempPathForTarget(const std::filesystem::path& target,
-                                        const char* extension_tag) {
-    const auto now = std::chrono::system_clock::now().time_since_epoch();
-    const auto ticks = std::chrono::duration_cast<std::chrono::nanoseconds>(now).count();
-    std::filesystem::path tmp = target;
-    tmp += ".tmp.";
-    tmp += extension_tag;
-    tmp += ".";
-    tmp += std::to_string(ticks);
-    return tmp;
-}
 
 std::string BoolToString(bool value) {
     return value ? "true" : "false";
@@ -378,8 +362,8 @@ ScriptCacheLock::~ScriptCacheLock() {
     if (!locked_) {
         return;
     }
-    std::error_code ec;
-    std::filesystem::remove_all(lock_path_, ec);
+	std::string ignored_error;
+	(void)Engine::Cache::CleanupDirectoryLock(lock_path_, &ignored_error);
 }
 
 std::string ToUtf8(v8::Isolate* isolate, v8::Local<v8::Value> value) {
@@ -420,28 +404,11 @@ std::filesystem::path DiffTextPathForScript(const std::filesystem::path& script_
 
 std::unique_ptr<ScriptCacheLock> AcquireScriptCacheLock(const std::filesystem::path& script_path,
                                                         std::string* error_out) {
-    const std::filesystem::path lock_path = LockPathForScript(script_path);
-
-    constexpr int kMaxAttempts = 100;
-    constexpr auto kRetryDelay = std::chrono::milliseconds(20);
-    for (int attempt = 0; attempt < kMaxAttempts; ++attempt) {
-        std::error_code ec;
-        if (std::filesystem::create_directory(lock_path, ec)) {
-            return std::make_unique<ScriptCacheLock>(lock_path);
-        }
-
-        if (ec && error_out != nullptr) {
-            *error_out = "Failed to create lock: " + lock_path.string() + ", reason: " + ec.message();
-            return nullptr;
-        }
-
-        std::this_thread::sleep_for(kRetryDelay);
-    }
-
-    if (error_out != nullptr) {
-        *error_out = "Timed out waiting for lock: " + lock_path.string();
-    }
-    return nullptr;
+	const std::filesystem::path lock_path = Engine::Cache::ScriptLockPath(script_path);
+	if (!Engine::Cache::AcquireDirectoryLock(lock_path, Engine::Cache::LockOptions(), error_out)) {
+		return nullptr;
+	}
+	return std::make_unique<ScriptCacheLock>(lock_path);
 }
 
 bool PrepareScriptForExecution(const std::filesystem::path& source_path,

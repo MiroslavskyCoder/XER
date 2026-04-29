@@ -11,6 +11,10 @@
 #include <absl/strings/str_cat.h>
 #include <range/v3/algorithm/any_of.hpp>
 
+#include "cache/cache_constants.h"
+#include "cache/cache_manager.h"
+#include "error_handler/err_capture.h"
+#include "error_handler/err_report_builder.h"
 #include "flux/terminal/terminal_output_renderer.h"
 #include "helper/string.h"
 
@@ -30,6 +34,11 @@ MonitorConfiguration& MutableConfiguration() {
 bool& MonitorInstalled() {
 	static bool installed = false;
 	return installed;
+}
+
+std::string& MutableLastReportPath() {
+	static std::string path;
+	return path;
 }
 
 std::string TimestampPrefix() {
@@ -59,6 +68,40 @@ std::string FormatLine(std::string_view level,
 		Helper::String::NormalizeUtf8(message_view));
 }
 
+DiagnosticData PopulateRuntimeContext(DiagnosticData diagnostic) {
+	const CaptureConfiguration capture = CurrentCaptureConfiguration();
+	diagnostic.script_path = capture.script_path;
+	diagnostic.dump_dir = capture.dump_dir;
+	diagnostic.crash_dump_path = LastCrashDumpPath();
+	return diagnostic;
+}
+
+std::string PersistDiagnosticReport(const DiagnosticData& diagnostic) {
+	if (!MutableConfiguration().persist_reports) {
+		return std::string();
+	}
+
+	std::string error;
+	const std::string key = BuildDiagnosticCacheKey(diagnostic);
+	const std::string file_name = BuildDiagnosticFileName(diagnostic);
+	const std::string report = BuildDiagnosticReport(diagnostic);
+	auto& cache = Engine::Cache::CacheManager::Instance();
+	if (!cache.WritePersistentText(Engine::Cache::constants::kErrorReportScope, key, file_name, report, &error)) {
+		flux::terminal::WriteLine(flux::terminal::OutputStream::kStderr,
+			FormatLine("error", "error_handler", absl::StrCat("failed to persist diagnostic report: ", error)));
+		return std::string();
+	}
+	return cache.PathFor(Engine::Cache::constants::kErrorReportScope, key, file_name).string();
+}
+
+std::string FormatDiagnosticLine(const DiagnosticData& diagnostic) {
+	std::string line = FormatLine(diagnostic.level, diagnostic.component, diagnostic.message);
+	if (!diagnostic.crash_dump_path.empty()) {
+		line = absl::StrCat(line, " [dump=", diagnostic.crash_dump_path, "]");
+	}
+	return line;
+}
+
 bool ShouldEmitInfo() {
 	const MonitorConfiguration& config = MutableConfiguration();
 	if (config.verbose) {
@@ -82,8 +125,7 @@ bool ShouldEmitInfo() {
 			detail = absl::StrCat(detail, ": unknown exception");
 		}
 	}
-	flux::terminal::WriteLine(flux::terminal::OutputStream::kStderr,
-		FormatLine("fatal", "error_handler", detail));
+	ReportDiagnostic(PopulateRuntimeContext(MakeDiagnosticData("fatal", "error_handler", detail)));
 	std::abort();
 }
 
@@ -105,17 +147,30 @@ void InitializeMonitor(const MonitorConfiguration& config) {
 	}
 }
 
+void ReportDiagnostic(const DiagnosticData& diagnostic) {
+	const DiagnosticData complete = PopulateRuntimeContext(diagnostic);
+	flux::terminal::WriteLine(flux::terminal::OutputStream::kStderr, FormatDiagnosticLine(complete));
+	MutableLastReportPath() = PersistDiagnosticReport(complete);
+}
+
 void ReportStartupEvent(std::string_view component, std::string_view message) {
 	if (!ShouldEmitInfo()) {
 		return;
 	}
-	flux::terminal::WriteLine(flux::terminal::OutputStream::kStderr,
-		FormatLine("info", component, message));
+	ReportDiagnostic(MakeDiagnosticData("info", component, message));
 }
 
 void ReportStartupError(std::string_view component, std::string_view message) {
-	flux::terminal::WriteLine(flux::terminal::OutputStream::kStderr,
-		FormatLine("error", component, message));
+	ReportDiagnostic(MakeDiagnosticData("error", component, message));
+}
+
+void ReportException(std::string_view component, std::string_view message) {
+	ReportDiagnostic(MakeDiagnosticData("fatal", component, message));
+}
+
+std::string LastReportPath() {
+	std::lock_guard<std::mutex> lock(MonitorMutex());
+	return MutableLastReportPath();
 }
 
 }  // namespace Engine::ErrorHandler

@@ -1,11 +1,14 @@
 #include "flow_script_require.h"
 
 #include <chrono>
-#include <cstdlib>
-#include <iostream>
+#include <sstream>
 #include <utility>
 
+#include <absl/strings/str_cat.h>
+
+#include "cache/persistent_storage.h"
 #include "engine_params.h"
+#include "flux/terminal/terminal_output_renderer.h"
 #include "flow_script_require_support.h"
 #include "helper/stack_error.h"
 #include "helper/tool_to.h"
@@ -19,14 +22,8 @@ using require_support::ValidationHistory;
 
 namespace {
 
-bool IsEnabledFromEnv(const char* key) {
-    const char* raw = std::getenv(key);
-    if (raw == nullptr || raw[0] == '\0') {
-        return false;
-    }
-
-    const std::string value(raw);
-    return value == "1" || value == "true" || value == "TRUE" || value == "on" || value == "ON";
+void WriteRequireLine(flux::terminal::OutputStream stream, const std::string& text) {
+    flux::terminal::WriteLine(stream, text);
 }
 
 // Log a debug/verbose message to stderr when ENGINE_DEBUG or ENGINE_VERBOSE is set.
@@ -38,8 +35,16 @@ void DebugLog(const EngineParams& params, const std::string& msg) {
                       std::chrono::steady_clock::now().time_since_epoch()).count()
               ) + "] [require] "
             : "[require] ";
-        std::cerr << prefix << msg << "\n";
+        WriteRequireLine(flux::terminal::OutputStream::kStderr, absl::StrCat(prefix, msg));
     }
+}
+
+bool RemoveCacheArtifact(const std::filesystem::path& artifact_path, std::string* error_out) {
+    Engine::Cache::PersistentStorage storage(artifact_path.parent_path());
+    if (!storage.ExistsRelative(artifact_path.filename())) {
+        return true;
+    }
+    return storage.RemoveRelative(artifact_path.filename(), error_out);
 }
 
 }  // namespace
@@ -173,10 +178,13 @@ bool FlowScriptRequireRuntime::ExecuteScriptFile(const std::filesystem::path& pa
 
     // --cache_clean: remove stale cache files for this script before proceeding.
     if (params.cache_clean) {
-        std::error_code ec;
-        if (std::filesystem::exists(cache_path,     ec)) std::filesystem::remove(cache_path,     ec);
-        if (std::filesystem::exists(metadata_path,  ec)) std::filesystem::remove(metadata_path,  ec);
-        if (std::filesystem::exists(diff_text_path, ec)) std::filesystem::remove(diff_text_path, ec);
+        std::string cleanup_error;
+        (void)RemoveCacheArtifact(cache_path, &cleanup_error);
+        (void)RemoveCacheArtifact(metadata_path, &cleanup_error);
+        (void)RemoveCacheArtifact(diff_text_path, &cleanup_error);
+        if (!cleanup_error.empty()) {
+            DebugLog(params, absl::StrCat("  cache_clean warning: ", cleanup_error));
+        }
         DebugLog(params, "  cache_clean: removed stale cache for " + path.string());
     }
 
@@ -378,22 +386,22 @@ bool FlowScriptRequireRuntime::ExecuteScriptFile(const std::filesystem::path& pa
     if (print_diff) {
         const auto& diff_result = diff_snapshot.returnDiffFile();
         const char* eq = diff_result.equal ? "true" : "false";
+        std::ostringstream diff_header;
         if (!params.colors_disabled()) {
-            std::cout << "\033[36m[require:diff]\033[0m script=" << path.string()
-                      << " equal=" << eq
-                      << " added=" << diff_result.added_count
-                      << " removed=" << diff_result.removed_count
-                      << "\n";
+            diff_header << "\033[36m[require:diff]\033[0m script=" << path.string()
+                        << " equal=" << eq
+                        << " added=" << diff_result.added_count
+                        << " removed=" << diff_result.removed_count;
         } else {
-            std::cout << "[require:diff] script=" << path.string()
-                      << " equal=" << eq
-                      << " added=" << diff_result.added_count
-                      << " removed=" << diff_result.removed_count
-                      << "\n";
+            diff_header << "[require:diff] script=" << path.string()
+                        << " equal=" << eq
+                        << " added=" << diff_result.added_count
+                        << " removed=" << diff_result.removed_count;
         }
+        WriteRequireLine(flux::terminal::OutputStream::kStdout, diff_header.str());
         for (const auto& op : diff_result.operations) {
             const char sign = (op.type == FileDiffOperationType::Added) ? '+' : '-';
-            std::cout << sign << " " << op.line << "\n";
+            WriteRequireLine(flux::terminal::OutputStream::kStdout, absl::StrCat(sign, " ", op.line));
         }
     }
 

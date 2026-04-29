@@ -3,16 +3,19 @@
 #include <libplatform/libplatform.h>
 
 #include <cstdlib>
-#include <iostream>
 #include <mutex>
 #include <utility>
 
+#include <absl/strings/str_cat.h>
+
+#include "error_handler/err_capture.h"
 #include "flow_script_buffer.h"
 #include "engine_params.h"
 #include "flow_script_console.h"
 #include "flow_script_event_bus.h"
 #include "flow_script_import_module.h"
 #include "flow_script_require.h"
+#include "flux/terminal/terminal_output_renderer.h"
 #include "resource_guard.h"
 
 namespace {
@@ -20,6 +23,10 @@ namespace {
 std::mutex g_v8_mutex;
 bool g_v8_initialized = false;
 std::unique_ptr<v8::Platform> g_v8_platform;
+
+void WriteFlowScriptLine(flux::terminal::OutputStream stream, const std::string& text) {
+    flux::terminal::WriteLine(stream, text);
+}
 
 }  // namespace
 
@@ -87,7 +94,8 @@ v8::Isolate* FlowScript::CreateIsolate() {
         std::string limit_error;
         ApplyProcessMemoryLimits(hard_mib, &limit_error);
         if (!limit_error.empty()) {
-            std::cerr << "[flow_script] " << limit_error << "\n";
+            WriteFlowScriptLine(flux::terminal::OutputStream::kStderr,
+                absl::StrCat("[flow_script] ", limit_error));
         }
     }
 
@@ -100,6 +108,7 @@ void FlowScript::DisposeIsolate(v8::Isolate* isolate) {
     }
 
     auto* allocator = isolate->GetArrayBufferAllocator();
+    Engine::ErrorHandler::BindIsolate(nullptr);
     isolate->Dispose();
     delete allocator;
 }
@@ -119,17 +128,25 @@ FlowScriptEnv* FlowScript::create_env() {
 bool FlowScript::Run() const {
     v8::Isolate* isolate = CreateIsolate();
     if (isolate == nullptr) {
-        std::cerr << "Failed to create V8 isolate\n";
+        WriteFlowScriptLine(flux::terminal::OutputStream::kStderr, "Failed to create V8 isolate");
         return false;
     }
+    Engine::ErrorHandler::BindIsolate(isolate);
 
     const EngineParams params = EngineParamsFromEnv();
 
     if (params.is_verbose()) {
-        std::cerr << "[flow_script] run: " << path_ << "\n";
-        if (params.sandbox)          std::cerr << "[flow_script]   sandbox mode enabled\n";
-        if (params.max_memory_used > 0) std::cerr << "[flow_script]   max_memory_used=" << params.max_memory_used << " MiB\n";
-        if (params.noemit)           std::cerr << "[flow_script]   noemit (dry-run)\n";
+        WriteFlowScriptLine(flux::terminal::OutputStream::kStderr, absl::StrCat("[flow_script] run: ", path_));
+        if (params.sandbox) {
+            WriteFlowScriptLine(flux::terminal::OutputStream::kStderr, "[flow_script]   sandbox mode enabled");
+        }
+        if (params.max_memory_used > 0) {
+            WriteFlowScriptLine(flux::terminal::OutputStream::kStderr,
+                absl::StrCat("[flow_script]   max_memory_used=", params.max_memory_used, " MiB"));
+        }
+        if (params.noemit) {
+            WriteFlowScriptLine(flux::terminal::OutputStream::kStderr, "[flow_script]   noemit (dry-run)");
+        }
     }
 
     bool success = false;
@@ -152,31 +169,33 @@ bool FlowScript::Run() const {
                                                 .ToLocalChecked())
                                         .FromMaybe(false);
                 if (!import_bound) {
-                    std::cerr << "Failed to bind ImportModule\n";
+					WriteFlowScriptLine(flux::terminal::OutputStream::kStderr, "Failed to bind ImportModule");
                     break;
                 }
             } else if (params.is_verbose()) {
-                std::cerr << "[flow_script]   sandbox: ImportModule binding skipped\n";
+				WriteFlowScriptLine(flux::terminal::OutputStream::kStderr,
+					"[flow_script]   sandbox: ImportModule binding skipped");
             }
 
             if (!flow_script_detail::BindConsoleGlobals(isolate, context)) {
-				std::cerr << "Failed to bind console\n";
+				WriteFlowScriptLine(flux::terminal::OutputStream::kStderr, "Failed to bind console");
                 break;
             }
 
             if (!flow_script_detail::BindBuffer(isolate, context)) {
-				std::cerr << "Failed to bind Buffer\n";
+				WriteFlowScriptLine(flux::terminal::OutputStream::kStderr, "Failed to bind Buffer");
 				break;
 			}
 
             if (!flow_script_detail::BindEventBus(isolate, context, &event_bus_state)) {
-                std::cerr << "Failed to bind EventBus\n";
+				WriteFlowScriptLine(flux::terminal::OutputStream::kStderr, "Failed to bind EventBus");
                 break;
             }
 
             flow_script_detail::FlowScriptRequireRuntime require_runtime(isolate, context, path_);
             if (!require_runtime.BindGlobals()) {
-                std::cerr << "Failed to bind RequireFile/MakeExportModule APIs\n";
+				WriteFlowScriptLine(flux::terminal::OutputStream::kStderr,
+					"Failed to bind RequireFile/MakeExportModule APIs");
                 break;
             }
 
@@ -191,9 +210,10 @@ bool FlowScript::Run() const {
 
             if (!run_ok) {
                 if (guard.was_killed() && !guard.kill_reason().empty()) {
-                    std::cerr << "[resource_guard] script aborted: " << guard.kill_reason() << "\n";
+                    WriteFlowScriptLine(flux::terminal::OutputStream::kStderr,
+                        absl::StrCat("[resource_guard] script aborted: ", guard.kill_reason()));
                 } else {
-                    std::cerr << run_error << "\n";
+                    WriteFlowScriptLine(flux::terminal::OutputStream::kStderr, run_error);
                 }
                 break;
             }

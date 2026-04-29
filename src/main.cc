@@ -4,8 +4,8 @@
 #include <fstream>
 #include <cmath>
 #include <iomanip>
-#include <iostream>
 #include <json/json.h>
+#include <absl/strings/str_cat.h>
 #include <range/v3/range/conversion.hpp>
 #include <range/v3/view/transform.hpp>
 #include <sstream>
@@ -23,11 +23,13 @@
 #include "audio/file_io_codecs/codec_wav_pcm.h"
 #include "audio/demo/audio_dsp_demo.h"
 #include "cache/cache_configuration.h"
-#include "crash/crash_handler.h"
 #include "ecosystem/ecosystem_manifest_loader.h"
 #include "engine_params.h"
+#include "error_handler/err_capture.h"
 #include "error_handler/err_monitor.h"
+#include "flux/terminal/terminal_output_renderer.h"
 #include "flowscript/flow_script.h"
+#include "helper/string.h"
 #include "provider.h"
 #include "runtime_safety/safe_integrity_check.h"
 #include "runtime_live.h"
@@ -36,6 +38,26 @@
 #include "xer/xer_script.h"
 
 namespace {
+
+void WriteOutput(flux::terminal::OutputStream stream, const std::string& text) {
+	flux::terminal::Write(stream, text);
+}
+
+void WriteOutputLine(flux::terminal::OutputStream stream, const std::string& text) {
+	flux::terminal::WriteLine(stream, text);
+}
+
+void WriteStdout(const std::string& text) {
+	WriteOutput(flux::terminal::OutputStream::kStdout, text);
+}
+
+void WriteStdoutLine(const std::string& text) {
+	WriteOutputLine(flux::terminal::OutputStream::kStdout, text);
+}
+
+void WriteStderrLine(const std::string& text) {
+	WriteOutputLine(flux::terminal::OutputStream::kStderr, text);
+}
 
 void SetEnvValue(const char* key, const std::string& value) {
 	setenv(key, value.c_str(), 1);
@@ -53,7 +75,7 @@ void SetEnvFlag(const char* key, bool enabled) {
 void LoadEnvFile(const std::string& path) {
 	std::ifstream f(path);
 	if (!f.is_open()) {
-		std::cerr << "[warn] --env_file not found: " << path << "\n";
+		WriteStderrLine(absl::StrCat("[warn] --env_file not found: ", path));
 		return;
 	}
 	std::string line;
@@ -403,12 +425,14 @@ Engine::Audio::Core::AudioSourceLoadOptions BuildAudioLoadOptions(const AppComma
 }  // namespace
 
 int main(int argc, char** argv) {
-	CrashHandler::Install();
+	Engine::ErrorHandler::CaptureConfiguration initial_capture_config;
+	initial_capture_config.dump_dir = ".";
+	Engine::ErrorHandler::InitializeCrashCapture(initial_capture_config);
 
 	AppCommand::Parsed parsed = AppCommand::Parse(argc, argv);
 	if (!parsed.valid) {
-		std::cerr << parsed.error_message << "\n";
-		std::cerr << AppCommand::BuildHelpText(argv[0]) << "\n";
+		WriteStderrLine(parsed.error_message);
+		WriteStderrLine(AppCommand::BuildHelpText(argv[0]));
 		return 2;
 	}
 
@@ -419,14 +443,14 @@ int main(int argc, char** argv) {
 		EcoSystemManifest manifest;
 		std::string ecosystem_error;
 		if (!loader.Load(&manifest, &ecosystem_error)) {
-			std::cerr << "Failed to load ecosystem manifest: " << ecosystem_error << "\n";
+			WriteStderrLine(absl::StrCat("Failed to load ecosystem manifest: ", ecosystem_error));
 			return 2;
 		}
 
 		const std::vector<std::string> manifest_tokens = EcoSystemManifestLoader::BuildArgv(manifest);
 		AppCommand::Parsed manifest_parsed;
 		if (!ParseCommandFromTokens(manifest_tokens, &manifest_parsed, &ecosystem_error)) {
-			std::cerr << "Invalid manifest CLI args: " << ecosystem_error << "\n";
+			WriteStderrLine(absl::StrCat("Invalid manifest CLI args: ", ecosystem_error));
 			return 2;
 		}
 
@@ -438,30 +462,32 @@ int main(int argc, char** argv) {
 	}
 
 	if (parsed.type == AppCommand::Type::kHelp) {
-		std::cout << AppCommand::BuildHelpText(argv[0]) << "\n";
+		WriteStdoutLine(AppCommand::BuildHelpText(argv[0]));
 		return 0;
 	}
 
 	if (parsed.type == AppCommand::Type::kVersion) {
-		std::cout << "EngineBuilder version 1.1.0\n";
+		WriteStdoutLine("EngineBuilder version 1.1.0");
 		return 0;
 	}
 
 	if (parsed.type == AppCommand::Type::kDoctor) {
 		const bool has_default_script = std::filesystem::exists("example/project.js");
 		const bool has_build_dir      = std::filesystem::exists("build");
-		std::cout << "Doctor summary:\n";
-		std::cout << "  example/project.js : " << (has_default_script ? "ok" : "missing") << "\n";
-		std::cout << "  build directory    : " << (has_build_dir      ? "ok" : "missing") << "\n";
+		std::ostringstream doctor_output;
+		doctor_output << "Doctor summary:\n";
+		doctor_output << "  example/project.js : " << (has_default_script ? "ok" : "missing") << "\n";
+		doctor_output << "  build directory    : " << (has_build_dir      ? "ok" : "missing") << "\n";
 		if (parsed.doctor_verbose) {
 			// Extra dependency checks.
 			const bool has_node = std::filesystem::exists("/usr/bin/node") ||
 			                      std::filesystem::exists("/usr/local/bin/node");
 			const bool has_tsc  = std::filesystem::exists("/usr/bin/tsc") ||
 			                      std::filesystem::exists("/usr/local/bin/tsc");
-			std::cout << "  node               : " << (has_node ? "ok" : "missing") << "\n";
-			std::cout << "  tsc                : " << (has_tsc  ? "ok" : "missing") << "\n";
+			doctor_output << "  node               : " << (has_node ? "ok" : "missing") << "\n";
+			doctor_output << "  tsc                : " << (has_tsc  ? "ok" : "missing") << "\n";
 		}
+		WriteStdout(doctor_output.str());
 		return (has_default_script && has_build_dir) ? 0 : 1;
 	}
 
@@ -481,10 +507,10 @@ int main(int argc, char** argv) {
 		std::string report;
 		std::string demo_error;
 		if (!Engine::Audio::Demo::RunAudioDSPDemo(demo_options, &report, &demo_error)) {
-			std::cerr << "Audio demo failed: " << demo_error << "\n";
+			WriteStderrLine(absl::StrCat("Audio demo failed: ", demo_error));
 			return 1;
 		}
-		std::cout << report;
+		WriteStdout(report);
 		return 0;
 	}
 
@@ -505,10 +531,10 @@ int main(int argc, char** argv) {
 		std::string report;
 		std::string fx_error;
 		if (!Engine::Audio::Demo::RunAudioFxCustom(fx_options, &report, &fx_error)) {
-			std::cerr << "Audio custom fx failed: " << fx_error << "\n";
+			WriteStderrLine(absl::StrCat("Audio custom fx failed: ", fx_error));
 			return 1;
 		}
-		std::cout << report;
+		WriteStdout(report);
 		return 0;
 	}
 
@@ -529,10 +555,10 @@ int main(int argc, char** argv) {
 		std::string report;
 		std::string fx_error;
 		if (!Engine::Audio::Demo::RunAudioFxBatch(fx_options, &report, &fx_error)) {
-			std::cerr << "Audio custom fx batch failed: " << fx_error << "\n";
+			WriteStderrLine(absl::StrCat("Audio custom fx batch failed: ", fx_error));
 			return 1;
 		}
-		std::cout << report;
+		WriteStdout(report);
 		return 0;
 	}
 
@@ -548,10 +574,10 @@ int main(int argc, char** argv) {
 		std::string report;
 		std::string smoke_error;
 		if (!Engine::Audio::Demo::RunAudioModulesSmoke(smoke_options, &report, &smoke_error)) {
-			std::cerr << "Audio modules smoke failed: " << smoke_error << "\n";
+			WriteStderrLine(absl::StrCat("Audio modules smoke failed: ", smoke_error));
 			return 1;
 		}
-		std::cout << report;
+		WriteStdout(report);
 		return 0;
 	}
 
@@ -569,16 +595,16 @@ int main(int argc, char** argv) {
 		std::string report;
 		std::string analysis_error;
 		if (!Engine::Audio::Demo::RunAudioAnalysisSmoke(analysis_options, &report, &analysis_error)) {
-			std::cerr << "Audio analysis smoke failed: " << analysis_error << "\n";
+			WriteStderrLine(absl::StrCat("Audio analysis smoke failed: ", analysis_error));
 			return 1;
 		}
-		std::cout << report;
+		WriteStdout(report);
 		return 0;
 	}
 
 	if (parsed.type == AppCommand::Type::kAudioInspect) {
 		if (parsed.audio_input_path.empty()) {
-			std::cerr << "Audio inspect command requires an input audio path\n";
+			WriteStderrLine("Audio inspect command requires an input audio path");
 			return 2;
 		}
 
@@ -586,7 +612,7 @@ int main(int argc, char** argv) {
 		const auto load_options = BuildAudioLoadOptions(parsed);
 		Engine::Audio::Core::AudioSourceBuffer audio_buffer;
 		if (!Engine::Audio::Core::AudioSourceLoader::Load(load_options, &audio_buffer, &inspect_error)) {
-			std::cerr << "Audio inspect failed: " << inspect_error << "\n";
+			WriteStderrLine(absl::StrCat("Audio inspect failed: ", inspect_error));
 			return 1;
 		}
 
@@ -598,7 +624,7 @@ int main(int argc, char** argv) {
 			std::error_code fs_error;
 			std::filesystem::create_directories(output_dir, fs_error);
 			if (fs_error) {
-				std::cerr << "Audio inspect failed: could not create output directory\n";
+				WriteStderrLine("Audio inspect failed: could not create output directory");
 				return 1;
 			}
 
@@ -612,18 +638,18 @@ int main(int argc, char** argv) {
 			std::string io_error;
 			if (!WriteTextFile(report_path, serialized_report, &io_error)
 				|| !WriteWaveFile(wav_path, audio_buffer.samples, audio_buffer.sample_rate, &io_error)) {
-				std::cerr << "Audio inspect failed: " << io_error << "\n";
+				WriteStderrLine(absl::StrCat("Audio inspect failed: ", io_error));
 				return 1;
 			}
 		}
 
-		std::cout << (parsed.json_output ? SerializeJson(report_json) : BuildAudioInspectTextReport(report_json));
+		WriteStdout(parsed.json_output ? SerializeJson(report_json) : BuildAudioInspectTextReport(report_json));
 		return 0;
 	}
 
 	if (parsed.type == AppCommand::Type::kSpectrogram) {
 		if (parsed.audio_input_path.empty()) {
-			std::cerr << "Spectrogram command requires an input audio path\n";
+			WriteStderrLine("Spectrogram command requires an input audio path");
 			return 2;
 		}
 
@@ -633,7 +659,7 @@ int main(int argc, char** argv) {
 		std::error_code fs_error;
 		std::filesystem::create_directories(output_dir, fs_error);
 		if (fs_error) {
-			std::cerr << "Failed to create spectrogram output directory\n";
+			WriteStderrLine("Failed to create spectrogram output directory");
 			return 1;
 		}
 
@@ -641,29 +667,31 @@ int main(int argc, char** argv) {
 		std::string analysis_error;
 		const auto load_options = BuildAudioLoadOptions(parsed);
 		if (!generator.GenerateFromFile(load_options, &analysis_error)) {
-			std::cerr << "Spectrogram command failed: " << analysis_error << "\n";
+			WriteStderrLine(absl::StrCat("Spectrogram command failed: ", analysis_error));
 			return 1;
 		}
 
 		const std::filesystem::path raw_output_path = output_dir / "spectrogram.raw";
 		if (!generator.ExportAsRaw(raw_output_path.string())) {
-			std::cerr << "Spectrogram command failed: could not export raw spectrogram\n";
+			WriteStderrLine("Spectrogram command failed: could not export raw spectrogram");
 			return 1;
 		}
 
-		std::cout << "Spectrogram CLI\n";
-		std::cout << "input_path=" << parsed.audio_input_path << "\n";
-		std::cout << "target_sample_rate=" << parsed.target_sample_rate << "\n";
-		std::cout << "frame_count=" << generator.GetFrameCount() << "\n";
-		std::cout << "bin_count=" << generator.GetBinCount() << "\n";
-		std::cout << "raw_output=" << raw_output_path.string() << "\n";
-		std::cout << generator.GetReport() << "\n";
+		std::ostringstream spectrogram_output;
+		spectrogram_output << "Spectrogram CLI\n";
+		spectrogram_output << "input_path=" << parsed.audio_input_path << "\n";
+		spectrogram_output << "target_sample_rate=" << parsed.target_sample_rate << "\n";
+		spectrogram_output << "frame_count=" << generator.GetFrameCount() << "\n";
+		spectrogram_output << "bin_count=" << generator.GetBinCount() << "\n";
+		spectrogram_output << "raw_output=" << raw_output_path.string() << "\n";
+		spectrogram_output << generator.GetReport() << "\n";
+		WriteStdout(spectrogram_output.str());
 		return 0;
 	}
 
 	if (parsed.type == AppCommand::Type::kOnset) {
 		if (parsed.audio_input_path.empty()) {
-			std::cerr << "Onset command requires an input audio path\n";
+			WriteStderrLine("Onset command requires an input audio path");
 			return 2;
 		}
 
@@ -673,7 +701,7 @@ int main(int argc, char** argv) {
 		std::error_code fs_error;
 		std::filesystem::create_directories(output_dir, fs_error);
 		if (fs_error) {
-			std::cerr << "Failed to create onset output directory\n";
+			WriteStderrLine("Failed to create onset output directory");
 			return 1;
 		}
 
@@ -681,7 +709,7 @@ int main(int argc, char** argv) {
 		std::string analysis_error;
 		const auto load_options = BuildAudioLoadOptions(parsed);
 		if (!detector.DetectOnsetsFromFile(load_options, &analysis_error)) {
-			std::cerr << "Onset command failed: " << analysis_error << "\n";
+			WriteStderrLine(absl::StrCat("Onset command failed: ", analysis_error));
 			return 1;
 		}
 
@@ -690,17 +718,19 @@ int main(int argc, char** argv) {
 		const std::filesystem::path flux_curve_path = output_dir / "flux_curve.raw";
 		if (!WriteOnsetTimes(onset_times_path, detector.GetOnsetFrames(), onset_times, &analysis_error)
 			|| !WriteFloatVectorBinary(flux_curve_path, detector.GetFluxCurve(), &analysis_error)) {
-			std::cerr << "Onset command failed: " << analysis_error << "\n";
+			WriteStderrLine(absl::StrCat("Onset command failed: ", analysis_error));
 			return 1;
 		}
 
-		std::cout << "Onset CLI\n";
-		std::cout << "input_path=" << parsed.audio_input_path << "\n";
-		std::cout << "target_sample_rate=" << parsed.target_sample_rate << "\n";
-		std::cout << "onset_count=" << detector.GetOnsetFrames().size() << "\n";
-		std::cout << "onset_times_csv=" << onset_times_path.string() << "\n";
-		std::cout << "flux_curve_raw=" << flux_curve_path.string() << "\n";
-		std::cout << detector.GetReport() << "\n";
+		std::ostringstream onset_output;
+		onset_output << "Onset CLI\n";
+		onset_output << "input_path=" << parsed.audio_input_path << "\n";
+		onset_output << "target_sample_rate=" << parsed.target_sample_rate << "\n";
+		onset_output << "onset_count=" << detector.GetOnsetFrames().size() << "\n";
+		onset_output << "onset_times_csv=" << onset_times_path.string() << "\n";
+		onset_output << "flux_curve_raw=" << flux_curve_path.string() << "\n";
+		onset_output << detector.GetReport() << "\n";
+		WriteStdout(onset_output.str());
 		return 0;
 	}
 
@@ -715,6 +745,7 @@ int main(int argc, char** argv) {
 	Engine::ErrorHandler::MonitorConfiguration monitor_config;
 	monitor_config.verbose = parsed.verbose;
 	monitor_config.timestamps = parsed.timestamps;
+	monitor_config.persist_reports = true;
 	monitor_config.log_level = parsed.log_level;
 	Engine::ErrorHandler::InitializeMonitor(monitor_config);
 
@@ -736,32 +767,30 @@ int main(int argc, char** argv) {
 
 	const std::string script_path = parsed.script_path;
 	if (!std::filesystem::exists(script_path)) {
-		std::cerr << "Script not found: " << script_path << "\n";
+		WriteStderrLine(absl::StrCat("Script not found: ", script_path));
 		return 1;
 	}
+	Engine::ErrorHandler::UpdateCrashContext(script_path, ".");
 
 	if (parsed.type == AppCommand::Type::kInspect) {
 		Xer::XerEncode encoder;
 		std::string inspect_report;
 		std::string inspect_error;
 		if (!encoder.InspectFile(script_path, &inspect_report, &inspect_error)) {
-			std::cerr << "Failed to inspect XER artifact: " << inspect_error << "\n";
+			WriteStderrLine(absl::StrCat("Failed to inspect XER artifact: ", inspect_error));
 			return 1;
 		}
-		std::cout << inspect_report;
+		WriteStdout(inspect_report);
 		if (inspect_report.empty() || inspect_report.back() != '\n') {
-			std::cout << "\n";
+			WriteStdout("\n");
 		}
 		return 0;
 	}
 
 	if (parsed.type == AppCommand::Type::kCompile) {
-		std::string extension = std::filesystem::path(script_path).extension().string();
-		for (char& ch : extension) {
-			ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
-		}
+		const std::string extension = Helper::String::CanonicalizeToken(std::filesystem::path(script_path).extension().string());
 		if (extension != ".xer") {
-			std::cerr << "Compile command only supports .xer sources: " << script_path << "\n";
+			WriteStderrLine(absl::StrCat("Compile command only supports .xer sources: ", script_path));
 			return 1;
 		}
 
@@ -769,13 +798,13 @@ int main(int argc, char** argv) {
 		std::string protection_error;
 		const Xer::XerProtectionOptions protection = Xer::ResolveProtectionOptionsFromEnvironment(&protection_error);
 		if (!protection_error.empty()) {
-			std::cerr << "Failed to resolve XER encryption key: " << protection_error << "\n";
+			WriteStderrLine(absl::StrCat("Failed to resolve XER encryption key: ", protection_error));
 			return 1;
 		}
 		std::string compile_error;
 		const Xer::XerEncodedBlock block = encoder.Compile(script_path, protection, &compile_error);
 		if (!compile_error.empty()) {
-			std::cerr << "Failed to compile .xer script: " << compile_error << "\n";
+			WriteStderrLine(absl::StrCat("Failed to compile .xer script: ", compile_error));
 			return 1;
 		}
 
@@ -783,7 +812,7 @@ int main(int argc, char** argv) {
 			? std::filesystem::path()
 			: std::filesystem::path(parsed.output_dir);
 		if (!encoder.WriteArtifacts(script_path, block, output_dir, &compile_error)) {
-			std::cerr << "Failed to write compile artifacts: " << compile_error << "\n";
+			WriteStderrLine(absl::StrCat("Failed to write compile artifacts: ", compile_error));
 			return 1;
 		}
 
@@ -791,14 +820,14 @@ int main(int argc, char** argv) {
 			? std::filesystem::path(script_path).parent_path()
 			: output_dir;
 		const std::string stem = std::filesystem::path(script_path).stem().string();
-		std::cout << "Compiled XER artifacts:\n";
-		std::cout << "  " << (destination_dir / (stem + ".bin")).string() << "\n";
-		std::cout << "  " << (destination_dir / (stem + ".bak")).string() << "\n";
+		std::ostringstream compile_output;
+		compile_output << "Compiled XER artifacts:\n";
+		compile_output << "  " << (destination_dir / (stem + ".bin")).string() << "\n";
+		compile_output << "  " << (destination_dir / (stem + ".bak")).string() << "\n";
+		WriteStdout(compile_output.str());
 		return 0;
 	}
 
-	CrashHandler::SetScriptPath(script_path);
-	CrashHandler::SetDumpDir(".");
 	const bool use_xer_runtime = XerScript::Supports(script_path);
 
 	if (parsed.watch) {
@@ -816,7 +845,7 @@ int main(int argc, char** argv) {
 	if (use_xer_runtime) {
 		XerScript script(script_path);
 		if (!script.Run()) {
-			std::cerr << "Failed to run .xer script: " << script_path << "\n";
+			WriteStderrLine(absl::StrCat("Failed to run .xer script: ", script_path));
 			return 1;
 		}
 		return 0;
@@ -824,7 +853,7 @@ int main(int argc, char** argv) {
 
 	FlowScript script(script_path);
 	if (!script.Run()) {
-		std::cerr << "Failed to run script: " << script_path << "\n";
+		WriteStderrLine(absl::StrCat("Failed to run script: ", script_path));
 		FlowScript::Shutdown();
 		return 1;
 	}

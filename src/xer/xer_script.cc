@@ -11,6 +11,8 @@
 
 #include <uv.h>
 
+#include "flux/terminal/terminal_output_renderer.h"
+
 #if ENGINE_HAS_ICU
 #include <unicode/normalizer2.h>
 #include <unicode/unistr.h>
@@ -21,7 +23,6 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
-#include <iostream>
 #include <memory>
 #include <optional>
 #include <sstream>
@@ -775,7 +776,7 @@ private:
             output = absl::StrReplaceAll(output, replacements);
         }
 
-        std::cout << output << "\n";
+		flux::terminal::WriteLine(flux::terminal::OutputStream::kStdout, output);
         return RuntimeValue();
     }
 
@@ -969,7 +970,7 @@ bool XerScript::Run() const {
     std::string error;
     const bool ok = Run(&error);
     if (!ok && !error.empty()) {
-        std::cerr << error << "\n";
+		flux::terminal::WriteLine(flux::terminal::OutputStream::kStderr, error);
     }
     return ok;
 }

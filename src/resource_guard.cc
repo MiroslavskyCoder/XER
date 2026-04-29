@@ -3,12 +3,15 @@
 #include <sys/resource.h>   // getrusage, setrlimit
 #include <sys/time.h>
 
+#include <absl/strings/str_cat.h>
+
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
-#include <iostream>
 #include <sstream>
+
+#include "flux/terminal/terminal_output_renderer.h"
 
 // ─────────────────────────────────────────────────────────────
 //  Build options from environment
@@ -109,16 +112,22 @@ void ResourceGuard::Log(const std::string& msg) const {
         const auto now = std::chrono::steady_clock::now();
         const auto ms  = std::chrono::duration_cast<std::chrono::milliseconds>(
                              now.time_since_epoch()).count();
-        std::cerr << "[" << ms << "] [resource_guard] " << msg << "\n";
+		flux::terminal::WriteLine(
+			flux::terminal::OutputStream::kStderr,
+			absl::StrCat("[", ms, "] [resource_guard] ", msg));
     } else {
-        std::cerr << "[resource_guard] " << msg << "\n";
+		flux::terminal::WriteLine(
+			flux::terminal::OutputStream::kStderr,
+			absl::StrCat("[resource_guard] ", msg));
     }
 }
 
 void ResourceGuard::KillIsolate(const std::string& reason) {
     if (was_killed_.exchange(true, std::memory_order_acq_rel)) return;
     kill_reason_ = reason;
-    std::cerr << "[resource_guard] LIMIT EXCEEDED – terminating script: " << reason << "\n";
+	flux::terminal::WriteLine(
+		flux::terminal::OutputStream::kStderr,
+		absl::StrCat("[resource_guard] LIMIT EXCEEDED – terminating script: ", reason));
     if (isolate_ != nullptr) {
         isolate_->TerminateExecution();
     }
@@ -151,8 +160,10 @@ void ResourceGuard::MonitorLoop() {
                 && static_cast<int>(rss) >= opts_.memory_warn_mib
                 && !warned_memory_.load(std::memory_order_acquire)) {
             warned_memory_.store(true, std::memory_order_release);
-            std::cerr << "[resource_guard] MEMORY WARNING: RSS=" << rss
-                      << " MiB >= warn=" << opts_.memory_warn_mib << " MiB\n";
+            flux::terminal::WriteLine(
+                flux::terminal::OutputStream::kStderr,
+                absl::StrCat("[resource_guard] MEMORY WARNING: RSS=", rss,
+                    " MiB >= warn=", opts_.memory_warn_mib, " MiB"));
         }
 
         // Hard kill threshold.

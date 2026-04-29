@@ -7,7 +7,8 @@
 
 #include <csignal>
 #include <filesystem>
-#include <iostream>
+#include <absl/strings/str_cat.h>
+#include "flux/terminal/terminal_output_renderer.h"
 #include <uv.h>
 
 std::atomic<bool> WatchLiveUpdatexScript::stop_requested_{false};
@@ -29,15 +30,21 @@ struct WatchLoopState {
     bool last_ok = true;
 };
 
+void WriteWatchLine(flux::terminal::OutputStream stream, const std::string& text) {
+	flux::terminal::WriteLine(stream, text);
+}
+
 void TriggerRestart(WatchLoopState* state, const std::string& reason) {
     ++state->cycles;
-    std::cout << WatchCliSupport::CycleMessage(state->cycles, reason) << "\n";
+	WriteWatchLine(flux::terminal::OutputStream::kStdout,
+		WatchCliSupport::CycleMessage(state->cycles, reason));
     state->previous = WatchChangeDetector::BuildMap(state->scanner.Scan());
 
     std::string compile_error;
     state->last_ok = state->service.Recompile(state->script_path, &compile_error);
     if (!state->last_ok && !compile_error.empty()) {
-        std::cerr << "[watch] " << compile_error << "\n";
+		WriteWatchLine(flux::terminal::OutputStream::kStderr,
+			absl::StrCat("[watch] ", compile_error));
     }
 }
 
@@ -106,7 +113,9 @@ int WatchLiveUpdatexScript::Run() {
     std::signal(SIGINT, HandleWatchSignal);
     std::signal(SIGTERM, HandleWatchSignal);
 
-    std::cout << WatchCliSupport::Header(config_.script_path, config_.poll_interval_ms);
+    flux::terminal::Write(
+        flux::terminal::OutputStream::kStdout,
+        WatchCliSupport::Header(config_.script_path, config_.poll_interval_ms));
 
     const std::filesystem::path script_path(config_.script_path);
     const std::filesystem::path root = script_path.parent_path().empty()
@@ -119,7 +128,8 @@ int WatchLiveUpdatexScript::Run() {
     std::string compile_error;
     state.last_ok = state.service.Recompile(config_.script_path, &compile_error);
     if (!state.last_ok && !compile_error.empty()) {
-        std::cerr << "[watch] " << compile_error << "\n";
+        WriteWatchLine(flux::terminal::OutputStream::kStderr,
+            absl::StrCat("[watch] ", compile_error));
     }
 
     uv_loop_t loop;
@@ -140,7 +150,8 @@ int WatchLiveUpdatexScript::Run() {
     const std::string watch_path = root.string();
     const int fs_rc = uv_fs_event_start(&fs_watcher, WatchFsEvent, watch_path.c_str(), 0);
     if (fs_rc != 0) {
-        std::cerr << "[watch] fs-event disabled, fallback to timer polling only\n";
+        WriteWatchLine(flux::terminal::OutputStream::kStderr,
+            "[watch] fs-event disabled, fallback to timer polling only");
     }
 
     while (!stop_requested_.load()) {
@@ -163,7 +174,7 @@ int WatchLiveUpdatexScript::Run() {
     uv_loop_close(&loop);
 
     state.service.Stop();
-    std::cout << "[watch] stopped\n";
+    WriteWatchLine(flux::terminal::OutputStream::kStdout, "[watch] stopped");
     return state.last_ok ? 0 : 1;
 }
 
