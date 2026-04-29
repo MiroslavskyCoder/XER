@@ -2,14 +2,15 @@
 
 #include "helper/js_buffer.h"
 
-#include <absl/strings/str_append.h>
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_format.h>
 
-#include <iostream>
+#include <algorithm>
 #include <sstream>
 #include <unordered_set>
 #include <vector>
+
+#include "flux/terminal/terminal_output_renderer.h"
 
 #include <range/v3/range/conversion.hpp>
 #include <range/v3/view/iota.hpp>
@@ -128,13 +129,13 @@ std::string FormatBytePreview(const std::vector<std::uint8_t>& bytes,
 				      std::size_t max_items,
 				      bool hex) {
 	const std::size_t limit = std::min(bytes.size(), max_items);
-	const auto tokens = ranges::views::iota(std::size_t{0}, limit)
+	const auto token_range = ranges::views::iota(std::size_t{0}, limit)
 		| ranges::views::transform([&](std::size_t index) {
 			return hex
 				? HexByte(bytes[index])
 				: absl::StrCat(static_cast<int>(bytes[index]));
-		})
-		| ranges::to<std::vector<std::string>>();
+		});
+	const auto tokens = ranges::to<std::vector<std::string>>(token_range);
 
 	std::string out;
 	for (std::size_t index = 0; index < tokens.size(); ++index) {
@@ -333,11 +334,11 @@ std::string JoinValues(v8::Isolate* isolate,
 			       const std::vector<v8::Local<v8::Value>>& values,
 			       const FormatOptions& options) {
 	std::unordered_set<int> seen_hashes;
-	const auto pieces = values
+	const auto piece_range = values
 		| ranges::views::transform([&](v8::Local<v8::Value> value) {
 			return FormatValueImpl(isolate, context, value, options.max_depth, 0, true, &seen_hashes, options);
-		})
-		| ranges::to<std::vector<std::string>>();
+		});
+	const auto pieces = ranges::to<std::vector<std::string>>(piece_range);
 
 	std::string text;
 	for (std::size_t index = 0; index < pieces.size(); ++index) {
@@ -361,9 +362,9 @@ std::string JoinArguments(v8::Isolate* isolate,
 }
 
 void WriteLine(Stream stream, std::string_view text) {
-	std::ostream& output = stream == Stream::kStdout ? std::cout : std::cerr;
-	output << text << '\n';
-	output.flush();
+	flux::terminal::WriteLine(
+		stream == Stream::kStdout ? flux::terminal::OutputStream::kStdout : flux::terminal::OutputStream::kStderr,
+		text);
 }
 
 }  // namespace flux::console

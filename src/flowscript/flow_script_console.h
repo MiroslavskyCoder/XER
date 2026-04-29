@@ -20,6 +20,10 @@ void ConsoleWarnCallback(const v8::FunctionCallbackInfo<v8::Value>& args);
 void ConsoleErrorCallback(const v8::FunctionCallbackInfo<v8::Value>& args);
 void ConsoleDirCallback(const v8::FunctionCallbackInfo<v8::Value>& args);
 void ConsoleAssertCallback(const v8::FunctionCallbackInfo<v8::Value>& args);
+void ConsoleTableCallback(const v8::FunctionCallbackInfo<v8::Value>& args);
+void ConsoleTimeCallback(const v8::FunctionCallbackInfo<v8::Value>& args);
+void ConsoleTimeEndCallback(const v8::FunctionCallbackInfo<v8::Value>& args);
+void ConsoleTraceCallback(const v8::FunctionCallbackInfo<v8::Value>& args);
 
 bool ValueToByteVector(
     v8::Local<v8::Context> context,

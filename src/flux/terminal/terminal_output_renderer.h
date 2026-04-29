@@ -1,0 +1,16 @@
+#pragma once
+
+#include <string>
+#include <string_view>
+
+#include "flux/terminal/terminal_interface.h"
+
+namespace flux::terminal {
+
+void Write(TerminalInterface& terminal, OutputStream stream, std::string_view text);
+void Write(OutputStream stream, std::string_view text);
+void WriteLine(TerminalInterface& terminal, OutputStream stream, std::string_view text);
+void WriteLine(OutputStream stream, std::string_view text);
+std::string Snapshot(OutputStream stream);
+
+}  // namespace flux::terminal
