@@ -2,6 +2,7 @@
 
 #include <absl/strings/ascii.h>
 #include <absl/strings/str_cat.h>
+#include <absl/strings/str_format.h>
 
 #include <algorithm>
 #include <iterator>
@@ -195,6 +196,92 @@ std::ptrdiff_t JsBuffer::IndexOf(ConstSpan haystack, ConstSpan needle, SizeType 
 		return -1;
 	}
 	return static_cast<std::ptrdiff_t>(offset) + (match.begin() - window.begin());
+}
+
+std::ptrdiff_t JsBuffer::LastIndexOf(ConstSpan haystack, ConstSpan needle, SizeType offset) {
+	const SizeType clamped_offset = std::min(offset, haystack.size());
+	if (needle.empty()) {
+		return static_cast<std::ptrdiff_t>(clamped_offset);
+	}
+	if (needle.size() > haystack.size()) {
+		return -1;
+	}
+	SizeType start = std::min(clamped_offset, haystack.size() - needle.size());
+	for (;;) {
+		if (ranges::equal(haystack.subspan(start, needle.size()), needle)) {
+			return static_cast<std::ptrdiff_t>(start);
+		}
+		if (start == 0) {
+			break;
+		}
+		--start;
+	}
+	return -1;
+}
+
+JsBuffer::SizeType JsBuffer::Fill(MutableSpan destination,
+				       ConstSpan pattern,
+				       SizeType offset,
+				       SizeType end) {
+	if (pattern.empty() || offset >= destination.size()) {
+		return 0;
+	}
+	const SizeType clamped_end = std::min(end, destination.size());
+	if (offset >= clamped_end) {
+		return 0;
+	}
+	SizeType written = 0;
+	for (SizeType index = offset; index < clamped_end; ++index) {
+		destination[index] = pattern[written % pattern.size()];
+		++written;
+	}
+	return written;
+}
+
+JsBuffer::Bytes JsBuffer::Slice(ConstSpan source, SizeType start, SizeType end) {
+	const SizeType clamped_start = std::min(start, source.size());
+	const SizeType clamped_end = std::min(end, source.size());
+	if (clamped_start >= clamped_end) {
+		return Bytes();
+	}
+	return Bytes(source.begin() + static_cast<std::ptrdiff_t>(clamped_start),
+		     source.begin() + static_cast<std::ptrdiff_t>(clamped_end));
+}
+
+namespace {
+
+bool SwapChunks(JsBuffer::MutableSpan bytes, std::size_t width, std::string* error_out) {
+	if ((bytes.size() % width) != 0u) {
+		if (error_out != nullptr) {
+			*error_out = absl::StrFormat("buffer size %d must be a multiple of %d",
+				static_cast<int>(bytes.size()),
+				static_cast<int>(width));
+		}
+		return false;
+	}
+	for (std::size_t chunk = 0; chunk < bytes.size(); chunk += width) {
+		for (std::size_t index = 0; index < width / 2u; ++index) {
+			std::swap(bytes[chunk + index], bytes[chunk + width - 1u - index]);
+		}
+	}
+	if (error_out != nullptr) {
+		error_out->clear();
+	}
+	return true;
+}
+
+}  // namespace
+
+bool JsBuffer::Swap16(MutableSpan bytes, std::string* error_out) {
+	return SwapChunks(bytes, 2u, error_out);
+}
+
+bool JsBuffer::Swap32(MutableSpan bytes, std::string* error_out) {
+	return SwapChunks(bytes, 4u, error_out);
+}
+
+bool JsBuffer::Swap64(MutableSpan bytes, std::string* error_out) {
+	return SwapChunks(bytes, 8u, error_out);
 }
 
 }  // namespace Engine::Helper

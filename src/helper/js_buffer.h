@@ -38,6 +38,19 @@ public:
 	static int Compare(ConstSpan lhs, ConstSpan rhs);
 	static bool Equals(ConstSpan lhs, ConstSpan rhs);
 	static std::ptrdiff_t IndexOf(ConstSpan haystack, ConstSpan needle, SizeType offset = 0);
+	static std::ptrdiff_t LastIndexOf(ConstSpan haystack,
+				     ConstSpan needle,
+				     SizeType offset = std::numeric_limits<SizeType>::max());
+	static SizeType Fill(MutableSpan destination,
+			     ConstSpan pattern,
+			     SizeType offset = 0,
+			     SizeType end = std::numeric_limits<SizeType>::max());
+	static Bytes Slice(ConstSpan source,
+			   SizeType start = 0,
+			   SizeType end = std::numeric_limits<SizeType>::max());
+	static bool Swap16(MutableSpan bytes, std::string* error_out = nullptr);
+	static bool Swap32(MutableSpan bytes, std::string* error_out = nullptr);
+	static bool Swap64(MutableSpan bytes, std::string* error_out = nullptr);
 };
 
 }  // namespace Engine::Helper

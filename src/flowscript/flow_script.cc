@@ -2,10 +2,12 @@
 
 #include <libplatform/libplatform.h>
 
+#include <cstdlib>
 #include <iostream>
 #include <mutex>
 #include <utility>
 
+#include "flow_script_buffer.h"
 #include "engine_params.h"
 #include "flow_script_console.h"
 #include "flow_script_event_bus.h"
@@ -157,33 +159,15 @@ bool FlowScript::Run() const {
                 std::cerr << "[flow_script]   sandbox: ImportModule binding skipped\n";
             }
 
-            v8::Local<v8::Object> console = v8::Object::New(isolate);
-            bool console_bound = console
-                                     ->Set(
-                                         context,
-                                         v8::String::NewFromUtf8Literal(isolate, "log"),
-                                         v8::Function::New(context, flow_script_detail::ConsoleLogCallback)
-                                             .ToLocalChecked())
-                                     .FromMaybe(false);
-            console_bound = console_bound
-                            && console
-                                   ->Set(
-                                       context,
-                                       v8::String::NewFromUtf8Literal(isolate, "error"),
-                                       v8::Function::New(context, flow_script_detail::ConsoleErrorCallback)
-                                           .ToLocalChecked())
-                                   .FromMaybe(false);
-            console_bound = console_bound
-                            && context->Global()
-                                   ->Set(
-                                       context,
-                                       v8::String::NewFromUtf8Literal(isolate, "console"),
-                                       console)
-                                   .FromMaybe(false);
-            if (!console_bound) {
-                std::cerr << "Failed to bind console\n";
+            if (!flow_script_detail::BindConsoleGlobals(isolate, context)) {
+				std::cerr << "Failed to bind console\n";
                 break;
             }
+
+            if (!flow_script_detail::BindBuffer(isolate, context)) {
+				std::cerr << "Failed to bind Buffer\n";
+				break;
+			}
 
             if (!flow_script_detail::BindEventBus(isolate, context, &event_bus_state)) {
                 std::cerr << "Failed to bind EventBus\n";
