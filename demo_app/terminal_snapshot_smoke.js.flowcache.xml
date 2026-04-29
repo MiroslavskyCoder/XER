@@ -30,13 +30,13 @@
     <validation_mode>hash</validation_mode>
     <validation_reason>metadata_sha256_match</validation_reason>
     <validation_stats>
-      <total>3</total>
-      <hash>2</hash>
+      <total>5</total>
+      <hash>4</hash>
       <diff>0</diff>
       <rebuild>1</rebuild>
     </validation_stats>
     <validation_history>
-      <count>3</count>
+      <count>5</count>
       <validation>
         <mode>rebuild</mode>
         <reason>cache_missing_or_invalid</reason>
@@ -54,6 +54,18 @@
         <reason>metadata_sha256_match</reason>
         <status>ready</status>
         <timestamp_ticks>1777482785277137594</timestamp_ticks>
+      </validation>
+      <validation>
+        <mode>hash</mode>
+        <reason>metadata_sha256_match</reason>
+        <status>ready</status>
+        <timestamp_ticks>1777488573178238572</timestamp_ticks>
+      </validation>
+      <validation>
+        <mode>hash</mode>
+        <reason>metadata_sha256_match</reason>
+        <status>ready</status>
+        <timestamp_ticks>1777489278195916960</timestamp_ticks>
       </validation>
     </validation_history>
   </cache>

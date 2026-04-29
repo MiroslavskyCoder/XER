@@ -53,7 +53,7 @@ int main() {
 	const bool raw_stderr_ok = raw_stderr.find(esc + "]0;warn-title\a") != std::string::npos
 		&& raw_stderr.find(esc + "[33m") != std::string::npos
 		&& raw_stderr.find(esc + "Pdrop" + esc + "\\") != std::string::npos;
-	const bool plain_stdout_ok = plain_stdout == "red B green\n";
+	const bool plain_stdout_ok = plain_stdout == "red green\n";
 	const bool plain_stderr_ok = plain_stderr == "warn: amber\n";
 
 	flux::terminal::ClearSnapshot(OutputStream::kStdout);

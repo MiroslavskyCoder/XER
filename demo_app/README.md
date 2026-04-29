@@ -82,12 +82,14 @@ The terminal snapshot smoke script verifies:
 
 The standalone C++ terminal manager smoke verifies:
 
-- direct `TerminalManager::Write`, `WriteLine`, `Snapshot`, and `ResetBuffer` behavior
+- direct `TerminalManager::Write`, `WriteLine`, `Snapshot`, `SnapshotPlainText`, and `ResetBuffer` behavior
+- persistent plain-text screen state is tracked per stream inside the terminal buffer
 - stdout and stderr buffer separation without using FlowScript runtime
 
 The standalone ANSI/renderer smoke verifies:
 
 - raw ANSI escape sequences remain in the terminal snapshot buffer
-- `SnapshotPlainText()` now runs through the terminal emulator layer instead of using parser output directly
+- `SnapshotPlainText()` is served from the persistent terminal emulator state instead of reparsing raw snapshots
 - renderer-facing plain text strips CSI, OSC, DCS, APC, PM, SOS, and single ESC control paths
+- cursor motion and erase handling for `CSI A/B/C/D`, `CSI K`, and `CSI J`
 - stdout clearing does not wipe stderr renderer state

@@ -3,8 +3,6 @@
 #include <chrono>
 #include <cstdint>
 #include <cstdlib>
-#include <fstream>
-#include <iostream>
 #include <system_error>
 #include <thread>
 #include <utility>
@@ -14,10 +12,17 @@
 #include <libxml/xmlsave.h>
 #include <openssl/sha.h>
 
+#include <absl/strings/str_cat.h>
+
+#include "cache/cache_constants.h"
+#include "cache/cache_encryption_handler.h"
+#include "cache/cache_manager.h"
+#include "cache/persistent_storage.h"
 #include "engine_params.h"
+#include "flux/terminal/terminal_output_renderer.h"
+#include "helper/string.h"
 #include "javascript/common/compression_codec.h"
 #include "helper/tool_to.h"
-#include <iostream>
 
 namespace flow_script_detail::require_support {
 
@@ -38,29 +43,6 @@ std::filesystem::path TempPathForTarget(const std::filesystem::path& target,
     tmp += ".";
     tmp += std::to_string(ticks);
     return tmp;
-}
-
-bool CommitTempFile(const std::filesystem::path& tmp,
-                    const std::filesystem::path& target,
-                    std::string* error_out) {
-    std::error_code ec;
-    std::filesystem::rename(tmp, target, ec);
-    if (!ec) {
-        return true;
-    }
-
-    std::filesystem::remove(target, ec);
-    ec.clear();
-    std::filesystem::rename(tmp, target, ec);
-    if (!ec) {
-        return true;
-    }
-
-    if (error_out != nullptr) {
-        *error_out = "Failed to commit file: " + target.string() + ", reason: " + ec.message();
-    }
-    std::filesystem::remove(tmp, ec);
-    return false;
 }
 
 std::string BoolToString(bool value) {
@@ -166,6 +148,27 @@ std::string ShellEscape(const std::string& input) {
     return out;
 }
 
+Engine::Cache::PersistentStorage StorageForPath(const std::filesystem::path& path) {
+    return Engine::Cache::PersistentStorage(path.parent_path());
+}
+
+xmlDocPtr ReadXmlDocument(const std::filesystem::path& metadata_path) {
+    Engine::Cache::PersistentStorage storage = StorageForPath(metadata_path);
+    std::string xml_text;
+    std::string error;
+    if (!storage.ReadTextRelative(metadata_path.filename(), &xml_text, &error) || xml_text.empty()) {
+        return nullptr;
+    }
+    return xmlReadMemory(xml_text.data(), static_cast<int>(xml_text.size()), metadata_path.string().c_str(), nullptr, XML_PARSE_NONET);
+}
+
+void EmitVerboseTypeScriptLog(const EngineParams& params, const std::string& message) {
+    if (!params.is_verbose()) {
+        return;
+    }
+    flux::terminal::WriteLine(flux::terminal::OutputStream::kStderr, message);
+}
+
 bool CompileTypeScriptToJavaScript(const std::filesystem::path& ts_path,
                                    const std::filesystem::path& js_path,
                                    std::string* compiler_used,
@@ -212,21 +215,21 @@ bool CompileTypeScriptToJavaScript(const std::filesystem::path& ts_path,
     const std::string& forced = params.ts_compiler;
 
     auto try_tsc = [&]() -> bool {
-        if (params.is_verbose()) std::cerr << "[ts] trying tsc: " << tsc_cmd << "\n";
+        EmitVerboseTypeScriptLog(params, absl::StrCat("[ts] trying tsc: ", tsc_cmd));
         const int rc = std::system(tsc_cmd.c_str());
         const bool ok = (rc == 0 && std::filesystem::exists(js_path));
         if (ok && compiler_used) *compiler_used = "tsc";
         return ok;
     };
     auto try_npx_tsc = [&]() -> bool {
-        if (params.is_verbose()) std::cerr << "[ts] trying npx-tsc: " << npx_tsc_cmd << "\n";
+        EmitVerboseTypeScriptLog(params, absl::StrCat("[ts] trying npx-tsc: ", npx_tsc_cmd));
         const int rc = std::system(npx_tsc_cmd.c_str());
         const bool ok = (rc == 0 && std::filesystem::exists(js_path));
         if (ok && compiler_used) *compiler_used = "npx-tsc";
         return ok;
     };
     auto try_esbuild = [&]() -> bool {
-        if (params.is_verbose()) std::cerr << "[ts] trying esbuild: " << esbuild_cmd << "\n";
+        EmitVerboseTypeScriptLog(params, absl::StrCat("[ts] trying esbuild: ", esbuild_cmd));
         const int rc = std::system(esbuild_cmd.c_str());
         const bool ok = (rc == 0 && std::filesystem::exists(js_path));
         if (ok && compiler_used) *compiler_used = "esbuild";
@@ -388,22 +391,31 @@ std::string ToUtf8(v8::Isolate* isolate, v8::Local<v8::Value> value) {
     if (*utf8 == nullptr) {
         return {};
     }
-    return *utf8;
+        return Helper::String::NormalizeUtf8(*utf8);
 }
 
 std::filesystem::path CachePathForScript(const std::filesystem::path& script_path) {
     const std::string cache_name = script_path.filename().string() + ".flowcache.bin";
-    return script_path.parent_path() / cache_name;
+        return Engine::Cache::CacheManager::Instance().PathFor(
+		Engine::Cache::constants::kFlowScriptScope,
+		script_path.string(),
+		cache_name);
 }
 
 std::filesystem::path MetadataPathForScript(const std::filesystem::path& script_path) {
     const std::string meta_name = script_path.filename().string() + ".flowcache.xml";
-    return script_path.parent_path() / meta_name;
+        return Engine::Cache::CacheManager::Instance().PathFor(
+		Engine::Cache::constants::kFlowScriptScope,
+		script_path.string(),
+		meta_name);
 }
 
 std::filesystem::path DiffTextPathForScript(const std::filesystem::path& script_path) {
     const std::string diff_name = script_path.filename().string() + ".flowcache.diff";
-    return script_path.parent_path() / diff_name;
+        return Engine::Cache::CacheManager::Instance().PathFor(
+		Engine::Cache::constants::kFlowScriptScope,
+		script_path.string(),
+		diff_name);
 }
 
 std::unique_ptr<ScriptCacheLock> AcquireScriptCacheLock(const std::filesystem::path& script_path,
@@ -474,11 +486,11 @@ std::string Sha256Hex(const std::vector<std::uint8_t>& bytes) {
 
 bool ReadCacheMetadataHashes(const std::filesystem::path& metadata_path,
                              CachedMetadataHashes* out_hashes) {
-    if (out_hashes == nullptr || !std::filesystem::exists(metadata_path)) {
+    if (out_hashes == nullptr) {
         return false;
     }
 
-    xmlDocPtr doc = xmlReadFile(metadata_path.string().c_str(), nullptr, XML_PARSE_NONET);
+    xmlDocPtr doc = ReadXmlDocument(metadata_path);
     if (doc == nullptr) {
         return false;
     }
@@ -506,11 +518,11 @@ bool ReadCacheMetadataHashes(const std::filesystem::path& metadata_path,
 
 bool ReadValidationCounters(const std::filesystem::path& metadata_path,
                             ValidationCounters* counters) {
-    if (counters == nullptr || !std::filesystem::exists(metadata_path)) {
+    if (counters == nullptr) {
         return false;
     }
 
-    xmlDocPtr doc = xmlReadFile(metadata_path.string().c_str(), nullptr, XML_PARSE_NONET);
+    xmlDocPtr doc = ReadXmlDocument(metadata_path);
     if (doc == nullptr) {
         return false;
     }
@@ -539,11 +551,11 @@ bool ReadValidationCounters(const std::filesystem::path& metadata_path,
 
 bool ReadValidationHistory(const std::filesystem::path& metadata_path,
                            ValidationHistory* history) {
-    if (history == nullptr || !std::filesystem::exists(metadata_path)) {
+    if (history == nullptr) {
         return false;
     }
 
-    xmlDocPtr doc = xmlReadFile(metadata_path.string().c_str(), nullptr, XML_PARSE_NONET);
+    xmlDocPtr doc = ReadXmlDocument(metadata_path);
     if (doc == nullptr) {
         return false;
     }
@@ -622,18 +634,22 @@ bool WriteCacheMetadataFile(const std::filesystem::path& meta_path,
         return false;
     }
 
-    const std::filesystem::path tmp_path = TempPathForTarget(meta_path, "xml");
-    const int rc = xmlSaveFormatFileEnc(tmp_path.string().c_str(), doc, "UTF-8", 1);
+    xmlChar* xml_buffer = nullptr;
+    int xml_size = 0;
+    xmlDocDumpFormatMemoryEnc(doc, &xml_buffer, &xml_size, "UTF-8", 1);
     xmlFreeDoc(doc);
 
-    if (rc < 0) {
+    if (xml_buffer == nullptr || xml_size < 0) {
         if (error_out != nullptr) {
             *error_out = "Failed to save XML metadata: " + meta_path.string();
         }
         return false;
     }
 
-    return CommitTempFile(tmp_path, meta_path, error_out);
+	std::string xml_text(reinterpret_cast<const char*>(xml_buffer), static_cast<std::size_t>(xml_size));
+	xmlFree(xml_buffer);
+	Engine::Cache::PersistentStorage storage = StorageForPath(meta_path);
+	return storage.WriteTextRelative(meta_path.filename(), xml_text, error_out);
 }
 
 bool WriteDiffText(const std::filesystem::path& diff_path,
@@ -653,77 +669,22 @@ bool WriteDiffText(const std::filesystem::path& diff_path,
         text.push_back('\n');
     }
 
-    const std::filesystem::path tmp_path = TempPathForTarget(diff_path, "txt");
-    if (!ToolTo::WriteTextFile(tmp_path, text, false, error_out)) {
-        return false;
-    }
-    return CommitTempFile(tmp_path, diff_path, error_out);
+	Engine::Cache::PersistentStorage storage = StorageForPath(diff_path);
+	return storage.WriteTextRelative(diff_path.filename(), text, error_out);
 }
 
 bool ReadBinaryFile(const std::filesystem::path& path,
                     std::vector<std::uint8_t>* bytes,
                     std::string* error_out) {
-    std::ifstream in(path, std::ios::binary);
-    if (!in.is_open()) {
-        if (error_out != nullptr) {
-            *error_out = "Failed to open cache file: " + path.string();
-        }
-        return false;
-    }
-
-    in.seekg(0, std::ios::end);
-    const std::streamsize size = in.tellg();
-    in.seekg(0, std::ios::beg);
-
-    if (size < 0) {
-        if (error_out != nullptr) {
-            *error_out = "Failed to read cache file size: " + path.string();
-        }
-        return false;
-    }
-
-    bytes->assign(static_cast<std::size_t>(size), 0);
-    if (size > 0 && !in.read(reinterpret_cast<char*>(bytes->data()), size)) {
-        if (error_out != nullptr) {
-            *error_out = "Failed to read cache file bytes: " + path.string();
-        }
-        return false;
-    }
-    return true;
+	Engine::Cache::PersistentStorage storage = StorageForPath(path);
+	return storage.ReadBinaryRelative(path.filename(), bytes, error_out);
 }
 
 bool WriteBinaryFile(const std::filesystem::path& path,
                      const std::vector<std::uint8_t>& bytes,
                      std::string* error_out) {
-    const std::filesystem::path tmp_path = TempPathForTarget(path, "bin");
-    std::ofstream out(tmp_path, std::ios::binary | std::ios::trunc);
-    if (!out.is_open()) {
-        if (error_out != nullptr) {
-            *error_out = "Failed to create cache temp file: " + tmp_path.string();
-        }
-        return false;
-    }
-
-    if (!bytes.empty()) {
-        out.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
-        if (!out.good()) {
-            if (error_out != nullptr) {
-                *error_out = "Failed to write cache temp file: " + tmp_path.string();
-            }
-            return false;
-        }
-    }
-
-    out.flush();
-    if (!out.good()) {
-        if (error_out != nullptr) {
-            *error_out = "Failed to flush cache temp file: " + tmp_path.string();
-        }
-        return false;
-    }
-    out.close();
-
-    return CommitTempFile(tmp_path, path, error_out);
+	Engine::Cache::PersistentStorage storage = StorageForPath(path);
+	return storage.WriteBinaryRelative(path.filename(), bytes, error_out);
 }
 
 bool ReadExpandedTextFromCache(const std::filesystem::path& cache_path,
@@ -734,30 +695,17 @@ bool ReadExpandedTextFromCache(const std::filesystem::path& cache_path,
         return false;
     }
 
-    auto decompressed = engine::javascript::common::CompressionCodec::DecompressToString(compressed);
-    if (!decompressed.has_value()) {
-        if (error_out != nullptr) {
-            *error_out = "Failed to decompress cache file: " + cache_path.string();
-        }
-        return false;
-    }
-
-    *text = *decompressed;
-    return true;
+	return Engine::Cache::CacheEncryptionHandler::DecompressText(compressed, text, error_out);
 }
 
 bool RebuildCacheFromExpandedText(const std::filesystem::path& cache_path,
                                   const std::string& expanded_text,
                                   std::string* error_out) {
-    auto compressed = engine::javascript::common::CompressionCodec::Compress(expanded_text);
-    if (!compressed.has_value()) {
-        if (error_out != nullptr) {
-            *error_out = "Failed to compress script for cache: " + cache_path.string();
-        }
-        return false;
-    }
-
-    return WriteBinaryFile(cache_path, *compressed, error_out);
+	std::vector<std::uint8_t> compressed;
+	if (!Engine::Cache::CacheEncryptionHandler::CompressText(expanded_text, &compressed, error_out)) {
+		return false;
+	}
+	return WriteBinaryFile(cache_path, compressed, error_out);
 }
 
 }  // namespace flow_script_detail::require_support

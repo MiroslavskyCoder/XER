@@ -22,11 +22,14 @@
 #include "audio/demo/audio_modules_smoke.h"
 #include "audio/file_io_codecs/codec_wav_pcm.h"
 #include "audio/demo/audio_dsp_demo.h"
+#include "cache/cache_configuration.h"
 #include "crash/crash_handler.h"
 #include "ecosystem/ecosystem_manifest_loader.h"
 #include "engine_params.h"
+#include "error_handler/err_monitor.h"
 #include "flowscript/flow_script.h"
 #include "provider.h"
+#include "runtime_safety/safe_integrity_check.h"
 #include "runtime_live.h"
 #include "watch/watch_live_updatex_script.h"
 #include "xer/xer_encode.h"
@@ -708,6 +711,28 @@ int main(int argc, char** argv) {
 
 	// Export all flags to environment before building EngineParams.
 	ExportParsedToEnv(parsed);
+
+	Engine::ErrorHandler::MonitorConfiguration monitor_config;
+	monitor_config.verbose = parsed.verbose;
+	monitor_config.timestamps = parsed.timestamps;
+	monitor_config.log_level = parsed.log_level;
+	Engine::ErrorHandler::InitializeMonitor(monitor_config);
+
+	Engine::RuntimeSafety::StartupOptions startup_options;
+	startup_options.script_path = parsed.script_path.empty()
+		? std::filesystem::path()
+		: std::filesystem::path(parsed.script_path);
+	startup_options.sandbox = parsed.sandbox;
+	startup_options.verbose = parsed.verbose;
+	startup_options.async_io_workers = parsed.async_io_workers;
+	startup_options.async_io_queue_depth = parsed.async_io_queue_depth;
+	Engine::RuntimeSafety::StartupState startup_state;
+	std::string startup_error;
+	if (!Engine::RuntimeSafety::BootstrapStartup(startup_options, &startup_state, &startup_error)) {
+		Engine::ErrorHandler::ReportStartupError("bootstrap", startup_error);
+		return 1;
+	}
+	(void)startup_state;
 
 	const std::string script_path = parsed.script_path;
 	if (!std::filesystem::exists(script_path)) {

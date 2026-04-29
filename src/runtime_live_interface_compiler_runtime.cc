@@ -2,8 +2,15 @@
 
 #include "compiler.h"
 #include "compiler_source.h"
+#include "cache/cache_constants.h"
+#include "cache/cache_manager.h"
+#include "cache/persistent_storage.h"
+#include "flux/terminal/terminal_output_renderer.h"
+#include "helper/string.h"
 #include "runtime_live_summary.h"
-#include "helper/tool_to.h"
+
+#include <absl/strings/str_cat.h>
+#include <absl/strings/str_join.h>
 
 #include <filesystem>
 #include <sstream>
@@ -15,10 +22,10 @@ bool IsCppLanguage(const std::string& language) {
 }
 
 bool SaveCompilableEntryCc(
-    const std::string& cache_dir,
+    Engine::Cache::PersistentStorage* storage,
     const std::vector<std::string>& compile_units,
     std::string* write_error) {
-    if (compile_units.empty()) {
+    if (storage == nullptr || compile_units.empty()) {
         return true;
     }
 
@@ -29,11 +36,61 @@ bool SaveCompilableEntryCc(
         entry_source << "#include \"" << unit << "\"\n";
     }
 
-    return ToolTo::WriteTextFile(
-        std::filesystem::path(cache_dir) / "entry.cc",
-        entry_source.str(),
-        false,
-        write_error);
+    return storage->WriteTextRelative("entry.cc", entry_source.str(), write_error);
+}
+
+std::string BuildRuntimeLiveCacheKey(
+    const std::string& provider,
+    const std::string& language,
+    const std::string& compile_flags,
+    const std::string& link_flags,
+    const std::string& source,
+    const std::vector<RuntimeLive::InterfaceCompiler::SourceFile>& source_files) {
+    std::vector<std::string> descriptors;
+    descriptors.reserve(source_files.size());
+    for (const auto& file : source_files) {
+        descriptors.push_back(absl::StrCat(file.path, ":", file.content.size(), ":", file.is_header ? "h" : "s"));
+    }
+    return absl::StrCat(
+        provider, "|",
+        language, "|",
+        compile_flags, "|",
+        link_flags, "|",
+        source.size(), "|",
+        absl::StrJoin(descriptors, ","));
+}
+
+void EmitText(const RuntimeLive::RuntimeCallbacks* callbacks,
+          flux::terminal::OutputStream stream,
+          const std::string& text) {
+    if (callbacks != nullptr) {
+        if (stream == flux::terminal::OutputStream::kStdout && callbacks->raw_out) {
+            callbacks->raw_out(text);
+            return;
+        }
+        if (stream == flux::terminal::OutputStream::kStderr && callbacks->raw_err) {
+            callbacks->raw_err(text);
+            return;
+        }
+    }
+    if (!text.empty()) {
+        flux::terminal::Write(stream, text);
+    }
+}
+
+std::string RelativeArtifactPath(const std::filesystem::path& root,
+                 const std::filesystem::path& path) {
+    const std::filesystem::path relative = path.lexically_relative(root);
+    return relative.empty() ? path.filename().string() : relative.string();
+}
+
+std::string ReadArtifactText(const Engine::Cache::PersistentStorage& storage,
+                 const std::filesystem::path& root,
+                 const std::filesystem::path& path) {
+    std::string text;
+    std::string error;
+    storage.ReadTextRelative(RelativeArtifactPath(root, path), &text, &error);
+    return text;
 }
 
 }  // namespace
@@ -44,48 +101,49 @@ bool RuntimeLive::InterfaceCompiler::CompileAndRun(
     ExecutionResult local_result;
     ExecutionResult* out = result != nullptr ? result : &local_result;
     *out = ExecutionResult();
-    out->cache_dir = cache_dir_;
+
+	const std::filesystem::path effective_cache_dir = cache_dir_.empty()
+		? Engine::Cache::CacheManager::Instance().DirectoryFor(
+			Engine::Cache::constants::kRuntimeLiveScope,
+			BuildRuntimeLiveCacheKey(provider_, language_, compile_flags_, link_flags_, source_, source_files_))
+		: std::filesystem::path(cache_dir_);
+	out->cache_dir = effective_cache_dir.string();
+	Engine::Cache::PersistentStorage storage(effective_cache_dir);
 
     const auto emit_out = [&](const std::string& text) {
-        if (callbacks != nullptr && callbacks->raw_out) {
-            callbacks->raw_out(text);
-        }
+		EmitText(callbacks, flux::terminal::OutputStream::kStdout, text);
     };
     const auto emit_err = [&](const std::string& text) {
-        if (callbacks != nullptr && callbacks->raw_err) {
-            callbacks->raw_err(text);
-        }
+		EmitText(callbacks, flux::terminal::OutputStream::kStderr, text);
     };
 
-    if (cache_dir_.empty() || (source_.empty() && source_files_.empty())) {
+    if (effective_cache_dir.empty() || (source_.empty() && source_files_.empty())) {
         out->error = "Cache directory or source is empty.";
         emit_err(out->error + "\n");
         return false;
     }
 
-    std::error_code ec;
-    std::filesystem::create_directories(cache_dir_, ec);
-    if (ec) {
-        out->error = "Unable to create cache directory.";
-        emit_err(out->error + "\n");
-        return false;
-    }
+	std::string cache_error;
+	if (!storage.EnsureRootDirectory(&cache_error)) {
+		out->error = cache_error.empty() ? "Unable to create cache directory." : cache_error;
+		emit_err(out->error + "\n");
+		return false;
+	}
 
     std::vector<std::string> compile_units;
     if (source_files_.empty()) {
         const CompilerSource compiler_source(
             source_,
-            cache_dir_,
+            effective_cache_dir.string(),
             provider_,
             language_,
             compile_flags_,
             link_flags_);
         std::string write_error;
-        if (!ToolTo::WriteTextFile(
-                compiler_source.source_path(),
-                compiler_source.source_with_stdio(),
-                false,
-                &write_error)) {
+        if (!storage.WriteTextRelative(
+			RelativeArtifactPath(effective_cache_dir, compiler_source.source_path()),
+			compiler_source.source_with_stdio(),
+			&write_error)) {
             out->error = "Unable to write source file.";
             emit_err(out->error + "\n");
             if (!write_error.empty()) {
@@ -95,21 +153,10 @@ bool RuntimeLive::InterfaceCompiler::CompileAndRun(
         }
     } else {
         for (const SourceFile& source_file_entry : source_files_) {
-            const std::filesystem::path file_path =
-                std::filesystem::path(cache_dir_) / source_file_entry.path;
-            std::error_code dir_ec;
-            std::filesystem::create_directories(file_path.parent_path(), dir_ec);
-            if (dir_ec) {
-                out->error = "Unable to create source directory structure.";
-                emit_err(out->error + "\n");
-                return false;
-            }
-
             std::string write_error;
-            if (!ToolTo::WriteTextFile(
-                    file_path,
+            if (!storage.WriteTextRelative(
+				source_file_entry.path,
                     source_file_entry.content,
-                    false,
                     &write_error)) {
                 out->error = "Unable to write source file.";
                 emit_err(out->error + "\n");
@@ -132,7 +179,7 @@ bool RuntimeLive::InterfaceCompiler::CompileAndRun(
 
         if (IsCppLanguage(language_)) {
             std::string write_error;
-            if (!SaveCompilableEntryCc(cache_dir_, compile_units, &write_error)) {
+            if (!SaveCompilableEntryCc(&storage, compile_units, &write_error)) {
                 out->error = "Unable to preserve entry.cc.";
                 emit_err(out->error + "\n");
                 if (!write_error.empty()) {
@@ -145,7 +192,7 @@ bool RuntimeLive::InterfaceCompiler::CompileAndRun(
 
     const CompilerSource compiler_source(
         source_,
-        cache_dir_,
+        effective_cache_dir.string(),
         provider_,
         language_,
         compile_flags_,
@@ -177,8 +224,8 @@ bool RuntimeLive::InterfaceCompiler::CompileAndRun(
     out->compile_err_path = compiler_source.compile_err_path().string();
     out->run_out_path = compiler_source.run_out_path().string();
     out->run_err_path = compiler_source.run_err_path().string();
-    out->compile_stdout = ToolTo::ReadTextFile(compiler_source.compile_out_path());
-    out->compile_stderr = ToolTo::ReadTextFile(compiler_source.compile_err_path());
+    out->compile_stdout = ReadArtifactText(storage, effective_cache_dir, compiler_source.compile_out_path());
+    out->compile_stderr = ReadArtifactText(storage, effective_cache_dir, compiler_source.compile_err_path());
 
     emit_out(out->compile_stdout);
     emit_err(out->compile_stderr);
@@ -190,8 +237,8 @@ bool RuntimeLive::InterfaceCompiler::CompileAndRun(
         return false;
     }
 
-    out->run_stdout = ToolTo::ReadTextFile(compiler_source.run_out_path());
-    out->run_stderr = ToolTo::ReadTextFile(compiler_source.run_err_path());
+    out->run_stdout = ReadArtifactText(storage, effective_cache_dir, compiler_source.run_out_path());
+    out->run_stderr = ReadArtifactText(storage, effective_cache_dir, compiler_source.run_err_path());
 
     emit_out(out->run_stdout);
     emit_err(out->run_stderr);
