@@ -1,4 +1,5 @@
 ImportModule("Git");
+ImportModule("FileSystem");
 ImportModule("System");
 
 function ensure(condition, message) {
@@ -29,6 +30,28 @@ function expectThrows(action, message) {
 	ensure(didThrow, message + ": expected throw");
 	ensure(errorText.length > 0, message + ": error text should not be empty");
 	return errorText;
+}
+
+function makeTempRepoPath() {
+	return "/tmp/xer_git_smoke_" + String(Date.now()) + "_" + String(Math.floor(Math.random() * 1000000));
+}
+
+function findStatusEntry(entries, path) {
+	for (let index = 0; index < entries.length; ++index) {
+		if (entries[index].path === path) {
+			return entries[index];
+		}
+	}
+	return null;
+}
+
+function findRenameEntry(entries, oldPath, path) {
+	for (let index = 0; index < entries.length; ++index) {
+		if (entries[index].oldPath === oldPath && entries[index].path === path) {
+			return entries[index];
+		}
+	}
+	return null;
 }
 
 const repoPath = System.projectRoot();
@@ -95,3 +118,60 @@ expectThrows(function() {
 expectThrows(function() {
 	Git.status(nonRepoPath);
 }, "Git.status non-repo path");
+
+const tempRepoPath = makeTempRepoPath();
+ensure(Git.init(tempRepoPath), "Git.init did not initialize temporary repo");
+ensure(FileSystem.exists(tempRepoPath + "/.git"), "Git.init did not create .git directory");
+ensure(Git.isRepository(tempRepoPath), "Git.init result is not recognized as a repository");
+ensure(Git.setConfig(tempRepoPath, "user.name", "XER Smoke"), "Git.setConfig user.name failed");
+ensure(Git.setConfig(tempRepoPath, "user.email", "xer-smoke@example.com"), "Git.setConfig user.email failed");
+
+ensure(FileSystem.writeText(tempRepoPath + "/alpha.txt", "alpha\n"), "failed to write alpha.txt");
+ensure(FileSystem.writeText(tempRepoPath + "/stable.txt", "stable\n"), "failed to write stable.txt");
+ensure(Git.add(tempRepoPath, "alpha.txt"), "Git.add alpha.txt failed");
+ensure(Git.add(tempRepoPath, "stable.txt"), "Git.add stable.txt failed");
+ensure(Git.commit(tempRepoPath, "initial commit"), "Git.commit initial commit failed");
+
+const tempHead = Git.head(tempRepoPath);
+ensure(typeof tempHead === "string" && tempHead.length >= 7, "temporary repo HEAD is invalid after initial commit");
+ensure(typeof Git.currentBranch(tempRepoPath) === "string" && Git.currentBranch(tempRepoPath).length > 0, "temporary repo branch is empty");
+
+ensure(Git.move(tempRepoPath, "alpha.txt", "beta.txt"), "Git.move alpha.txt -> beta.txt failed");
+ensure(FileSystem.writeText(tempRepoPath + "/beta.txt", "alpha renamed and modified\n"), "failed to modify beta.txt");
+ensure(FileSystem.writeText(tempRepoPath + "/stable.txt", "stable modified\n"), "failed to modify stable.txt");
+ensure(FileSystem.writeText(tempRepoPath + "/staged_only.txt", "staged only\n"), "failed to write staged_only.txt");
+ensure(Git.add(tempRepoPath, "staged_only.txt"), "Git.add staged_only.txt failed");
+
+const tempStatus = Git.status(tempRepoPath);
+ensureShape(tempStatus, ["dirty", "entries", "entryCount", "repoPath", "statusPorcelain"], "Git.status temp repo result shape mismatch");
+ensure(tempStatus.repoPath === tempRepoPath, "Git.status temp repoPath mismatch");
+ensure(tempStatus.dirty === true, "Git.status temp repo should be dirty");
+ensure(tempStatus.entryCount === 3, "Git.status temp repo should have exactly three entries");
+ensure(tempStatus.entries.length === 3, "Git.status temp repo entries length mismatch");
+ensure(tempStatus.statusPorcelain === Git.statusPorcelain(tempRepoPath), "Git.statusPorcelain temp repo mismatch");
+
+const renameEntry = findRenameEntry(tempStatus.entries, "alpha.txt", "beta.txt");
+ensure(renameEntry !== null, "Git.status temp repo is missing rename entry");
+ensureShape(renameEntry, ["indexStatus", "oldPath", "path", "raw", "workTreeStatus"], "Git.status rename entry shape mismatch");
+ensure(renameEntry.indexStatus === "R", "Git.status rename entry should be staged as rename");
+ensure(renameEntry.workTreeStatus === "M", "Git.status rename entry should also carry unstaged modification");
+ensure(renameEntry.raw.indexOf("alpha.txt -> beta.txt") >= 0, "Git.status rename raw entry mismatch");
+
+const stagedOnlyEntry = findStatusEntry(tempStatus.entries, "staged_only.txt");
+ensure(stagedOnlyEntry !== null, "Git.status temp repo is missing staged-only entry");
+ensureShape(stagedOnlyEntry, ["indexStatus", "oldPath", "path", "raw", "workTreeStatus"], "Git.status staged-only entry shape mismatch");
+ensure(stagedOnlyEntry.indexStatus === "A", "Git.status staged-only entry should have staged add flag");
+ensure(stagedOnlyEntry.workTreeStatus === " ", "Git.status staged-only entry should not have unstaged flag");
+
+const unstagedOnlyEntry = findStatusEntry(tempStatus.entries, "stable.txt");
+ensure(unstagedOnlyEntry !== null, "Git.status temp repo is missing unstaged-only entry");
+ensureShape(unstagedOnlyEntry, ["indexStatus", "oldPath", "path", "raw", "workTreeStatus"], "Git.status unstaged-only entry shape mismatch");
+ensure(unstagedOnlyEntry.indexStatus === " ", "Git.status unstaged-only entry should not have staged flag");
+ensure(unstagedOnlyEntry.workTreeStatus === "M", "Git.status unstaged-only entry should have modified work tree flag");
+
+const tempDescribe = Git.describe(tempRepoPath);
+ensure(tempDescribe && tempDescribe.isRepository === true, "Git.describe temp repo should report repository");
+ensure(tempDescribe.error === "", "Git.describe temp repo should not report error");
+ensure(tempDescribe.dirty === true, "Git.describe temp repo should be dirty");
+ensure(tempDescribe.statusEntryCount === tempStatus.entryCount, "Git.describe temp repo entry count mismatch");
+ensure(tempDescribe.statusPorcelain === tempStatus.statusPorcelain, "Git.describe temp repo porcelain mismatch");

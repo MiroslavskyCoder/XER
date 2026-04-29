@@ -1,8 +1,20 @@
 #include "modules/module_builders.h"
 
+#include "audio/analysis_ai/anal_onset_detection.h"
+#include "audio/analysis_ai/anal_spectrogram_generator.h"
 #include "audio/audio_core/audio_source_loader.h"
+#include "audio/dsp_algorithms/dsp_phase_vocoder.h"
+#include "audio/dsp_algorithms/dsp_spectral_shaper.h"
 #include "audio/fx_customs/fx_customs_presets.h"
 #include "audio/file_io_codecs/codec_wav_pcm.h"
+#include "audio/midi_sequencing/midi_parser.h"
+#include "audio/midi_sequencing/midi_pattern_sequencer.h"
+#include "audio/midi_sequencing/midi_sysex_handler.h"
+#include "audio/plugin_wrappers/au_host_interface.h"
+#include "audio/plugin_wrappers/clap_host_interface.h"
+#include "audio/plugin_wrappers/plugin_builtin_host.h"
+#include "audio/plugin_wrappers/vst3_host_interface.h"
+#include "audio/synth_engine/synth_voice_manager.h"
 
 #include <algorithm>
 #include <cctype>
@@ -68,6 +80,30 @@ struct AudioBatchResult {
 	AudioSourceBuffer final_audio;
 	std::vector<AudioBatchArtifact> artifacts;
 };
+
+enum class AudioProcessorKind {
+	kSpectralShaper,
+	kPhaseVocoder,
+};
+
+enum class AudioPluginFormat {
+	kBuiltin,
+	kClap,
+	kVst3,
+	kAu,
+};
+
+struct ResolvedAudioInput {
+	AudioBufferData audio_data;
+	AudioSourceBuffer source_buffer;
+	AudioSourceLoadOptions load_options;
+	std::string input_path;
+	bool from_path = false;
+};
+
+constexpr size_t kAudioModuleFftSize = 1024;
+constexpr size_t kAudioModuleHopSize = 256;
+constexpr uint32_t kAudioModulePluginBlockSize = 4096;
 
 std::string NormalizeEffectName(std::string text) {
 	std::transform(text.begin(), text.end(), text.begin(), [](unsigned char ch) {
@@ -183,6 +219,22 @@ bool RequireStringArrayArg(const v8::FunctionCallbackInfo<v8::Value>& args,
 	return true;
 }
 
+bool RequireUint32Arg(const v8::FunctionCallbackInfo<v8::Value>& args,
+			     int index,
+			     const char* name,
+			     uint32_t* out) {
+	if (out == nullptr) {
+		Engine::Helper::ThrowError(args.GetIsolate(), "uint32 output target is null");
+		return false;
+	}
+	if (args.Length() <= index || !args[index]->IsNumber()) {
+		Engine::Helper::ThrowTypeError(args.GetIsolate(), name);
+		return false;
+	}
+	*out = args[index]->Uint32Value(args.GetIsolate()->GetCurrentContext()).FromMaybe(0u);
+	return true;
+}
+
 int GetObjectInt(v8::Isolate* isolate,
 			 v8::Local<v8::Context> context,
 			 v8::Local<v8::Object> object,
@@ -194,6 +246,19 @@ int GetObjectInt(v8::Isolate* isolate,
 		return fallback;
 	}
 	return value->Int32Value(context).FromMaybe(fallback);
+}
+
+double GetObjectDouble(v8::Isolate* isolate,
+			      v8::Local<v8::Context> context,
+			      v8::Local<v8::Object> object,
+			      const char* primary_key,
+			      const char* secondary_key,
+			      double fallback) {
+	v8::Local<v8::Value> value;
+	if (!GetObjectValue(isolate, context, object, primary_key, secondary_key, &value) || !value->IsNumber()) {
+		return fallback;
+	}
+	return value->NumberValue(context).FromMaybe(fallback);
 }
 
 ResampleQuality ParseResampleQuality(std::string value) {
@@ -398,6 +463,33 @@ v8::Local<v8::Array> MakeByteArray(v8::Isolate* isolate,
 	return array;
 }
 
+template <typename T>
+v8::Local<v8::Array> MakeNumberArray(v8::Isolate* isolate,
+				     v8::Local<v8::Context> context,
+				     const std::vector<T>& values) {
+	v8::Local<v8::Array> array = v8::Array::New(isolate, static_cast<int>(values.size()));
+	for (size_t index = 0; index < values.size(); ++index) {
+		array->Set(
+			context,
+			static_cast<uint32_t>(index),
+			v8::Number::New(isolate, static_cast<double>(values[index]))).FromMaybe(false);
+	}
+	return array;
+}
+
+v8::Local<v8::Array> MakeFloatMatrixArray(v8::Isolate* isolate,
+				      v8::Local<v8::Context> context,
+				      const std::vector<std::vector<float>>& rows) {
+	v8::Local<v8::Array> array = v8::Array::New(isolate, static_cast<int>(rows.size()));
+	for (size_t index = 0; index < rows.size(); ++index) {
+		array->Set(
+			context,
+			static_cast<uint32_t>(index),
+			MakeNumberArray(isolate, context, rows[index])).FromMaybe(false);
+	}
+	return array;
+}
+
 v8::Local<v8::Object> MakeAudioBufferObject(v8::Isolate* isolate,
 				    v8::Local<v8::Context> context,
 				    const AudioSourceBuffer& buffer) {
@@ -511,30 +603,25 @@ bool TryReadAudioBufferObject(v8::Isolate* isolate,
 	return true;
 }
 
-bool ParseAudioBufferData(v8::Isolate* isolate,
-			  v8::Local<v8::Context> context,
-			  const v8::FunctionCallbackInfo<v8::Value>& args,
-			  int value_index,
-			  int options_index,
-			  AudioBufferData* out) {
+bool ParseAudioBufferValue(v8::Isolate* isolate,
+			   v8::Local<v8::Context> context,
+			   v8::Local<v8::Value> value,
+			   v8::Local<v8::Value> options_value,
+			   AudioBufferData* out) {
 	if (out == nullptr) {
 		Engine::Helper::ThrowError(isolate, "audio buffer target is null");
 		return false;
 	}
-	if (args.Length() <= value_index) {
-		Engine::Helper::ThrowTypeError(isolate, "audio buffer argument is required");
-		return false;
-	}
 
 	AudioBufferData parsed;
-	if (!TryReadAudioBufferObject(isolate, context, args[value_index], &parsed)
-		&& !ReadSampleVector(context, args[value_index], &parsed.samples)) {
+	if (!TryReadAudioBufferObject(isolate, context, value, &parsed)
+			&& !ReadSampleVector(context, value, &parsed.samples)) {
 		Engine::Helper::ThrowTypeError(isolate, "audio value expects { samples, sampleRate, channels } or a numeric array/typed array");
 		return false;
 	}
 
-	if (args.Length() > options_index && args[options_index]->IsObject()) {
-		v8::Local<v8::Object> options = args[options_index].As<v8::Object>();
+	if (options_value->IsObject()) {
+		v8::Local<v8::Object> options = options_value.As<v8::Object>();
 		parsed.sample_rate = GetObjectInt(isolate, context, options, "sampleRate", "sample_rate", parsed.sample_rate);
 		parsed.channels = GetObjectInt(isolate, context, options, "channels", nullptr, parsed.channels);
 	}
@@ -558,6 +645,27 @@ bool ParseAudioBufferData(v8::Isolate* isolate,
 	return true;
 }
 
+bool ParseAudioBufferData(v8::Isolate* isolate,
+			  v8::Local<v8::Context> context,
+			  const v8::FunctionCallbackInfo<v8::Value>& args,
+			  int value_index,
+			  int options_index,
+			  AudioBufferData* out) {
+	if (out == nullptr) {
+		Engine::Helper::ThrowError(isolate, "audio buffer target is null");
+		return false;
+	}
+	if (args.Length() <= value_index) {
+		Engine::Helper::ThrowTypeError(isolate, "audio buffer argument is required");
+		return false;
+	}
+	v8::Local<v8::Value> options_value = v8::Undefined(isolate);
+	if (args.Length() > options_index) {
+		options_value = args[options_index];
+	}
+	return ParseAudioBufferValue(isolate, context, args[value_index], options_value, out);
+}
+
 AudioSourceBuffer BuildAudioSourceBuffer(const AudioBufferData& data,
 				 const std::string& source_format,
 				 const std::string& codec_name,
@@ -574,6 +682,79 @@ AudioSourceBuffer BuildAudioSourceBuffer(const AudioBufferData& data,
 	buffer.codec_name = codec_name;
 	buffer.decode_backend = decode_backend;
 	return buffer;
+}
+
+AudioBufferData DownmixToMonoAudio(const AudioBufferData& audio_data) {
+	if (audio_data.channels <= 1) {
+		return audio_data;
+	}
+	const size_t frame_count = audio_data.samples.size() / static_cast<size_t>(audio_data.channels);
+	AudioBufferData mono;
+	mono.samples.assign(frame_count, 0.0f);
+	mono.sample_rate = audio_data.sample_rate;
+	mono.channels = 1;
+	for (size_t frame_index = 0; frame_index < frame_count; ++frame_index) {
+		float sum = 0.0f;
+		for (int channel_index = 0; channel_index < audio_data.channels; ++channel_index) {
+			sum += audio_data.samples[(frame_index * static_cast<size_t>(audio_data.channels)) + static_cast<size_t>(channel_index)];
+		}
+		mono.samples[frame_index] = sum / static_cast<float>(audio_data.channels);
+	}
+	return mono;
+}
+
+bool ResolveAudioInputValue(v8::Isolate* isolate,
+			    v8::Local<v8::Context> context,
+			    v8::Local<v8::Value> value,
+			    v8::Local<v8::Value> options_value,
+			    ResolvedAudioInput* out) {
+	if (out == nullptr) {
+		Engine::Helper::ThrowError(isolate, "resolved audio input target is null");
+		return false;
+	}
+	if (value->IsString()) {
+		ResolvedAudioInput resolved;
+		resolved.from_path = true;
+		resolved.input_path = Engine::Helper::FromV8Str(isolate, value);
+		resolved.load_options = ParseLoadOptions(isolate, context, options_value);
+		resolved.load_options.input_path = std::filesystem::path(resolved.input_path);
+		std::string error;
+		if (!Engine::Audio::Core::AudioSourceLoader::Load(resolved.load_options, &resolved.source_buffer, &error)) {
+			Engine::Helper::ThrowError(isolate, error.empty() ? "audio input load failed" : error);
+			return false;
+		}
+		resolved.audio_data = AudioBufferData{resolved.source_buffer.samples, resolved.source_buffer.sample_rate, resolved.source_buffer.channels};
+		*out = std::move(resolved);
+		return true;
+	}
+	ResolvedAudioInput resolved;
+	if (!ParseAudioBufferValue(isolate, context, value, options_value, &resolved.audio_data)) {
+		return false;
+	}
+	resolved.source_buffer = BuildAudioSourceBuffer(resolved.audio_data, "audio_module", "memory", "audio_module");
+	*out = std::move(resolved);
+	return true;
+}
+
+bool ResolveAudioInputArg(v8::Isolate* isolate,
+			  v8::Local<v8::Context> context,
+			  const v8::FunctionCallbackInfo<v8::Value>& args,
+			  int value_index,
+			  int options_index,
+			  ResolvedAudioInput* out) {
+	if (out == nullptr) {
+		Engine::Helper::ThrowError(isolate, "resolved audio input target is null");
+		return false;
+	}
+	if (args.Length() <= value_index) {
+		Engine::Helper::ThrowTypeError(isolate, "audio input argument is required");
+		return false;
+	}
+	v8::Local<v8::Value> options_value = v8::Undefined(isolate);
+	if (args.Length() > options_index) {
+		options_value = args[options_index];
+	}
+	return ResolveAudioInputValue(isolate, context, args[value_index], options_value, out);
 }
 
 bool EncodeWavBytes(const AudioBufferData& audio_data,

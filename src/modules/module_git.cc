@@ -2,8 +2,11 @@
 
 #include <array>
 #include <cstdio>
+#include <filesystem>
 #include <string>
 #include <sys/wait.h>
+#include <utility>
+#include <vector>
 #include <vector>
 
 namespace modules::detail {
@@ -55,6 +58,20 @@ std::string ResolveGitRepoPath(const v8::FunctionCallbackInfo<v8::Value>& args, 
 	return ResolveProjectRelativePath(OptionalStringArg(args, index, ResolveProjectRoot().string())).string();
 }
 
+bool RequireExplicitGitRepoPathArg(const v8::FunctionCallbackInfo<v8::Value>& args,
+					  int index,
+					  const char* message,
+					  std::string* repo_path_out) {
+	std::string repo_path;
+	if (!RequireStringArg(args, index, message, &repo_path)) {
+		return false;
+	}
+	if (repo_path_out != nullptr) {
+		*repo_path_out = ResolveProjectRelativePath(repo_path).string();
+	}
+	return true;
+}
+
 std::string BuildGitCommand(const std::string& repo_path, const std::string& command) {
 	return "git -C " + QuoteForShell(repo_path) + " " + command + " 2>&1";
 }
@@ -91,6 +108,25 @@ bool RunGitCommandOrThrow(v8::Isolate* isolate,
 				 CommandResult* result_out) {
 	CommandResult result;
 	if (!RunGitCommand(repo_path, command, &result)) {
+		Engine::Helper::ThrowError(isolate, DescribeCommandFailure(result, fallback_error));
+		return false;
+	}
+	if (result.exit_code != 0) {
+		Engine::Helper::ThrowError(isolate, DescribeCommandFailure(result, fallback_error));
+		return false;
+	}
+	if (result_out != nullptr) {
+		*result_out = std::move(result);
+	}
+	return true;
+}
+
+bool RunRawGitCommandOrThrow(v8::Isolate* isolate,
+				   const std::string& command,
+				   const char* fallback_error,
+				   CommandResult* result_out) {
+	CommandResult result;
+	if (!RunCommandCapture(command, &result)) {
 		Engine::Helper::ThrowError(isolate, DescribeCommandFailure(result, fallback_error));
 		return false;
 	}
@@ -233,9 +269,111 @@ void GitDescribeCallback(const v8::FunctionCallbackInfo<v8::Value>& args) {
 	args.GetReturnValue().Set(object);
 }
 
+void GitInitCallback(const v8::FunctionCallbackInfo<v8::Value>& args) {
+	v8::Isolate* isolate = args.GetIsolate();
+	std::string repo_path;
+	if (!RequireExplicitGitRepoPathArg(args, 0, "init expects repository path string", &repo_path)) {
+		return;
+	}
+	std::error_code dir_error;
+	std::filesystem::create_directories(repo_path, dir_error);
+	if (dir_error) {
+		Engine::Helper::ThrowError(isolate, "failed to create git repository directory");
+		return;
+	}
+	if (!RunRawGitCommandOrThrow(
+			isolate,
+			"git -C " + QuoteForShell(repo_path) + " init 2>&1",
+			"failed to initialize git repository",
+			nullptr)) {
+		return;
+	}
+	args.GetReturnValue().Set(v8::Boolean::New(isolate, true));
+}
+
 void GitIsRepositoryCallback(const v8::FunctionCallbackInfo<v8::Value>& args) {
 	CommandResult probe;
 	args.GetReturnValue().Set(v8::Boolean::New(args.GetIsolate(), IsGitRepositoryPath(ResolveGitRepoPath(args, 0), &probe)));
+}
+
+void GitSetConfigCallback(const v8::FunctionCallbackInfo<v8::Value>& args) {
+	v8::Isolate* isolate = args.GetIsolate();
+	std::string repo_path;
+	std::string key;
+	std::string value;
+	if (!RequireExplicitGitRepoPathArg(args, 0, "setConfig expects repository path string", &repo_path)
+			|| !RequireStringArg(args, 1, "setConfig expects config key string", &key)
+			|| !RequireStringArg(args, 2, "setConfig expects config value string", &value)) {
+		return;
+	}
+	if (!RunGitCommandOrThrow(
+			isolate,
+			repo_path,
+			"config --local " + QuoteForShell(key) + " " + QuoteForShell(value),
+			"failed to set git config",
+			nullptr)) {
+		return;
+	}
+	args.GetReturnValue().Set(v8::Boolean::New(isolate, true));
+}
+
+void GitAddCallback(const v8::FunctionCallbackInfo<v8::Value>& args) {
+	v8::Isolate* isolate = args.GetIsolate();
+	std::string repo_path;
+	std::string pathspec;
+	if (!RequireExplicitGitRepoPathArg(args, 0, "add expects repository path string", &repo_path)
+			|| !RequireStringArg(args, 1, "add expects file path string", &pathspec)) {
+		return;
+	}
+	if (!RunGitCommandOrThrow(
+			isolate,
+			repo_path,
+			"add -- " + QuoteForShell(pathspec),
+			"failed to stage git path",
+			nullptr)) {
+		return;
+	}
+	args.GetReturnValue().Set(v8::Boolean::New(isolate, true));
+}
+
+void GitCommitCallback(const v8::FunctionCallbackInfo<v8::Value>& args) {
+	v8::Isolate* isolate = args.GetIsolate();
+	std::string repo_path;
+	std::string message;
+	if (!RequireExplicitGitRepoPathArg(args, 0, "commit expects repository path string", &repo_path)
+			|| !RequireStringArg(args, 1, "commit expects commit message string", &message)) {
+		return;
+	}
+	if (!RunGitCommandOrThrow(
+			isolate,
+			repo_path,
+			"-c commit.gpgsign=false commit --no-verify -m " + QuoteForShell(message),
+			"failed to create git commit",
+			nullptr)) {
+		return;
+	}
+	args.GetReturnValue().Set(v8::Boolean::New(isolate, true));
+}
+
+void GitMoveCallback(const v8::FunctionCallbackInfo<v8::Value>& args) {
+	v8::Isolate* isolate = args.GetIsolate();
+	std::string repo_path;
+	std::string source_path;
+	std::string destination_path;
+	if (!RequireExplicitGitRepoPathArg(args, 0, "move expects repository path string", &repo_path)
+			|| !RequireStringArg(args, 1, "move expects source path string", &source_path)
+			|| !RequireStringArg(args, 2, "move expects destination path string", &destination_path)) {
+		return;
+	}
+	if (!RunGitCommandOrThrow(
+			isolate,
+			repo_path,
+			"mv -- " + QuoteForShell(source_path) + " " + QuoteForShell(destination_path),
+			"failed to move git path",
+			nullptr)) {
+		return;
+	}
+	args.GetReturnValue().Set(v8::Boolean::New(isolate, true));
 }
 
 void GitCurrentBranchCallback(const v8::FunctionCallbackInfo<v8::Value>& args) {
@@ -292,7 +430,12 @@ bool BuildGitModule(v8::Isolate* isolate,
 	v8::Local<v8::Object> module = v8::Object::New(isolate);
 	bool ok = true;
 	ok = ok && Engine::Helper::SetMethod(isolate, context, module, "describe", &GitDescribeCallback);
+	ok = ok && Engine::Helper::SetMethod(isolate, context, module, "init", &GitInitCallback);
 	ok = ok && Engine::Helper::SetMethod(isolate, context, module, "isRepository", &GitIsRepositoryCallback);
+	ok = ok && Engine::Helper::SetMethod(isolate, context, module, "setConfig", &GitSetConfigCallback);
+	ok = ok && Engine::Helper::SetMethod(isolate, context, module, "add", &GitAddCallback);
+	ok = ok && Engine::Helper::SetMethod(isolate, context, module, "commit", &GitCommitCallback);
+	ok = ok && Engine::Helper::SetMethod(isolate, context, module, "move", &GitMoveCallback);
 	ok = ok && Engine::Helper::SetMethod(isolate, context, module, "currentBranch", &GitCurrentBranchCallback);
 	ok = ok && Engine::Helper::SetMethod(isolate, context, module, "head", &GitHeadCallback);
 	ok = ok && Engine::Helper::SetMethod(isolate, context, module, "statusPorcelain", &GitStatusPorcelainCallback);

@@ -4,6 +4,8 @@ ImportModule("RuntimeLive");
 ImportModule("Doctor");
 ImportModule("Audio");
 ImportModule("Git");
+ImportModule("Crypto");
+ImportModule("IO/Async");
 ImportModule("OpenCV");
 ImportModule("CUDA");
 ImportModule("CUDNN");
@@ -19,6 +21,8 @@ console.log(JSON.stringify({
 	doctorOk: typeof Doctor === "object" && Doctor !== null,
 	audioOk: typeof Audio === "object" && Audio !== null,
 	gitOk: typeof Git === "object" && Git !== null,
+	cryptoOk: typeof Crypto === "object" && Crypto !== null,
+	ioAsyncOk: typeof IOAsync === "object" && IOAsync !== null,
 	openCvOk: typeof OpenCV === "object" && OpenCV !== null,
 	cudaOk: typeof CUDA === "object" && CUDA !== null,
 	cudnnOk: typeof CUDNN === "object" && CUDNN !== null,
@@ -31,6 +35,11 @@ console.log(JSON.stringify({
 	hasAudioBatch: Audio && typeof Audio.applyBatch === "function",
 	hasGitDescribe: Git && typeof Git.describe === "function",
 	hasGitStatus: Git && typeof Git.status === "function",
+	hasCryptoHash: Crypto && typeof Crypto.sha256 === "function" && typeof Crypto.sha256File === "function",
+	hasCryptoBase64: Crypto && typeof Crypto.base64Encode === "function" && typeof Crypto.base64Decode === "function",
+	hasIOAsyncRead: IOAsync && typeof IOAsync.readText === "function" && typeof IOAsync.readHex === "function",
+	hasIOAsyncWrite: IOAsync && typeof IOAsync.writeText === "function" && typeof IOAsync.fileSize === "function",
+	hasIOAsyncCopy: IOAsync && typeof IOAsync.copyBinary === "function",
 	hasCompileAndRun: RuntimeLive && typeof RuntimeLive.compileAndRun === "function",
 	hasFfmpegProbe: FFmpeg && typeof FFmpeg.probeMedia === "function",
 	hasSkiaExports: Skia && typeof Skia.exportedFunctions === "object"

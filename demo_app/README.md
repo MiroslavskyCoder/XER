@@ -20,6 +20,18 @@ Run the FlowScript Git module smoke check:
 ./out/build/default/EngineBuilder run demo_app/git_module_smoke.js
 ```
 
+Run the FlowScript Crypto module smoke check:
+
+```bash
+./out/build/default/EngineBuilder run demo_app/crypto_module_smoke.js
+```
+
+Run the FlowScript IO/Async module smoke check:
+
+```bash
+./out/build/default/EngineBuilder run demo_app/io_async_module_smoke.js
+```
+
 Run the FlowScript Buffer smoke check:
 
 ```bash

@@ -86,7 +86,12 @@ Full per-module description and API list:
 	- effect options: `clapPluginReference`, `batchMode`, `outputDir` for `applyBatch`, plus `clapPluginReference` for `applyEffect/applyChain`
 - `ImportModule("Git")`
 	- `Git.describe([repoPath])`
+	- `Git.init(repoPath)`
 	- `Git.isRepository([repoPath])`
+	- `Git.setConfig(repoPath, key, value)`
+	- `Git.add(repoPath, path)`
+	- `Git.commit(repoPath, message)`
+	- `Git.move(repoPath, sourcePath, destinationPath)`
 	- `Git.currentBranch([repoPath])`
 	- `Git.head([repoPath])`
 	- `Git.statusPorcelain([repoPath])`
