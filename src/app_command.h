@@ -42,6 +42,7 @@ public:
         int audio_raw_sample_rate = 44100;
         int target_sample_rate = 44100;
         int audio_target_channels = -1;
+        std::string audio_batch_mode = "parallel";
         bool json_output = false;
         std::string xer_key;
         std::string xer_key_file;

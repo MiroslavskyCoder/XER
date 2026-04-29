@@ -27,15 +27,7 @@ find_package(OpenSSL REQUIRED)
 find_package(ZLIB REQUIRED)
 find_package(ICU COMPONENTS uc i18n QUIET)
 find_package(SQLite3 QUIET)
-find_package(V8 QUIET)
-cmake_minimum_required(VERSION 3.16)
-
-if(NOT DEFINED CMAKE_C_COMPILER)
-    set(CMAKE_C_COMPILER clang)
-endif()
-if(NOT DEFINED CMAKE_CXX_COMPILER)
-    set(CMAKE_CXX_COMPILER clang++)
-endif()
+find_package(V8 QUIET)  
 
 project(EngineBuilder LANGUAGES C CXX)
 

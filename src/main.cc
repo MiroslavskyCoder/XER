@@ -497,6 +497,8 @@ int main(int argc, char** argv) {
 		fx_options.raw_sample_rate = parsed.audio_raw_sample_rate;
 		fx_options.target_sample_rate = parsed.target_sample_rate;
 		fx_options.target_channels = parsed.audio_target_channels;
+		fx_options.batch_mode = parsed.audio_batch_mode;
+		fx_options.json_summary = parsed.json_output;
 		std::string report;
 		std::string fx_error;
 		if (!Engine::Audio::Demo::RunAudioFxCustom(fx_options, &report, &fx_error)) {
@@ -519,6 +521,8 @@ int main(int argc, char** argv) {
 		fx_options.raw_sample_rate = parsed.audio_raw_sample_rate;
 		fx_options.target_sample_rate = parsed.target_sample_rate;
 		fx_options.target_channels = parsed.audio_target_channels;
+		fx_options.batch_mode = parsed.audio_batch_mode;
+		fx_options.json_summary = parsed.json_output;
 		std::string report;
 		std::string fx_error;
 		if (!Engine::Audio::Demo::RunAudioFxBatch(fx_options, &report, &fx_error)) {

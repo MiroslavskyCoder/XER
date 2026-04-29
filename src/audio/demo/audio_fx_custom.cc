@@ -5,6 +5,8 @@
 #include "audio/file_io_codecs/codec_wav_pcm.h"
 #include "audio/fx_customs/fx_customs_presets.h"
 
+#include <json/json.h>
+
 #include <algorithm>
 #include <cctype>
 #include <filesystem>
@@ -44,9 +46,70 @@ std::string SlugifyName(std::string text) {
 	return text.empty() ? std::string("fx_custom") : text;
 }
 
+std::string BuildStageSlug(size_t stage_index, const std::string& effect_name) {
+	std::ostringstream output;
+	output << std::setw(2) << std::setfill('0') << stage_index << "_" << SlugifyName(effect_name);
+	return output.str();
+}
+
+enum class AudioFxBatchMode {
+	kParallel,
+	kChain,
+};
+
+std::string AudioFxBatchModeToString(AudioFxBatchMode batch_mode) {
+	switch (batch_mode) {
+	case AudioFxBatchMode::kParallel:
+		return "parallel";
+	case AudioFxBatchMode::kChain:
+		return "chain";
+	}
+	return "parallel";
+}
+
+bool ParseAudioFxBatchMode(const std::string& text, AudioFxBatchMode* batch_mode_out, std::string* error_out) {
+	if (batch_mode_out == nullptr) {
+		if (error_out != nullptr) {
+			*error_out = "audio fx batch mode target is null";
+		}
+		return false;
+	}
+	const std::string normalized = NormalizeName(text.empty() ? std::string("parallel") : text);
+	if (normalized == "parallel") {
+		*batch_mode_out = AudioFxBatchMode::kParallel;
+		return true;
+	}
+	if (normalized == "chain") {
+		*batch_mode_out = AudioFxBatchMode::kChain;
+		return true;
+	}
+	if (error_out != nullptr) {
+		*error_out = "unsupported audio fx batch mode: " + text;
+	}
+	return false;
+}
+
+bool WantsStereoByDefault(const std::string& effect_name);
+
+bool WriteTextFile(
+	const std::filesystem::path& path,
+	const std::string& text,
+	std::string* error_out);
+
+bool WriteWaveFile(
+	const std::filesystem::path& path,
+	const std::vector<float>& samples,
+	int sample_rate,
+	int channels,
+	std::string* error_out);
+
 struct EffectArtifact {
 	std::string effect_name;
 	std::string effect_slug;
+	size_t stage_index = 0;
+	size_t frame_count = 0;
+	std::string render_mode;
+	std::filesystem::path stage_input_wav_path;
 	std::filesystem::path processed_wav_path;
 	std::filesystem::path report_path;
 	Engine::Audio::FX::CustomEffectReport report;
@@ -112,23 +175,46 @@ bool LoadInputAudio(
 	return Engine::Audio::Core::AudioSourceLoader::Load(load_options, input_audio_out, error_out);
 }
 
-std::string BuildEffectReportText(
-	const std::string& effect_name,
-	const Engine::Audio::Core::AudioSourceBuffer& input_audio,
-	const std::filesystem::path& input_wav_path,
-	const std::filesystem::path& output_wav_path,
-	const Engine::Audio::FX::CustomEffectReport& report) {
-	std::ostringstream output;
-	output << "Audio FX Custom CLI\n";
-	output << "effect_name=" << effect_name << "\n";
-	output << "input_path=" << input_audio.decode_backend.empty() ? std::string() : input_audio.decode_backend << "\n";
-	output.seekp(0, std::ios::end);
-	return output.str();
+std::string SerializeJson(const Json::Value& value) {
+	Json::StreamWriterBuilder builder;
+	builder["commentStyle"] = "None";
+	builder["indentation"] = "  ";
+	builder["precision"] = 10;
+	std::string text = Json::writeString(builder, value);
+	if (text.empty() || text.back() != '\n') {
+		text.push_back('\n');
+	}
+	return text;
+}
+
+Json::Value BuildCustomEffectReportJson(const Engine::Audio::FX::CustomEffectReport& report) {
+	Json::Value value(Json::objectValue);
+	value["label"] = report.label;
+	value["node_count"] = static_cast<Json::UInt64>(report.node_count);
+	value["stage_count"] = static_cast<Json::UInt64>(report.stage_count);
+	value["channel_count"] = static_cast<Json::UInt64>(report.channel_count);
+	value["worker_count_used"] = static_cast<Json::UInt64>(report.worker_count_used);
+	value["peak"] = report.peak;
+	value["rms"] = report.rms;
+	Json::Value stage_reports(Json::arrayValue);
+	for (const auto& stage_report : report.stage_reports) {
+		stage_reports.append(stage_report);
+	}
+	value["stage_reports"] = std::move(stage_reports);
+	Json::Value node_reports(Json::arrayValue);
+	for (const auto& node_report : report.node_reports) {
+		node_reports.append(node_report);
+	}
+	value["node_reports"] = std::move(node_reports);
+	return value;
 }
 
 std::string BuildEffectArtifactText(
 	const std::string& effect_name,
+	const std::string& render_mode,
+	size_t stage_index,
 	const std::filesystem::path& input_path,
+	const std::filesystem::path& stage_input_wav_path,
 	const Engine::Audio::Core::AudioSourceBuffer& input_audio,
 	const std::filesystem::path& input_wav_path,
 	const std::filesystem::path& output_wav_path,
@@ -136,7 +222,10 @@ std::string BuildEffectArtifactText(
 	std::ostringstream output;
 	output << "Audio FX Custom CLI\n";
 	output << "effect_name=" << effect_name << "\n";
+	output << "render_mode=" << render_mode << "\n";
+	output << "stage_index=" << stage_index << "\n";
 	output << "input_path=" << input_path.string() << "\n";
+	output << "stage_input_wav=" << stage_input_wav_path.string() << "\n";
 	output << "source_format=" << input_audio.source_format << "\n";
 	output << "codec=" << input_audio.codec_name << "\n";
 	output << "decode_backend=" << input_audio.decode_backend << "\n";
@@ -154,8 +243,13 @@ std::string BuildEffectArtifactText(
 bool RenderEffectArtifact(
 	const AudioFxCustomOptions& options,
 	const Engine::Audio::Core::AudioSourceBuffer& input_audio,
+	const std::vector<float>& render_input,
+	const std::filesystem::path& stage_input_wav_path,
 	const std::filesystem::path& input_wav_path,
 	const std::string& effect_name,
+	size_t stage_index,
+	const std::string& render_mode,
+	std::vector<float>* processed_audio_out,
 	EffectArtifact* artifact_out,
 	std::string* error_out) {
 	if (artifact_out == nullptr) {
@@ -167,13 +261,18 @@ bool RenderEffectArtifact(
 
 	std::vector<float> processed_audio;
 	artifact_out->effect_name = effect_name;
-	artifact_out->effect_slug = SlugifyName(effect_name);
+	artifact_out->effect_slug = options.effect_names.size() > 1u
+		? BuildStageSlug(stage_index, effect_name)
+		: SlugifyName(effect_name);
+	artifact_out->stage_index = stage_index;
+	artifact_out->render_mode = render_mode;
+	artifact_out->stage_input_wav_path = stage_input_wav_path;
 	artifact_out->processed_wav_path = options.output_dir / (artifact_out->effect_slug + ".wav");
 	artifact_out->report_path = options.output_dir / (artifact_out->effect_slug + "_report.txt");
 	if (!Engine::Audio::FX::Customs::RenderFxCustomPresetInterleaved(
 			effect_name,
 			static_cast<float>(input_audio.sample_rate),
-			input_audio.samples,
+			render_input,
 			input_audio.channels,
 			&processed_audio,
 			&artifact_out->report,
@@ -181,21 +280,48 @@ bool RenderEffectArtifact(
 			error_out)) {
 		return false;
 	}
+	artifact_out->frame_count = input_audio.channels > 0
+		? processed_audio.size() / static_cast<size_t>(input_audio.channels)
+		: 0u;
 	if (!WriteWaveFile(artifact_out->processed_wav_path, processed_audio, input_audio.sample_rate, input_audio.channels, error_out)) {
 		return false;
 	}
 	artifact_out->report_text = BuildEffectArtifactText(
 		artifact_out->effect_name,
+		render_mode,
+		stage_index,
 		options.input_path,
+		stage_input_wav_path,
 		input_audio,
 		input_wav_path,
 		artifact_out->processed_wav_path,
 		artifact_out->report);
-	return WriteTextFile(artifact_out->report_path, artifact_out->report_text, error_out);
+	if (!WriteTextFile(artifact_out->report_path, artifact_out->report_text, error_out)) {
+		return false;
+	}
+	if (processed_audio_out != nullptr) {
+		*processed_audio_out = std::move(processed_audio);
+	}
+	return true;
+}
+
+Json::Value BuildEffectArtifactJson(const EffectArtifact& artifact) {
+	Json::Value value(Json::objectValue);
+	value["effect_name"] = artifact.effect_name;
+	value["effect_slug"] = artifact.effect_slug;
+	value["render_mode"] = artifact.render_mode;
+	value["stage_index"] = static_cast<Json::UInt64>(artifact.stage_index);
+	value["stage_input_wav"] = artifact.stage_input_wav_path.string();
+	value["processed_wav"] = artifact.processed_wav_path.string();
+	value["report_path"] = artifact.report_path.string();
+	value["frame_count"] = static_cast<Json::UInt64>(artifact.frame_count);
+	value["report"] = BuildCustomEffectReportJson(artifact.report);
+	return value;
 }
 
 std::string BuildBatchSummaryText(
 	const AudioFxCustomOptions& options,
+	AudioFxBatchMode batch_mode,
 	const Engine::Audio::Core::AudioSourceBuffer& input_audio,
 	const std::filesystem::path& input_wav_path,
 	const std::filesystem::path& summary_path,
@@ -203,6 +329,7 @@ std::string BuildBatchSummaryText(
 	std::ostringstream output;
 	output << std::fixed << std::setprecision(6);
 	output << "Audio FX Batch CLI\n";
+	output << "batch_mode=" << AudioFxBatchModeToString(batch_mode) << "\n";
 	output << "input_path=" << options.input_path.string() << "\n";
 	output << "source_format=" << input_audio.source_format << "\n";
 	output << "codec=" << input_audio.codec_name << "\n";
@@ -212,18 +339,56 @@ std::string BuildBatchSummaryText(
 	output << "frame_count=" << input_audio.frame_count << "\n";
 	output << "effect_count=" << artifacts.size() << "\n";
 	output << "normalized_input_wav=" << input_wav_path.string() << "\n";
+	if (!artifacts.empty()) {
+		output << "final_output_wav=" << artifacts.back().processed_wav_path.string() << "\n";
+	}
 	output << "summary_path=" << summary_path.string() << "\n";
 	for (size_t index = 0; index < artifacts.size(); ++index) {
 		const auto& artifact = artifacts[index];
 		output << "effect_" << index << "_name=" << artifact.effect_name << "\n";
+		output << "effect_" << index << "_mode=" << artifact.render_mode << "\n";
+		output << "effect_" << index << "_stage_index=" << artifact.stage_index << "\n";
+		output << "effect_" << index << "_stage_input_wav=" << artifact.stage_input_wav_path.string() << "\n";
 		output << "effect_" << index << "_wav=" << artifact.processed_wav_path.string() << "\n";
 		output << "effect_" << index << "_report=" << artifact.report_path.string() << "\n";
+		output << "effect_" << index << "_frames=" << artifact.frame_count << "\n";
 		output << "effect_" << index << "_peak=" << artifact.report.peak << "\n";
 		output << "effect_" << index << "_rms=" << artifact.report.rms << "\n";
 		output << "effect_" << index << "_channels=" << artifact.report.channel_count << "\n";
 		output << "effect_" << index << "_workers=" << artifact.report.worker_count_used << "\n";
 	}
 	return output.str();
+}
+
+Json::Value BuildBatchSummaryJson(
+	const AudioFxCustomOptions& options,
+	AudioFxBatchMode batch_mode,
+	const Engine::Audio::Core::AudioSourceBuffer& input_audio,
+	const std::filesystem::path& input_wav_path,
+	const std::filesystem::path& summary_path,
+	const std::vector<EffectArtifact>& artifacts) {
+	Json::Value root(Json::objectValue);
+	root["command"] = "audio_fx_batch";
+	root["batch_mode"] = AudioFxBatchModeToString(batch_mode);
+	root["input_path"] = options.input_path.string();
+	root["source_format"] = input_audio.source_format;
+	root["codec"] = input_audio.codec_name;
+	root["decode_backend"] = input_audio.decode_backend;
+	root["sample_rate"] = input_audio.sample_rate;
+	root["render_channels"] = input_audio.channels;
+	root["frame_count"] = static_cast<Json::UInt64>(input_audio.frame_count);
+	root["effect_count"] = static_cast<Json::UInt64>(artifacts.size());
+	root["normalized_input_wav"] = input_wav_path.string();
+	root["summary_path"] = summary_path.string();
+	if (!artifacts.empty()) {
+		root["final_output_wav"] = artifacts.back().processed_wav_path.string();
+	}
+	Json::Value effects(Json::arrayValue);
+	for (const auto& artifact : artifacts) {
+		effects.append(BuildEffectArtifactJson(artifact));
+	}
+	root["effects"] = std::move(effects);
+	return root;
 }
 
 bool WantsStereoByDefault(const std::string& effect_name) {
@@ -346,7 +511,18 @@ bool RunAudioFxCustom(
 		return false;
 	}
 	EffectArtifact artifact;
-	if (!RenderEffectArtifact(options, input_audio, input_wav_path, effect_names.front(), &artifact, error_out)) {
+	if (!RenderEffectArtifact(
+			options,
+			input_audio,
+			input_audio.samples,
+			input_wav_path,
+			input_wav_path,
+			effect_names.front(),
+			0u,
+			"single",
+			nullptr,
+			&artifact,
+			error_out)) {
 		return false;
 	}
 	*report_out = artifact.report_text;
@@ -380,6 +556,10 @@ bool RunAudioFxBatch(
 		}
 		return false;
 	}
+	AudioFxBatchMode batch_mode = AudioFxBatchMode::kParallel;
+	if (!ParseAudioFxBatchMode(options.batch_mode, &batch_mode, error_out)) {
+		return false;
+	}
 
 	std::error_code fs_error;
 	std::filesystem::create_directories(options.output_dir, fs_error);
@@ -402,16 +582,39 @@ bool RunAudioFxBatch(
 
 	std::vector<EffectArtifact> artifacts;
 	artifacts.reserve(effect_names.size());
-	for (const auto& effect_name : effect_names) {
+	std::vector<float> chain_input = input_audio.samples;
+	std::filesystem::path chain_input_wav_path = input_wav_path;
+	for (size_t index = 0; index < effect_names.size(); ++index) {
+		const auto& effect_name = effect_names[index];
 		EffectArtifact artifact;
-		if (!RenderEffectArtifact(options, input_audio, input_wav_path, effect_name, &artifact, error_out)) {
+		std::vector<float> stage_output;
+		const std::vector<float>& render_input = batch_mode == AudioFxBatchMode::kChain ? chain_input : input_audio.samples;
+		const std::filesystem::path& stage_input_wav_path = batch_mode == AudioFxBatchMode::kChain ? chain_input_wav_path : input_wav_path;
+		if (!RenderEffectArtifact(
+				options,
+				input_audio,
+				render_input,
+				stage_input_wav_path,
+				input_wav_path,
+				effect_name,
+				index,
+				AudioFxBatchModeToString(batch_mode),
+				batch_mode == AudioFxBatchMode::kChain ? &stage_output : nullptr,
+				&artifact,
+				error_out)) {
 			return false;
 		}
 		artifacts.push_back(std::move(artifact));
+		if (batch_mode == AudioFxBatchMode::kChain) {
+			chain_input = std::move(stage_output);
+			chain_input_wav_path = artifacts.back().processed_wav_path;
+		}
 	}
 
-	const std::filesystem::path summary_path = options.output_dir / "batch_summary.txt";
-	const std::string summary_text = BuildBatchSummaryText(options, input_audio, input_wav_path, summary_path, artifacts);
+	const std::filesystem::path summary_path = options.output_dir / (options.json_summary ? "batch_summary.json" : "batch_summary.txt");
+	const std::string summary_text = options.json_summary
+		? SerializeJson(BuildBatchSummaryJson(options, batch_mode, input_audio, input_wav_path, summary_path, artifacts))
+		: BuildBatchSummaryText(options, batch_mode, input_audio, input_wav_path, summary_path, artifacts);
 	if (!WriteTextFile(summary_path, summary_text, error_out)) {
 		return false;
 	}

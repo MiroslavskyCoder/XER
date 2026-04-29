@@ -14,6 +14,8 @@ struct AudioFxCustomOptions {
 	int raw_sample_rate = 44100;
 	int target_sample_rate = 44100;
 	int target_channels = -1;
+	std::string batch_mode = "parallel";
+	bool json_summary = false;
 };
 
 bool RunAudioFxCustom(

@@ -369,6 +369,15 @@ AppCommand::Parsed AppCommand::Parse(int argc, char** argv) {
                 continue;
             }
         }
+        {
+            std::string value; bool inline_v = false;
+            if (ParseValueFlag(arg, "--audio_batch_mode", &value, &inline_v)) {
+                if (!inline_v && !ConsumeStringValue("--audio_batch_mode", argc, argv, &i, &value, &parsed))
+                    return parsed;
+                parsed.audio_batch_mode = value;
+                continue;
+            }
+        }
         if (arg == "--json")                    { parsed.json_output = true;         continue; }
         {
             std::string value; bool inline_v = false;
@@ -739,9 +748,9 @@ AppCommand::Parsed AppCommand::Parse(int argc, char** argv) {
         parsed.script_path = arg;
     }
 
-    if (parsed.json_output && parsed.type != Type::kAudioInspect) {
+    if (parsed.json_output && parsed.type != Type::kAudioInspect && parsed.type != Type::kAudioFxBatch) {
         parsed.valid = false;
-        parsed.error_message = "--json is currently supported only for audio_inspect";
+        parsed.error_message = "--json is currently supported only for audio_inspect and audio_fx_batch";
         return parsed;
     }
 
@@ -756,7 +765,7 @@ std::string AppCommand::BuildHelpText(const std::string& binary_name) {
     out << "  " << binary_name << " inspect [artifact.bin|artifact.bak]\n";
     out << "  " << binary_name << " audio_inspect <input_audio> [--output_dir dir] [--target_sample_rate hz] [--json]\n";
     out << "  " << binary_name << " audio_fx_custom <effect_name> <input_audio> [--output_dir dir] [--target_sample_rate hz] [--target_channels n]\n";
-	out << "  " << binary_name << " audio_fx_batch <input_audio> --audio_effect <name> [--audio_effect <name> ...] [--output_dir dir] [--target_sample_rate hz] [--target_channels n]\n";
+	out << "  " << binary_name << " audio_fx_batch <input_audio> --audio_effect <name> [--audio_effect <name> ...] [--output_dir dir] [--target_sample_rate hz] [--target_channels n] [--audio_batch_mode parallel|chain] [--json]\n";
     out << "  " << binary_name << " audio_modules_smoke <input_audio> [--output_dir dir]\n";
     out << "  " << binary_name << " audio_analysis_smoke <input_audio> [--output_dir dir] [--target_sample_rate hz]\n";
     out << "  " << binary_name << " audio_demo [input_audio] [--output_dir dir] [--audio_processor name]\n";
@@ -779,8 +788,9 @@ std::string AppCommand::BuildHelpText(const std::string& binary_name) {
     out << "  --audio_stretch_ratio <x>    Phase vocoder time-stretch ratio (> 0)\n";
     out << "  --audio_raw_sample_rate <n>  Sample rate for headerless .raw/.pcm input\n";
     out << "  --target_sample_rate <n>     Normalize file-based audio commands to target sample rate\n";
-	out << "  --target_channels <n>        Normalize audio_fx_custom output to a target channel count\n";
-    out << "  --json                       Emit audio_inspect report as JSON\n";
+    out << "  --target_channels <n>        Normalize audio_fx_custom/audio_fx_batch output to a target channel count\n";
+    out << "  --audio_batch_mode <mode>   parallel|chain for audio_fx_batch rendering order\n";
+    out << "  --json                       Emit audio_inspect or audio_fx_batch summary as JSON\n";
     out << "\nXER protection:\n";
     out << "  --xer_key <secret>           Encrypt XER .bin payloads with AES-256-GCM\n";
     out << "  --xer_key_file <path>        Read XER encryption key from file\n";
@@ -846,7 +856,7 @@ std::string AppCommand::BuildHelpText(const std::string& binary_name) {
     out << "  " << binary_name << " inspect <artifact.bin|artifact.bak>   Print XER metadata without execution\n";
     out << "  " << binary_name << " audio_inspect <input_audio> [--output_dir dir] [--target_sample_rate hz] [--json]   Load, normalize, and print audio metadata without DSP\n";
 	out << "  " << binary_name << " audio_fx_custom <effect_name> <input_audio> [--output_dir dir] [--target_sample_rate hz] [--target_channels n]   Render one named custom FX preset directly to an output WAV\n";
-    out << "  " << binary_name << " audio_fx_batch <input_audio> --audio_effect <name> [--audio_effect <name> ...] [--output_dir dir] [--target_sample_rate hz] [--target_channels n]   Render multiple custom FX presets in one run and export a batch summary\n";
+	out << "  " << binary_name << " audio_fx_batch <input_audio> --audio_effect <name> [--audio_effect <name> ...] [--output_dir dir] [--target_sample_rate hz] [--target_channels n] [--audio_batch_mode parallel|chain] [--json]   Render multiple custom FX presets in one run as parallel previews or a sequential mastering chain\n";
     out << "  " << binary_name << " audio_modules_smoke <input_audio> [--output_dir dir]   Run plugin/MIDI/codec smoke validation on one input\n";
     out << "  " << binary_name << " audio_analysis_smoke <input_audio> [--output_dir dir] [--target_sample_rate hz]   Run beat/pitch/loudness analysis and export report artifacts\n";
     out << "  " << binary_name << " audio_demo [input_audio] [--audio_processor name] [--output_dir dir]   Run STFT smoke demo or file-based processing\n";

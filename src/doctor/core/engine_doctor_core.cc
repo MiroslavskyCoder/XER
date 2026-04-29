@@ -15,13 +15,15 @@
 
 namespace EngineDoctor {
 
-EngineDoctorCore::EngineDoctorCore(const Config& config) : config_(config) {
+EngineDoctorCore::EngineDoctorCore(const Config& config)
+        : config_(config),
+            context_(),
+            module_manager_(context_) {
     // Инициализация логгера с настройками из конфигурации
     Logger::initialize(config_.log_level);
     Logger::info("EngineDoctorCore: Initializing...");
 
     // Создание и регистрация модулей через ModuleManager
-    context_ = Context(); // Инициализация контекста
     module_manager_.register_module(std::make_unique<ScannerModule>(context_));
     module_manager_.register_module(std::make_unique<AnalysisEngine>(context_));
     // ... регистрация других модулей
@@ -74,7 +76,8 @@ void EngineDoctorCore::generate_report() {
     Logger::info("EngineDoctorCore: Generating report.");
     auto reporter = context_.get_module<ReportGeneratorInterface>();
     if (!reporter) {
-        throw ModuleNotFoundError("ReportGeneratorInterface");
+        Logger::warning("EngineDoctorCore: ReportGeneratorInterface is not registered, skipping report generation.");
+        return;
     }
     reporter->generate();
     Logger::info("EngineDoctorCore: Report generation complete.");

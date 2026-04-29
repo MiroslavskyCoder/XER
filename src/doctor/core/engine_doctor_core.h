@@ -12,7 +12,7 @@
 #include "core/engine_doctor_context.h"
 #include "core/module_manager.h"
 #include "core/engine_doctor_config.h"
-#include "scanner/file_scanner.h"
+#include "scanner/scanner_module.h"
 #include "analysis/analysis_engine.h"
 
 namespace EngineDoctor {
