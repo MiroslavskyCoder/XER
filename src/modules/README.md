@@ -72,11 +72,18 @@ Full per-module description and API list:
 - `ImportModule("Audio")`
 	- `Audio.load(path[, options])`
 	- `Audio.inspect(path[, options])`
+	- `Audio.stats(audio[, options])`
+	- `Audio.availableEffects()`
+	- `Audio.hasEffect(name)`
+	- `Audio.applyEffect(name, audio[, options])`
+	- `Audio.applyBatch(names, audio[, options])`
+	- `Audio.applyChain(names, audio[, options])`
 	- `Audio.save(path, audio[, options])`
 	- `Audio.saveWav(path, audio[, options])`
 	- `Audio.encodeWav(audio[, options])`
 	- `Audio.decodeWav(bytes)`
 	- load/inspect options: `rawSampleRate`, `targetSampleRate`, `targetChannels`, `resampleQuality`
+	- effect options: `clapPluginReference`, `batchMode`, `outputDir` for `applyBatch`, plus `clapPluginReference` for `applyEffect/applyChain`
 - `ImportModule("Git")`
 	- `Git.describe([repoPath])`
 	- `Git.currentBranch([repoPath])`

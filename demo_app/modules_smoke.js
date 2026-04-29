@@ -25,6 +25,8 @@ console.log(JSON.stringify({
 	skiaOk: typeof Skia === "object" && Skia !== null,
 	ffmpegOk: typeof FFmpeg === "object" && FFmpeg !== null,
 	hasAudioInspect: Audio && typeof Audio.inspect === "function",
+	hasAudioEffects: Audio && typeof Audio.applyEffect === "function" && typeof Audio.availableEffects === "function",
+	hasAudioBatch: Audio && typeof Audio.applyBatch === "function",
 	hasCompileAndRun: RuntimeLive && typeof RuntimeLive.compileAndRun === "function",
 	hasFfmpegProbe: FFmpeg && typeof FFmpeg.probeMedia === "function",
 	hasSkiaExports: Skia && typeof Skia.exportedFunctions === "object"
