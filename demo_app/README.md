@@ -26,6 +26,12 @@ Run the FlowScript console smoke check:
 ./out/build/default/EngineBuilder run demo_app/console_smoke.js
 ```
 
+Run the terminal snapshot smoke check:
+
+```bash
+./out/build/default/EngineBuilder run demo_app/terminal_snapshot_smoke.js
+```
+
 This script checks these modules:
 
 - OpenCV
@@ -56,3 +62,8 @@ The console smoke script verifies:
 - global `Console` class and `console` instance
 - `log`, `info`, `warn`, `error`, `dir`, `assert`
 - object, array, and Buffer formatting through the new `src/flux` console runtime
+
+The terminal snapshot smoke script verifies:
+
+- direct `console.snapshot()` access to the `src/flux/terminal` buffer state
+- direct `console.clearSnapshot()` reset behavior for stdout and stderr buffers

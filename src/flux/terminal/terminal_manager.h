@@ -1,6 +1,7 @@
 #pragma once
 
 #include <mutex>
+#include <string>
 #include <string_view>
 
 #include "flux/terminal/terminal_buffer.h"
@@ -15,6 +16,8 @@ public:
 	void WriteLine(OutputStream stream, std::string_view text);
 	void Flush(OutputStream stream);
 	void ResetBuffer();
+	void ResetBuffer(OutputStream stream);
+	std::string Snapshot(OutputStream stream) const;
 
 	const TerminalBuffer& buffer() const;
 

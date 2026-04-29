@@ -24,6 +24,8 @@ void ConsoleTableCallback(const v8::FunctionCallbackInfo<v8::Value>& args);
 void ConsoleTimeCallback(const v8::FunctionCallbackInfo<v8::Value>& args);
 void ConsoleTimeEndCallback(const v8::FunctionCallbackInfo<v8::Value>& args);
 void ConsoleTraceCallback(const v8::FunctionCallbackInfo<v8::Value>& args);
+void ConsoleSnapshotCallback(const v8::FunctionCallbackInfo<v8::Value>& args);
+void ConsoleClearSnapshotCallback(const v8::FunctionCallbackInfo<v8::Value>& args);
 
 bool ValueToByteVector(
     v8::Local<v8::Context> context,

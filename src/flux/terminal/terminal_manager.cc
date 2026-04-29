@@ -34,6 +34,16 @@ void TerminalManager::ResetBuffer() {
 	buffer_.Clear();
 }
 
+void TerminalManager::ResetBuffer(OutputStream stream) {
+	std::lock_guard<std::mutex> lock(mutex_);
+	buffer_.Clear(stream);
+}
+
+std::string TerminalManager::Snapshot(OutputStream stream) const {
+	std::lock_guard<std::mutex> lock(mutex_);
+	return buffer_.Snapshot(stream);
+}
+
 const TerminalBuffer& TerminalManager::buffer() const {
 	return buffer_;
 }

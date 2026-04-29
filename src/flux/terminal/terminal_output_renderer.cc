@@ -22,8 +22,16 @@ void WriteLine(OutputStream stream, std::string_view text) {
 	TerminalManager::Instance().WriteLine(stream, text);
 }
 
+void ClearSnapshot() {
+	TerminalManager::Instance().ResetBuffer();
+}
+
+void ClearSnapshot(OutputStream stream) {
+	TerminalManager::Instance().ResetBuffer(stream);
+}
+
 std::string Snapshot(OutputStream stream) {
-	return TerminalManager::Instance().buffer().Snapshot(stream);
+	return TerminalManager::Instance().Snapshot(stream);
 }
 
 }  // namespace flux::terminal
