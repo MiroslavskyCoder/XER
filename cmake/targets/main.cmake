@@ -7,6 +7,7 @@ target_sources(EngineBuilder PRIVATE ${ENGINE_PROJECT_H})
 
 target_include_directories(EngineBuilder PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/doctor
     ${LIBXML2_INCLUDE_DIRS}
     ${LLVM_INCLUDE_DIRS}
     ${NODE_INCLUDE_DIR}

@@ -54,6 +54,54 @@ Full per-module description and API list:
 	- `RuntimeLive.defaultProvider()`
 	- `RuntimeLive.describeCompiler(source[, options])`
 	- `RuntimeLive.buildCompilerCommandPreview(source[, options[, compilerBinary]])`
+	- `RuntimeLive.compileAndRun(source[, options])`
+	- `RuntimeLive.compileAndRun("", { sourceFiles: [{ path, content, isHeader? }], ...options })`
+- `ImportModule("System")`
+	- `System.cwd()`
+	- `System.projectRoot()`
+	- `System.platform()`
+	- `System.hostname()`
+	- `System.getEnv(name[, fallback])`
+	- `System.setEnv(name, value)`
+	- `System.which(command)`
+- `ImportModule("Network")`
+	- `Network.fetchText(url)`
+	- `Network.probe(url)`
+	- `Network.download(url, outputPath)`
+- `ImportModule("Git")`
+	- `Git.describe([repoPath])`
+	- `Git.currentBranch([repoPath])`
+	- `Git.head([repoPath])`
+	- `Git.statusPorcelain([repoPath])`
+- `ImportModule("Crypto")`
+	- `Crypto.sha256(text)`
+	- `Crypto.sha256File(path)`
+	- `Crypto.randomHex([byteCount])`
+	- `Crypto.base64Encode(text)`
+	- `Crypto.base64Decode(text)`
+- `ImportModule("IO/Async")` or `ImportModule("IOAsync")`
+	- `IOAsync.readText(path)`
+	- `IOAsync.readHex(path)`
+	- `IOAsync.writeText(path, text[, append])`
+	- `IOAsync.copyBinary(source, destination)`
+	- `IOAsync.fileSize(path)`
+- `ImportModule("Doctor")`
+	- `Doctor.run([options])`
+	- returns structured scan results, summary metrics, dominant problem codes, and `summaryText`
+- `ImportModule("OpenCV")`, `ImportModule("CUDA")`, `ImportModule("CUDNN")`, `ImportModule("ANGLE")`, `ImportModule("VTK")`
+	- availability/status metadata via `name`, `available`, `summary`
+- `ImportModule("Skia")`
+	- `Skia.available`
+	- `Skia.summary`
+	- `Skia.version`
+	- `Skia.exportedFunctions`
+	- `Skia.blendModes`
+- `ImportModule("FFmpeg")`
+	- `FFmpeg.available`
+	- `FFmpeg.summary`
+	- `FFmpeg.configuration`
+	- `FFmpeg.license`
+	- `FFmpeg.probeMedia(path)`
 
 ## Utility/system modules
 

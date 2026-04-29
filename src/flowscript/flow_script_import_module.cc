@@ -41,7 +41,24 @@ void ImportModuleCallback(const v8::FunctionCallbackInfo<v8::Value>& args) {
         }
         isolate->ThrowException(v8::Exception::Error(
             v8::String::NewFromUtf8(isolate, error.c_str()).ToLocalChecked()));
+        return;
     }
+
+    std::string canonical_name = modules::ResolveCanonicalModuleName(*module_name_utf8);
+    if (canonical_name.empty()) {
+        canonical_name = *module_name_utf8;
+    }
+
+    v8::Local<v8::Value> module_value;
+    if (!context->Global()
+             ->Get(context, v8::String::NewFromUtf8(isolate, canonical_name.c_str()).ToLocalChecked())
+             .ToLocal(&module_value)) {
+        isolate->ThrowException(v8::Exception::Error(
+            v8::String::NewFromUtf8Literal(isolate, "Imported module could not be resolved")));
+        return;
+    }
+
+    args.GetReturnValue().Set(module_value);
 #else
     isolate->ThrowException(v8::Exception::Error(
         v8::String::NewFromUtf8Literal(isolate, "ImportModule is unavailable in this build")));
