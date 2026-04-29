@@ -1,18 +1,46 @@
 #include "modules/module_registry.h"
 
+#include "async_io/async_file_reader.h"
+#include "async_io/async_file_writer.h"
 #include "compiler_source.h"
+#include "doctor/analysis/analysis_engine.h"
+#include "doctor/analysis/analysis_result_handler.h"
+#include "doctor/core/engine_doctor_config.h"
+#include "doctor/core/engine_doctor_context.h"
+#include "doctor/scanner/scanner_module.h"
+#include "doctor/scanner/scan_parameters.h"
+#include "doctor/scanner/scan_result.h"
 #include "helper/class_builder.h"
 #include "helper/module_builder.h"
 #include "helper/tool_to.h"
 #include "provider.h"
 #include "runtime_live.h"
+#include "wrapper/angle/angle_engine_bridge.h"
+#include "wrapper/cuda/cuda_engine_bridge.h"
+#include "wrapper/cudnn/cudnn_engine_bridge.h"
+#include "wrapper/ffmpeg/ffmpeg_engine_bridge.h"
+#include "wrapper/opencv/opencv_engine_bridge.h"
+#include "wrapper/skia/skia_engine_bridge.h"
+
+#include <curl/curl.h>
+#include <openssl/evp.h>
+#include <openssl/rand.h>
+#include <openssl/sha.h>
 
 #include <algorithm>
+#include <array>
 #include <cctype>
+#include <cstdio>
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
+#include <memory>
+#include <optional>
+#include <sstream>
 #include <string>
 #include <system_error>
+#include <sys/wait.h>
+#include <unistd.h>
 #include <utility>
 #include <vector>
 
@@ -36,6 +64,482 @@ std::string ToLowerCopy(const std::string& text) {
 		return static_cast<char>(std::tolower(ch));
 	});
 	return out;
+}
+
+std::string TrimWhitespace(std::string text) {
+	const auto not_space = [](unsigned char ch) {
+		return std::isspace(ch) == 0;
+	};
+	text.erase(text.begin(), std::find_if(text.begin(), text.end(), not_space));
+	text.erase(std::find_if(text.rbegin(), text.rend(), not_space).base(), text.end());
+	return text;
+}
+
+std::string QuoteForShell(const std::string& token) {
+	if (token.empty()) {
+		return "''";
+	}
+	bool needs_quote = false;
+	for (char ch : token) {
+		if (std::isspace(static_cast<unsigned char>(ch)) != 0 || ch == '\'' || ch == '"') {
+			needs_quote = true;
+			break;
+		}
+	}
+	if (!needs_quote) {
+		return token;
+	}
+	std::string out = "'";
+	for (char ch : token) {
+		if (ch == '\'') {
+			out += "'\\''";
+		} else {
+			out.push_back(ch);
+		}
+	}
+	out.push_back('\'');
+	return out;
+}
+
+std::string BytesToHex(const uint8_t* bytes, size_t size) {
+	static constexpr char kHex[] = "0123456789abcdef";
+	std::string out;
+	out.resize(size * 2u);
+	for (size_t index = 0; index < size; ++index) {
+		out[index * 2u] = kHex[(bytes[index] >> 4u) & 0x0Fu];
+		out[index * 2u + 1u] = kHex[bytes[index] & 0x0Fu];
+	}
+	return out;
+}
+
+std::filesystem::path ResolveProjectRoot() {
+	return ResolveSourceRoot().parent_path();
+}
+
+std::filesystem::path ResolveProjectRelativePath(const std::string& input) {
+	if (input.empty()) {
+		return ResolveProjectRoot();
+	}
+	std::filesystem::path path(input);
+	if (path.is_absolute()) {
+		return path.lexically_normal();
+	}
+	const std::filesystem::path current_relative = std::filesystem::current_path() / path;
+	std::error_code current_error;
+	if (std::filesystem::exists(current_relative, current_error)) {
+		return current_relative.lexically_normal();
+	}
+	return (ResolveProjectRoot() / path).lexically_normal();
+}
+
+bool ReadAllBytes(const std::filesystem::path& path, std::vector<uint8_t>* bytes_out, std::string* error_out) {
+	if (bytes_out == nullptr) {
+		if (error_out != nullptr) {
+			*error_out = "binary output target is null";
+		}
+		return false;
+	}
+	IO::AsyncIO::AsyncFileReader reader;
+	if (!reader.OpenFile(path.string())) {
+		if (error_out != nullptr) {
+			*error_out = reader.GetLastError().empty() ? "failed to open file" : reader.GetLastError();
+		}
+		return false;
+	}
+	const int64_t file_size = reader.GetFileSize();
+	if (file_size < 0) {
+		if (error_out != nullptr) {
+			*error_out = reader.GetLastError().empty() ? "failed to determine file size" : reader.GetLastError();
+		}
+		reader.CloseFile();
+		return false;
+	}
+	std::vector<uint8_t> bytes;
+	if (!reader.ReadSync(static_cast<size_t>(file_size), bytes)) {
+		if (error_out != nullptr) {
+			*error_out = reader.GetLastError().empty() ? "failed to read file" : reader.GetLastError();
+		}
+		reader.CloseFile();
+		return false;
+	}
+	reader.CloseFile();
+	*bytes_out = std::move(bytes);
+	return true;
+}
+
+bool WriteAllBytes(const std::filesystem::path& path,
+			   const std::vector<uint8_t>& bytes,
+			   bool append,
+			   std::string* error_out) {
+	std::error_code dir_error;
+	if (!path.parent_path().empty()) {
+		std::filesystem::create_directories(path.parent_path(), dir_error);
+	}
+	IO::AsyncIO::AsyncFileWriter writer;
+	if (!writer.CreateFile(path.string(), append)) {
+		if (error_out != nullptr) {
+			*error_out = writer.GetLastError().empty() ? "failed to open file for writing" : writer.GetLastError();
+		}
+		return false;
+	}
+	if (!bytes.empty() && !writer.WriteSync(bytes.data(), bytes.size())) {
+		if (error_out != nullptr) {
+			*error_out = writer.GetLastError().empty() ? "failed to write file" : writer.GetLastError();
+		}
+		writer.CloseFile();
+		return false;
+	}
+	writer.CloseFile();
+	return true;
+}
+
+bool GetObjectValue(v8::Isolate* isolate,
+			   v8::Local<v8::Context> context,
+			   v8::Local<v8::Object> object,
+			   const char* primary_key,
+			   const char* secondary_key,
+			   v8::Local<v8::Value>* value_out) {
+	if (value_out == nullptr) {
+		return false;
+	}
+	auto try_get = [&](const char* key) -> bool {
+		if (key == nullptr) {
+			return false;
+		}
+		return object->Get(context, Engine::Helper::ToV8Str(isolate, key)).ToLocal(value_out)
+			&& !(*value_out).IsEmpty()
+			&& !(*value_out)->IsUndefined();
+	};
+	return try_get(primary_key) || try_get(secondary_key);
+}
+
+bool GetObjectBool(v8::Isolate* isolate,
+			  v8::Local<v8::Context> context,
+			  v8::Local<v8::Object> object,
+			  const char* primary_key,
+			  const char* secondary_key,
+			  bool fallback) {
+	v8::Local<v8::Value> value;
+	if (!GetObjectValue(isolate, context, object, primary_key, secondary_key, &value)) {
+		return fallback;
+	}
+	return value->BooleanValue(isolate);
+}
+
+int GetObjectInt(v8::Isolate* isolate,
+			 v8::Local<v8::Context> context,
+			 v8::Local<v8::Object> object,
+			 const char* primary_key,
+			 const char* secondary_key,
+			 int fallback) {
+	v8::Local<v8::Value> value;
+	if (!GetObjectValue(isolate, context, object, primary_key, secondary_key, &value) || !value->IsNumber()) {
+		return fallback;
+	}
+	return value->Int32Value(context).FromMaybe(fallback);
+}
+
+std::vector<std::string> GetObjectStringArray(v8::Isolate* isolate,
+				      v8::Local<v8::Context> context,
+				      v8::Local<v8::Object> object,
+				      const char* primary_key,
+				      const char* secondary_key) {
+	std::vector<std::string> values;
+	v8::Local<v8::Value> value;
+	if (!GetObjectValue(isolate, context, object, primary_key, secondary_key, &value) || !value->IsArray()) {
+		return values;
+	}
+	v8::Local<v8::Array> array = value.As<v8::Array>();
+	values.reserve(array->Length());
+	for (uint32_t index = 0; index < array->Length(); ++index) {
+		v8::Local<v8::Value> element;
+		if (!array->Get(context, index).ToLocal(&element) || !element->IsString()) {
+			continue;
+		}
+		values.push_back(Engine::Helper::FromV8Str(isolate, element));
+	}
+	return values;
+}
+
+std::vector<RuntimeLive::InterfaceCompiler::SourceFile> GetRuntimeSourceFiles(
+						v8::Isolate* isolate,
+						v8::Local<v8::Context> context,
+						v8::Local<v8::Object> object) {
+	std::vector<RuntimeLive::InterfaceCompiler::SourceFile> files;
+	v8::Local<v8::Value> value;
+	if (!GetObjectValue(isolate, context, object, "sourceFiles", "source_files", &value) || !value->IsArray()) {
+		return files;
+	}
+	v8::Local<v8::Array> array = value.As<v8::Array>();
+	for (uint32_t index = 0; index < array->Length(); ++index) {
+		v8::Local<v8::Value> element;
+		if (!array->Get(context, index).ToLocal(&element) || !element->IsObject()) {
+			continue;
+		}
+		v8::Local<v8::Object> file_object = element.As<v8::Object>();
+		RuntimeLive::InterfaceCompiler::SourceFile file;
+		file.path = GetObjectString(isolate, context, file_object, "path", nullptr, std::string());
+		file.content = GetObjectString(isolate, context, file_object, "content", nullptr, std::string());
+		file.is_header = GetObjectBool(isolate, context, file_object, "isHeader", "is_header", false);
+		if (!file.path.empty()) {
+			files.push_back(std::move(file));
+		}
+	}
+	return files;
+}
+
+struct CurlResponse {
+	bool ok = false;
+	long status_code = 0;
+	double content_length = -1.0;
+	std::string content_type;
+	std::string effective_url;
+	std::string body;
+	std::string error;
+};
+
+size_t CurlWriteToString(void* data, size_t size, size_t nmemb, void* userdata) {
+	const size_t bytes = size * nmemb;
+	auto* output = static_cast<std::string*>(userdata);
+	output->append(static_cast<const char*>(data), bytes);
+	return bytes;
+}
+
+size_t CurlWriteToFile(void* data, size_t size, size_t nmemb, void* userdata) {
+	const size_t bytes = size * nmemb;
+	auto* output = static_cast<std::ofstream*>(userdata);
+	output->write(static_cast<const char*>(data), static_cast<std::streamsize>(bytes));
+	return bytes;
+}
+
+bool EnsureCurlInitialized() {
+	static const CURLcode kInitCode = curl_global_init(CURL_GLOBAL_DEFAULT);
+	return kInitCode == CURLE_OK;
+}
+
+bool PerformNetworkRequest(const std::string& url,
+			       bool head_only,
+			       const std::filesystem::path* output_path,
+			       CurlResponse* response) {
+	if (response == nullptr) {
+		return false;
+	}
+	*response = CurlResponse();
+	if (!EnsureCurlInitialized()) {
+		response->error = "curl initialization failed";
+		return false;
+	}
+	std::unique_ptr<CURL, decltype(&curl_easy_cleanup)> curl(curl_easy_init(), &curl_easy_cleanup);
+	if (!curl) {
+		response->error = "curl_easy_init failed";
+		return false;
+	}
+	std::ofstream output_stream;
+	char error_buffer[CURL_ERROR_SIZE] = {0};
+	curl_easy_setopt(curl.get(), CURLOPT_URL, url.c_str());
+	curl_easy_setopt(curl.get(), CURLOPT_FOLLOWLOCATION, 1L);
+	curl_easy_setopt(curl.get(), CURLOPT_USERAGENT, "EngineBuilder/1.1");
+	curl_easy_setopt(curl.get(), CURLOPT_ERRORBUFFER, error_buffer);
+	if (head_only) {
+		curl_easy_setopt(curl.get(), CURLOPT_NOBODY, 1L);
+	} else if (output_path != nullptr) {
+		std::error_code dir_error;
+		if (!output_path->parent_path().empty()) {
+			std::filesystem::create_directories(output_path->parent_path(), dir_error);
+		}
+		output_stream.open(*output_path, std::ios::binary);
+		if (!output_stream.is_open()) {
+			response->error = "failed to open output path";
+			return false;
+		}
+		curl_easy_setopt(curl.get(), CURLOPT_WRITEFUNCTION, &CurlWriteToFile);
+		curl_easy_setopt(curl.get(), CURLOPT_WRITEDATA, &output_stream);
+	} else {
+		curl_easy_setopt(curl.get(), CURLOPT_WRITEFUNCTION, &CurlWriteToString);
+		curl_easy_setopt(curl.get(), CURLOPT_WRITEDATA, &response->body);
+	}
+	const CURLcode code = curl_easy_perform(curl.get());
+	if (output_stream.is_open()) {
+		output_stream.close();
+	}
+	if (code != CURLE_OK) {
+		response->error = error_buffer[0] != '\0' ? std::string(error_buffer) : curl_easy_strerror(code);
+		return false;
+	}
+	char* content_type = nullptr;
+	char* effective_url = nullptr;
+	curl_easy_getinfo(curl.get(), CURLINFO_RESPONSE_CODE, &response->status_code);
+	curl_easy_getinfo(curl.get(), CURLINFO_CONTENT_TYPE, &content_type);
+	curl_easy_getinfo(curl.get(), CURLINFO_EFFECTIVE_URL, &effective_url);
+	curl_easy_getinfo(curl.get(), CURLINFO_CONTENT_LENGTH_DOWNLOAD, &response->content_length);
+	response->content_type = content_type != nullptr ? std::string(content_type) : std::string();
+	response->effective_url = effective_url != nullptr ? std::string(effective_url) : std::string();
+	response->ok = response->status_code >= 200 && response->status_code < 400;
+	return true;
+}
+
+struct CommandResult {
+	int exit_code = -1;
+	std::string output;
+	std::string error;
+};
+
+bool RunCommandCapture(const std::string& command, CommandResult* result) {
+	if (result == nullptr) {
+		return false;
+	}
+	*result = CommandResult();
+	FILE* pipe = popen(command.c_str(), "r");
+	if (pipe == nullptr) {
+		result->error = "popen failed";
+		return false;
+	}
+	std::array<char, 4096> buffer {};
+	while (fgets(buffer.data(), static_cast<int>(buffer.size()), pipe) != nullptr) {
+		result->output += buffer.data();
+	}
+	const int status = pclose(pipe);
+	if (status == -1) {
+		result->error = "pclose failed";
+		return false;
+	}
+	if (WIFEXITED(status)) {
+		result->exit_code = WEXITSTATUS(status);
+	} else {
+		result->exit_code = status;
+	}
+	result->output = TrimWhitespace(result->output);
+	return true;
+}
+
+std::string DetectPlatformName() {
+#if defined(_WIN32)
+	return "windows";
+#elif defined(__APPLE__)
+	return "macos";
+#elif defined(__linux__)
+	return "linux";
+#elif defined(__OpenBSD__)
+	return "openbsd";
+#else
+	return "unknown";
+#endif
+}
+
+std::string DetectHostName() {
+	std::array<char, 256> hostname {};
+	if (gethostname(hostname.data(), hostname.size() - 1u) != 0) {
+		return std::string();
+	}
+	hostname.back() = '\0';
+	return hostname.data();
+}
+
+std::string WhichCommand(const std::string& command) {
+	const char* path_env = std::getenv("PATH");
+	if (path_env == nullptr || command.empty()) {
+		return std::string();
+	}
+	std::stringstream stream(path_env);
+	std::string segment;
+	while (std::getline(stream, segment, ':')) {
+		const std::filesystem::path candidate = std::filesystem::path(segment) / command;
+		std::error_code error;
+		if (std::filesystem::exists(candidate, error) && access(candidate.c_str(), X_OK) == 0) {
+			return candidate.string();
+		}
+	}
+	return std::string();
+}
+
+std::string Sha256HexString(const std::string& text) {
+	unsigned char digest[SHA256_DIGEST_LENGTH];
+	SHA256(reinterpret_cast<const unsigned char*>(text.data()), text.size(), digest);
+	return BytesToHex(digest, SHA256_DIGEST_LENGTH);
+}
+
+std::string Sha256HexFile(const std::filesystem::path& path, std::string* error_out) {
+	std::vector<uint8_t> bytes;
+	if (!ReadAllBytes(path, &bytes, error_out)) {
+		return std::string();
+	}
+	unsigned char digest[SHA256_DIGEST_LENGTH];
+	SHA256(bytes.data(), bytes.size(), digest);
+	return BytesToHex(digest, SHA256_DIGEST_LENGTH);
+}
+
+std::string Base64EncodeString(const std::string& text) {
+	if (text.empty()) {
+		return std::string();
+	}
+	std::string out(static_cast<size_t>(4 * ((text.size() + 2u) / 3u)), '\0');
+	const int written = EVP_EncodeBlock(
+		reinterpret_cast<unsigned char*>(out.data()),
+		reinterpret_cast<const unsigned char*>(text.data()),
+		static_cast<int>(text.size()));
+	out.resize(written > 0 ? static_cast<size_t>(written) : 0u);
+	return out;
+}
+
+bool Base64DecodeString(const std::string& encoded, std::string* decoded_out, std::string* error_out) {
+	if (decoded_out == nullptr) {
+		if (error_out != nullptr) {
+			*error_out = "decoded output target is null";
+		}
+		return false;
+	}
+	if (encoded.empty()) {
+		decoded_out->clear();
+		return true;
+	}
+	std::vector<unsigned char> decoded(static_cast<size_t>(3 * (encoded.size() / 4u) + 3u), 0);
+	int decoded_size = EVP_DecodeBlock(
+		decoded.data(),
+		reinterpret_cast<const unsigned char*>(encoded.data()),
+		static_cast<int>(encoded.size()));
+	if (decoded_size < 0) {
+		if (error_out != nullptr) {
+			*error_out = "invalid base64 input";
+		}
+		return false;
+	}
+	int padding = 0;
+	if (!encoded.empty() && encoded.back() == '=') {
+		++padding;
+	}
+	if (encoded.size() > 1u && encoded[encoded.size() - 2u] == '=') {
+		++padding;
+	}
+	decoded_size -= padding;
+	decoded_out->assign(reinterpret_cast<const char*>(decoded.data()), static_cast<size_t>(std::max(decoded_size, 0)));
+	return true;
+}
+
+std::string RandomHex(size_t byte_count, std::string* error_out) {
+	std::vector<uint8_t> bytes(byte_count, 0u);
+	if (byte_count > 0u && RAND_bytes(bytes.data(), static_cast<int>(byte_count)) != 1) {
+		if (error_out != nullptr) {
+			*error_out = "RAND_bytes failed";
+		}
+		return std::string();
+	}
+	return BytesToHex(bytes.data(), bytes.size());
+}
+
+std::string ScanStatusToString(EngineDoctor::ScanStatus status) {
+	switch (status) {
+	case EngineDoctor::ScanStatus::PENDING:
+		return "pending";
+	case EngineDoctor::ScanStatus::SUCCESS:
+		return "success";
+	case EngineDoctor::ScanStatus::WARNING:
+		return "warning";
+	case EngineDoctor::ScanStatus::ERROR:
+		return "error";
+	case EngineDoctor::ScanStatus::SKIPPED:
+		return "skipped";
+	}
+	return "unknown";
 }
 
 std::filesystem::path ResolveSourceRoot() {
