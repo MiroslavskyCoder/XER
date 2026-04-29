@@ -14,6 +14,12 @@ Run the broader module-registry smoke check used after refactors:
 ./out/build/default/EngineBuilder run demo_app/modules_smoke.js
 ```
 
+Run the FlowScript Git module smoke check:
+
+```bash
+./out/build/default/EngineBuilder run demo_app/git_module_smoke.js
+```
+
 Run the FlowScript Buffer smoke check:
 
 ```bash

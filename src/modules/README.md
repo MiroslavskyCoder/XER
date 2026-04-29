@@ -86,9 +86,13 @@ Full per-module description and API list:
 	- effect options: `clapPluginReference`, `batchMode`, `outputDir` for `applyBatch`, plus `clapPluginReference` for `applyEffect/applyChain`
 - `ImportModule("Git")`
 	- `Git.describe([repoPath])`
+	- `Git.isRepository([repoPath])`
 	- `Git.currentBranch([repoPath])`
 	- `Git.head([repoPath])`
 	- `Git.statusPorcelain([repoPath])`
+	- `Git.status([repoPath])`
+	- `Git.describe(...)` returns `repoPath`, `isRepository`, `branch`, `head`, `headShort`, `statusPorcelain`, `statusEntryCount`, `statusEntries`, `dirty`, `error`
+	- `Git.status(...)` returns parsed porcelain entries with `indexStatus`, `workTreeStatus`, `path`, `oldPath`, `raw`
 - `ImportModule("Crypto")`
 	- `Crypto.sha256(text)`
 	- `Crypto.sha256File(path)`

@@ -3,6 +3,7 @@ ImportModule("System");
 ImportModule("RuntimeLive");
 ImportModule("Doctor");
 ImportModule("Audio");
+ImportModule("Git");
 ImportModule("OpenCV");
 ImportModule("CUDA");
 ImportModule("CUDNN");
@@ -17,6 +18,7 @@ console.log(JSON.stringify({
 	runtimeLiveOk: typeof RuntimeLive === "object" && RuntimeLive !== null,
 	doctorOk: typeof Doctor === "object" && Doctor !== null,
 	audioOk: typeof Audio === "object" && Audio !== null,
+	gitOk: typeof Git === "object" && Git !== null,
 	openCvOk: typeof OpenCV === "object" && OpenCV !== null,
 	cudaOk: typeof CUDA === "object" && CUDA !== null,
 	cudnnOk: typeof CUDNN === "object" && CUDNN !== null,
@@ -27,6 +29,8 @@ console.log(JSON.stringify({
 	hasAudioInspect: Audio && typeof Audio.inspect === "function",
 	hasAudioEffects: Audio && typeof Audio.applyEffect === "function" && typeof Audio.availableEffects === "function",
 	hasAudioBatch: Audio && typeof Audio.applyBatch === "function",
+	hasGitDescribe: Git && typeof Git.describe === "function",
+	hasGitStatus: Git && typeof Git.status === "function",
 	hasCompileAndRun: RuntimeLive && typeof RuntimeLive.compileAndRun === "function",
 	hasFfmpegProbe: FFmpeg && typeof FFmpeg.probeMedia === "function",
 	hasSkiaExports: Skia && typeof Skia.exportedFunctions === "object"
