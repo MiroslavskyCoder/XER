@@ -1,5 +1,4 @@
 #include "flux/terminal/terminal_manager.h"
-
 #include "flux/terminal/terminal_interface.h"
 
 namespace flux::terminal {
