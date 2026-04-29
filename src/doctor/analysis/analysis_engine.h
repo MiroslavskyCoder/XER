@@ -5,10 +5,14 @@
 
 #pragma once
 
+#include "analysis/analysis_strategy.h"
+#include "analysis/data_provider.h"
 #include "analysis/analysis_pipeline.h"
 #include "analysis/analysis_result_handler.h"
 #include "core/engine_doctor_config.h"
 #include "core/engine_doctor_context.h"
+
+#include <memory>
 
 namespace EngineDoctor {
 
@@ -21,8 +25,11 @@ public:
 
 private:
 	Context& context_;
+	DataProvider data_provider_;
 	AnalysisPipeline pipeline_;
 	AnalysisResultHandler result_handler_;
+	std::unique_ptr<AnalysisStrategy> strategy_;
+	Config config_;
 };
 
 } // namespace EngineDoctor

@@ -69,22 +69,43 @@ void ParseSourceFile(
 } // namespace
 
 ScannerModule::ScannerModule(Context& context)
-	: context_(context) {}
+	: context_(context),
+	  config_(NormalizeConfig(Config{})) {}
 
 void ScannerModule::initialize(const Config& config) {
-	Logger::initialize(config.log_level);
+	config_ = NormalizeConfig(config);
+	context_.set_data(kContextConfigDataKey, config_);
+	Logger::initialize(config_.log_level);
 	Logger::debug("ScannerModule: initialized.");
+	if (config_.publish_events) {
+		context_.event_bus().publish(
+			"doctor.scan.initialized",
+			"ScannerModule initialized",
+			{{"scan_results_key", config_.scan_results_key}});
+	}
 }
 
 void ScannerModule::scan(const ScanParameters& params) {
+	if (config_.publish_events) {
+		context_.event_bus().publish(
+			"doctor.scan.started",
+			"ScannerModule scan started",
+			{{"path_count", std::to_string(params.paths_to_scan.size())}});
+	}
 	std::vector<ScanResult> results;
 	for (const auto& raw_path : params.paths_to_scan) {
 		scan_path(std::filesystem::path(raw_path), params, &results);
 	}
 
-	context_.set_data("scan_parameters", params);
-	context_.set_data("scan_results", results);
+	context_.set_data(config_.scan_parameters_key, params);
+	context_.set_data(config_.scan_results_key, results);
 	Logger::info("ScannerModule: produced %zu scan results.", results.size());
+	if (config_.publish_events) {
+		context_.event_bus().publish(
+			"doctor.scan.completed",
+			"ScannerModule scan completed",
+			{{"result_count", std::to_string(results.size())}, {"scan_results_key", config_.scan_results_key}});
+	}
 }
 
 void ScannerModule::scan_path(

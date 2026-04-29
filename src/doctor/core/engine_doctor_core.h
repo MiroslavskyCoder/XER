@@ -23,6 +23,9 @@ public:
     ~EngineDoctorCore();
 
     void run(const ScanParameters& params);
+	Context& context();
+	const Context& context() const;
+	const Config& config() const;
 
 private:
     void initialize_modules();

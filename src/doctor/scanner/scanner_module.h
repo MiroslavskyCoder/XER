@@ -28,6 +28,7 @@ private:
 	static bool is_source_like(const std::filesystem::path& path);
 
 	Context& context_;
+	Config config_;
 };
 
 } // namespace EngineDoctor

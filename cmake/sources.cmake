@@ -81,9 +81,15 @@ list(FILTER ENGINE_SRC_H EXCLUDE REGEX "/src/doctor/")
 list(FILTER ENGINE_SRC_H EXCLUDE REGEX "/src/v8/v8_runtime_checker\\.h$")
 
 set(ENGINE_DOCTOR_RUNTIME_CC
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/core/engine_doctor_config.cc"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/core/event_bus.cc"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/core/logger.cc"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/core/engine_doctor_context.cc"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/core/module_manager.cc"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/core/engine_doctor_core.cc"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/scanner/scanner_module.cc"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/analysis/data_provider.cc"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/analysis/analysis_strategy.cc"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/analysis/analysis_result_handler.cc"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/analysis/metric_calculator.cc"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/analysis/analysis_task_manager.cc"
@@ -92,12 +98,17 @@ set(ENGINE_DOCTOR_RUNTIME_CC
 
 set(ENGINE_DOCTOR_RUNTIME_H
     "${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/core/engine_doctor_config.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/core/event_bus.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/core/exceptions.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/core/logger.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/core/engine_doctor_context.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/core/module_manager.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/core/engine_doctor_core.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/scanner/scan_parameters.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/scanner/scan_result.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/scanner/scanner_module.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/analysis/data_provider.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/analysis/analysis_strategy.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/analysis/analysis_result_handler.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/analysis/metric_calculator.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/analysis/analysis_task_manager.h"

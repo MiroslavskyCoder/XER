@@ -5,6 +5,8 @@
 
 #pragma once
 
+#include "core/event_bus.h"
+
 #include <any>
 #include <memory>
 #include <mutex>
@@ -64,11 +66,14 @@ public:
 	}
 
 	bool has_data(const std::string& key) const;
+	EventBus& event_bus();
+	const EventBus& event_bus() const;
 
 private:
 	mutable std::mutex mutex_;
 	std::unordered_map<std::type_index, std::shared_ptr<void>> modules_;
 	std::unordered_map<std::string, std::any> data_;
+	EventBus event_bus_;
 };
 
 } // namespace EngineDoctor
