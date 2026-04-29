@@ -21,22 +21,22 @@
     <path>demo_app/console_smoke.js.flowcache.bin</path>
     <exists>true</exists>
     <valid>true</valid>
-    <rebuilt>true</rebuilt>
+    <rebuilt>false</rebuilt>
     <used>true</used>
     <size>672</size>
     <last_write_time_ticks>-4660182709980000000</last_write_time_ticks>
     <sha256>6abe997b1439da74c351ee1127c9a29b51678729c08dbb52875cd0a359d8dde6</sha256>
     <expanded_sha256>c66e2eb0afcd1bd213432612b8d925e892f02a420fd216c5b0f557d396f92810</expanded_sha256>
-    <validation_mode>diff</validation_mode>
-    <validation_reason>expanded_text_changed</validation_reason>
+    <validation_mode>hash</validation_mode>
+    <validation_reason>metadata_sha256_match</validation_reason>
     <validation_stats>
-      <total>3</total>
-      <hash>0</hash>
+      <total>5</total>
+      <hash>2</hash>
       <diff>2</diff>
       <rebuild>1</rebuild>
     </validation_stats>
     <validation_history>
-      <count>3</count>
+      <count>5</count>
       <validation>
         <mode>rebuild</mode>
         <reason>cache_missing_or_invalid</reason>
@@ -54,6 +54,18 @@
         <reason>expanded_text_changed</reason>
         <status>ready</status>
         <timestamp_ticks>1777481290022787460</timestamp_ticks>
+      </validation>
+      <validation>
+        <mode>hash</mode>
+        <reason>metadata_sha256_match</reason>
+        <status>ready</status>
+        <timestamp_ticks>1777481675882585120</timestamp_ticks>
+      </validation>
+      <validation>
+        <mode>hash</mode>
+        <reason>metadata_sha256_match</reason>
+        <status>ready</status>
+        <timestamp_ticks>1777481952309568920</timestamp_ticks>
       </validation>
     </validation_history>
   </cache>

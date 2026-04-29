@@ -172,3 +172,22 @@ target_include_directories(EngineClapSmokePlugin PRIVATE
 set_target_properties(EngineClapSmokePlugin PROPERTIES
     PREFIX ""
     SUFFIX ".clap")
+
+add_executable(FluxTerminalManagerSmoke
+    ${CMAKE_CURRENT_SOURCE_DIR}/demo_app/terminal_manager_smoke.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/flux/terminal/terminal_interface.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/flux/terminal/terminal_buffer.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/flux/terminal/terminal_manager.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/flux/terminal/terminal_output_renderer.cc)
+target_include_directories(FluxTerminalManagerSmoke PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src)
+
+add_executable(FluxTerminalAnsiSmoke
+    ${CMAKE_CURRENT_SOURCE_DIR}/demo_app/terminal_ansi_smoke.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/flux/terminal/terminal_interface.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/flux/terminal/terminal_buffer.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/flux/terminal/terminal_manager.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/flux/terminal/terminal_output_renderer.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/flux/terminal/terminal_ansi_parser.cc)
+target_include_directories(FluxTerminalAnsiSmoke PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src)

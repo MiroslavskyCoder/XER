@@ -32,6 +32,18 @@ Run the terminal snapshot smoke check:
 ./out/build/default/EngineBuilder run demo_app/terminal_snapshot_smoke.js
 ```
 
+Run the standalone C++ terminal manager smoke check:
+
+```bash
+./out/build/default/FluxTerminalManagerSmoke
+```
+
+Run the standalone ANSI/renderer smoke check:
+
+```bash
+./out/build/default/FluxTerminalAnsiSmoke
+```
+
 This script checks these modules:
 
 - OpenCV
@@ -67,3 +79,14 @@ The terminal snapshot smoke script verifies:
 
 - direct `console.snapshot()` access to the `src/flux/terminal` buffer state
 - direct `console.clearSnapshot()` reset behavior for stdout and stderr buffers
+
+The standalone C++ terminal manager smoke verifies:
+
+- direct `TerminalManager::Write`, `WriteLine`, `Snapshot`, and `ResetBuffer` behavior
+- stdout and stderr buffer separation without using FlowScript runtime
+
+The standalone ANSI/renderer smoke verifies:
+
+- raw ANSI escape sequences remain in the terminal snapshot buffer
+- `SnapshotPlainText()` strips CSI and OSC ANSI sequences for renderer-facing plain text
+- stdout clearing does not wipe stderr renderer state

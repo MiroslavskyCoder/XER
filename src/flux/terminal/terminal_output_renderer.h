@@ -14,5 +14,6 @@ void WriteLine(OutputStream stream, std::string_view text);
 void ClearSnapshot();
 void ClearSnapshot(OutputStream stream);
 std::string Snapshot(OutputStream stream);
+std::string SnapshotPlainText(OutputStream stream);
 
 }  // namespace flux::terminal

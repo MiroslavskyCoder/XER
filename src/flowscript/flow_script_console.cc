@@ -1,30 +1,15 @@
 #include "flow_script_console.h"
 
-#include <absl/strings/str_cat.h>
-#include <absl/strings/str_format.h>
-
-#include <chrono>
 #include <string>
-#include <unordered_map>
 
-#include "flux/terminal/terminal_output_renderer.h"
+#include "flux/v8_console_diagnostics.h"
 #include "flux/v8_console_table.h"
+#include "flux/v8_console_terminal.h"
 #include "flux/v8_console_runtime.h"
 #include "helper/class_builder.h"
 
 namespace flow_script_detail {
 namespace {
-
-using ConsoleClock = std::chrono::steady_clock;
-
-std::unordered_map<v8::Isolate*, std::unordered_map<std::string, ConsoleClock::time_point>>& ConsoleTimers() {
-	static std::unordered_map<v8::Isolate*, std::unordered_map<std::string, ConsoleClock::time_point>> timers;
-	return timers;
-}
-
-std::unordered_map<std::string, ConsoleClock::time_point>& TimersFor(v8::Isolate* isolate) {
-	return ConsoleTimers()[isolate];
-}
 
 std::string DefaultConsoleLabel(v8::Isolate* isolate,
 					const v8::FunctionCallbackInfo<v8::Value>& args,
@@ -33,54 +18,6 @@ std::string DefaultConsoleLabel(v8::Isolate* isolate,
 		return "default";
 	}
 	return Utf8(isolate, args[index]);
-}
-
-
-flux::terminal::OutputStream ParseOutputStream(v8::Isolate* isolate,
-					       const v8::FunctionCallbackInfo<v8::Value>& args,
-					       int index) {
-	if (index >= args.Length() || args[index]->IsUndefined()) {
-		return flux::terminal::OutputStream::kStdout;
-	}
-	return Utf8(isolate, args[index]) == "stderr"
-		? flux::terminal::OutputStream::kStderr
-		: flux::terminal::OutputStream::kStdout;
-}
-
-std::string BuildConsoleTrace(v8::Isolate* isolate) {
-	v8::Local<v8::StackTrace> stack = v8::StackTrace::CurrentStackTrace(isolate, 32, v8::StackTrace::kDetailed);
-	if (stack.IsEmpty() || stack->GetFrameCount() == 0) {
-		return std::string();
-	}
-	std::string out;
-	for (int index = 0; index < stack->GetFrameCount(); ++index) {
-		v8::Local<v8::StackFrame> frame = stack->GetFrame(isolate, index);
-		if (frame.IsEmpty()) {
-			continue;
-		}
-		v8::Local<v8::String> function_name_value = frame->GetFunctionName();
-		v8::Local<v8::String> script_name_value = frame->GetScriptNameOrSourceURL();
-		const std::string function_name = function_name_value.IsEmpty() ? std::string() : Utf8(isolate, function_name_value);
-		std::string script_name = script_name_value.IsEmpty() ? std::string() : Utf8(isolate, script_name_value);
-		if (script_name.empty()) {
-			script_name = "<anonymous>";
-		}
-		if (!out.empty()) {
-			absl::StrAppend(&out, "\n");
-		}
-		if (function_name.empty()) {
-			absl::StrAppendFormat(&out, "    at %s:%d:%d", script_name, frame->GetLineNumber(), frame->GetColumn());
-		} else {
-			absl::StrAppendFormat(
-				&out,
-				"    at %s (%s:%d:%d)",
-				function_name,
-				script_name,
-				frame->GetLineNumber(),
-				frame->GetColumn());
-		}
-	}
-	return out;
 }
 
 void ConsoleConstructor(const v8::FunctionCallbackInfo<v8::Value>& args) {
@@ -195,62 +132,48 @@ void ConsoleTableCallback(const v8::FunctionCallbackInfo<v8::Value>& args) {
 	if (args.Length() == 0) {
 		return;
 	}
+	v8::Local<v8::Value> columns_filter = args.Length() > 1
+		? v8::Local<v8::Value>(args[1])
+		: v8::Local<v8::Value>(v8::Undefined(isolate));
 	flux::console::WriteLine(
 		flux::console::Stream::kStdout,
 		flux::console::RenderTable(
 			isolate,
 			context,
 			args[0],
-			args.Length() > 1 ? args[1] : v8::Undefined(isolate)));
+			columns_filter));
 }
 
 void ConsoleTimeCallback(const v8::FunctionCallbackInfo<v8::Value>& args) {
 	v8::Isolate* isolate = args.GetIsolate();
-	TimersFor(isolate)[DefaultConsoleLabel(isolate, args, 0)] = ConsoleClock::now();
+	flux::console::StartTimer(isolate, DefaultConsoleLabel(isolate, args, 0));
 }
 
 void ConsoleTimeEndCallback(const v8::FunctionCallbackInfo<v8::Value>& args) {
 	v8::Isolate* isolate = args.GetIsolate();
 	const std::string label = DefaultConsoleLabel(isolate, args, 0);
-	auto& timers = TimersFor(isolate);
-	const auto timer_it = timers.find(label);
-	if (timer_it == timers.end()) {
-		flux::console::WriteLine(
-			flux::console::Stream::kStderr,
-			absl::StrCat("Timer '", label, "' does not exist"));
-		return;
-	}
-	const double elapsed_ms = std::chrono::duration<double, std::milli>(ConsoleClock::now() - timer_it->second).count();
-	timers.erase(timer_it);
+	bool found = false;
+	const std::string message = flux::console::EndTimer(isolate, label, &found);
 	flux::console::WriteLine(
-		flux::console::Stream::kStdout,
-		absl::StrCat(label, ": ", absl::StrFormat("%.3fms", elapsed_ms)));
+		found ? flux::console::Stream::kStdout : flux::console::Stream::kStderr,
+		message);
 }
 
 void ConsoleTraceCallback(const v8::FunctionCallbackInfo<v8::Value>& args) {
 	v8::Isolate* isolate = args.GetIsolate();
-	const std::string prefix = args.Length() > 0
-		? absl::StrCat("Trace: ", JoinArguments(isolate, args))
-		: std::string("Trace");
-	const std::string stack = BuildConsoleTrace(isolate);
 	flux::console::WriteLine(
 		flux::console::Stream::kStderr,
-		stack.empty() ? prefix : absl::StrCat(prefix, "\n", stack));
+		flux::console::BuildTrace(isolate, args.Length() > 0 ? JoinArguments(isolate, args) : std::string()));
 }
 
 void ConsoleSnapshotCallback(const v8::FunctionCallbackInfo<v8::Value>& args) {
 	v8::Isolate* isolate = args.GetIsolate();
 	args.GetReturnValue().Set(
-		Engine::Helper::ToV8Str(isolate, flux::terminal::Snapshot(ParseOutputStream(isolate, args, 0))));
+		Engine::Helper::ToV8Str(isolate, flux::console::SnapshotFromArgs(isolate, args)));
 }
 
 void ConsoleClearSnapshotCallback(const v8::FunctionCallbackInfo<v8::Value>& args) {
-	v8::Isolate* isolate = args.GetIsolate();
-	if (args.Length() == 0 || args[0]->IsUndefined()) {
-		flux::terminal::ClearSnapshot();
-		return;
-	}
-	flux::terminal::ClearSnapshot(ParseOutputStream(isolate, args, 0));
-}
-
+	flux::console::ClearSnapshotFromArgs(args.GetIsolate(), args);
 }  // namespace flow_script_detail
+}  // namespace flow_script_detail
+

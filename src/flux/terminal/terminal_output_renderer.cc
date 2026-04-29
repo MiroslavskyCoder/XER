@@ -1,5 +1,6 @@
 #include "flux/terminal/terminal_output_renderer.h"
 
+#include "flux/terminal/terminal_ansi_parser.h"
 #include "flux/terminal/terminal_manager.h"
 
 namespace flux::terminal {
@@ -32,6 +33,10 @@ void ClearSnapshot(OutputStream stream) {
 
 std::string Snapshot(OutputStream stream) {
 	return TerminalManager::Instance().Snapshot(stream);
+}
+
+std::string SnapshotPlainText(OutputStream stream) {
+	return StripAnsi(Snapshot(stream));
 }
 
 }  // namespace flux::terminal
