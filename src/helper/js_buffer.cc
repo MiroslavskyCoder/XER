@@ -1,0 +1,200 @@
+#include "helper/js_buffer.h"
+
+#include <absl/strings/ascii.h>
+#include <absl/strings/str_cat.h>
+
+#include <algorithm>
+#include <iterator>
+
+#include <range/v3/algorithm/copy.hpp>
+#include <range/v3/algorithm/equal.hpp>
+#include <range/v3/algorithm/lexicographical_compare.hpp>
+#include <range/v3/algorithm/search.hpp>
+
+#if ENGINE_HAS_ICU
+#include <unicode/normalizer2.h>
+#include <unicode/unistr.h>
+#endif
+
+namespace Engine::Helper {
+namespace {
+
+constexpr char kHexDigits[] = "0123456789abcdef";
+
+int HexNibble(char ch) {
+	if (ch >= '0' && ch <= '9') {
+		return ch - '0';
+	}
+	if (ch >= 'a' && ch <= 'f') {
+		return 10 + (ch - 'a');
+	}
+	return -1;
+}
+
+std::string StripAsciiWhitespace(std::string_view text) {
+	std::string compact;
+	compact.reserve(text.size());
+	for (char ch : text) {
+		if (!absl::ascii_isspace(static_cast<unsigned char>(ch))) {
+			compact.push_back(ch);
+		}
+	}
+	return compact;
+}
+
+}  // namespace
+
+JsBuffer::Bytes JsBuffer::FromString(std::string_view text, bool normalize_utf8) {
+	Bytes out;
+	AppendString(&out, text, normalize_utf8);
+	return out;
+}
+
+std::string JsBuffer::ToString(ConstSpan bytes, bool normalize_utf8) {
+	std::string out(bytes.begin(), bytes.end());
+	return normalize_utf8 ? NormalizeUtf8(out) : out;
+}
+
+std::string JsBuffer::NormalizeUtf8(std::string_view text) {
+	std::string normalized(text);
+#if ENGINE_HAS_ICU
+	UErrorCode status = U_ZERO_ERROR;
+	const icu::Normalizer2* normalizer = icu::Normalizer2::getNFCInstance(status);
+	if (U_FAILURE(status) || normalizer == nullptr) {
+		return normalized;
+	}
+	icu::UnicodeString source = icu::UnicodeString::fromUTF8(text);
+	icu::UnicodeString output;
+	status = U_ZERO_ERROR;
+	normalizer->normalize(source, output, status);
+	if (U_FAILURE(status)) {
+		return normalized;
+	}
+	normalized.clear();
+	output.toUTF8String(normalized);
+#endif
+	return normalized;
+}
+
+void JsBuffer::AppendString(Bytes* target, std::string_view text, bool normalize_utf8) {
+	if (target == nullptr || text.empty()) {
+		return;
+	}
+	const std::string source = normalize_utf8 ? NormalizeUtf8(text) : std::string(text);
+	target->reserve(target->size() + source.size());
+	AppendBytes(target, ConstSpan(reinterpret_cast<const Byte*>(source.data()), source.size()));
+}
+
+void JsBuffer::AppendBytes(Bytes* target, ConstSpan bytes) {
+	if (target == nullptr || bytes.empty()) {
+		return;
+	}
+	target->reserve(target->size() + bytes.size());
+	ranges::copy(bytes, std::back_inserter(*target));
+}
+
+std::string JsBuffer::HexEncode(ConstSpan bytes) {
+	std::string hex;
+	hex.reserve(bytes.size() * 2u);
+	for (Byte value : bytes) {
+		hex.push_back(kHexDigits[(value >> 4u) & 0x0Fu]);
+		hex.push_back(kHexDigits[value & 0x0Fu]);
+	}
+	return hex;
+}
+
+bool JsBuffer::HexDecode(std::string_view hex, Bytes* bytes_out, std::string* error_out) {
+	if (bytes_out == nullptr) {
+		if (error_out != nullptr) {
+			*error_out = "hex decode target is null";
+		}
+		return false;
+	}
+	std::string compact = StripAsciiWhitespace(hex);
+	absl::AsciiStrToLower(&compact);
+	if ((compact.size() % 2u) != 0u) {
+		if (error_out != nullptr) {
+			*error_out = absl::StrCat("hex input must contain an even number of digits: ", compact.size());
+		}
+		return false;
+	}
+
+	Bytes out;
+	out.reserve(compact.size() / 2u);
+	for (size_t index = 0; index < compact.size(); index += 2u) {
+		const int high = HexNibble(compact[index]);
+		const int low = HexNibble(compact[index + 1u]);
+		if (high < 0 || low < 0) {
+			if (error_out != nullptr) {
+				*error_out = absl::StrCat("invalid hex digit at index ", index);
+			}
+			return false;
+		}
+		out.push_back(static_cast<Byte>((high << 4u) | low));
+	}
+
+	*bytes_out = std::move(out);
+	if (error_out != nullptr) {
+		error_out->clear();
+	}
+	return true;
+}
+
+JsBuffer::SizeType JsBuffer::Copy(ConstSpan source,
+				      MutableSpan destination,
+				      SizeType source_offset,
+				      SizeType destination_offset,
+				      SizeType max_length) {
+	if (source_offset >= source.size() || destination_offset >= destination.size()) {
+		return 0;
+	}
+	ConstSpan source_tail = source.subspan(source_offset);
+	MutableSpan destination_tail = destination.subspan(destination_offset);
+	const SizeType count = std::min({max_length, source_tail.size(), destination_tail.size()});
+	if (count == 0) {
+		return 0;
+	}
+	ranges::copy(source_tail.first(count), destination_tail.begin());
+	return count;
+}
+
+JsBuffer::Bytes JsBuffer::Concat(const std::vector<ConstSpan>& segments) {
+	SizeType total_size = 0;
+	for (ConstSpan segment : segments) {
+		total_size += segment.size();
+	}
+	Bytes out;
+	out.reserve(total_size);
+	for (ConstSpan segment : segments) {
+		AppendBytes(&out, segment);
+	}
+	return out;
+}
+
+int JsBuffer::Compare(ConstSpan lhs, ConstSpan rhs) {
+	if (ranges::equal(lhs, rhs)) {
+		return 0;
+	}
+	return ranges::lexicographical_compare(lhs, rhs) ? -1 : 1;
+}
+
+bool JsBuffer::Equals(ConstSpan lhs, ConstSpan rhs) {
+	return ranges::equal(lhs, rhs);
+}
+
+std::ptrdiff_t JsBuffer::IndexOf(ConstSpan haystack, ConstSpan needle, SizeType offset) {
+	if (offset > haystack.size()) {
+		return -1;
+	}
+	if (needle.empty()) {
+		return static_cast<std::ptrdiff_t>(offset);
+	}
+	ConstSpan window = haystack.subspan(offset);
+	const auto match = ranges::search(window, needle);
+	if (match.begin() == window.end()) {
+		return -1;
+	}
+	return static_cast<std::ptrdiff_t>(offset) + (match.begin() - window.begin());
+}
+
+}  // namespace Engine::Helper

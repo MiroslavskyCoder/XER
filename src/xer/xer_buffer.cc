@@ -1,15 +1,27 @@
 #include "xer/xer_buffer.h"
 
+#include "helper/js_buffer.h"
+
 #include <fstream>
+
+namespace {
+
+Engine::Helper::JsBuffer::ConstSpan MakeConstSpan(const std::vector<std::uint8_t>& bytes) {
+    return Engine::Helper::JsBuffer::ConstSpan(bytes.data(), bytes.size());
+}
+
+Engine::Helper::JsBuffer::ConstSpan MakeConstSpan(const std::uint8_t* data, std::size_t size) {
+    return Engine::Helper::JsBuffer::ConstSpan(data, size);
+}
+
+}  // namespace
 
 namespace Xer {
 
 XerBuffer::XerBuffer(std::vector<std::uint8_t> bytes) : bytes_(std::move(bytes)) {}
 
 XerBuffer XerBuffer::FromString(std::string_view text) {
-    XerBuffer buffer;
-    buffer.Append(text);
-    return buffer;
+    return XerBuffer(Engine::Helper::JsBuffer::FromString(text));
 }
 
 XerBuffer XerBuffer::FromFile(const std::filesystem::path& path, std::string* error_out) {
@@ -52,18 +64,18 @@ XerBuffer XerBuffer::FromFile(const std::filesystem::path& path, std::string* er
 }
 
 void XerBuffer::Append(std::string_view text) {
-    bytes_.insert(bytes_.end(), text.begin(), text.end());
+    Engine::Helper::JsBuffer::AppendString(&bytes_, text);
 }
 
 void XerBuffer::Append(const std::uint8_t* data, std::size_t size) {
     if (data == nullptr || size == 0) {
         return;
     }
-    bytes_.insert(bytes_.end(), data, data + size);
+    Engine::Helper::JsBuffer::AppendBytes(&bytes_, MakeConstSpan(data, size));
 }
 
 std::string XerBuffer::ToString() const {
-    return std::string(bytes_.begin(), bytes_.end());
+    return Engine::Helper::JsBuffer::ToString(MakeConstSpan(bytes_));
 }
 
 }  // namespace Xer

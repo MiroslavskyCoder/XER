@@ -505,7 +505,7 @@ bool RunAudioModulesSmoke(
 		}
 		return false;
 	}
-	granular_shifter.SetPitchRatio(1.25f);
+	granular_shifter.SetPitchRatio(0.25f);
 	std::vector<float> granular_output;
 	if (!ProcessGranularInBlocks(&granular_shifter, processing_input, &granular_output, 512u)) {
 		if (error_out != nullptr) {

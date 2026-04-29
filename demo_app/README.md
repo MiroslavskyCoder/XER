@@ -8,6 +8,12 @@ Run bridge status check for multimedia/GPU related modules:
 ./build/EngineBuilder run demo_app/bridge_multimedia.js
 ```
 
+Run the broader module-registry smoke check used after refactors:
+
+```bash
+./out/build/default/EngineBuilder run demo_app/modules_smoke.js
+```
+
 This script checks these modules:
 
 - OpenCV
@@ -16,3 +22,11 @@ This script checks these modules:
 - Skia
 - FFmpeg
 - ANGLE
+
+The module smoke script also verifies:
+
+- Container
+- System
+- RuntimeLive
+- Doctor
+- VTK
