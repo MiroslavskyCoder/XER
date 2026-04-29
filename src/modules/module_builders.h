@@ -28,6 +28,10 @@ bool BuildNetworkModule(v8::Isolate* isolate,
 			    v8::Local<v8::Context> context,
 			    v8::Local<v8::Object>* module_out,
 			    std::string* error_out);
+bool BuildAudioModule(v8::Isolate* isolate,
+			  v8::Local<v8::Context> context,
+			  v8::Local<v8::Object>* module_out,
+			  std::string* error_out);
 bool BuildGitModule(v8::Isolate* isolate,
 			v8::Local<v8::Context> context,
 			v8::Local<v8::Object>* module_out,

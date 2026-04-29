@@ -13,6 +13,7 @@ Full per-module description and API list:
 ## Quick map
 
 - `FileSystem` — path/file operations
+- `Audio` — normalized audio load/save and WAV encode/decode helpers
 - `RuntimeLive` — runtime compiler path/command helpers
 - `Container` — full `src/` source-tree indexing, search, and file reads
 - `Provider` — provider key/value store helpers via `Provider.ProviderStore`
@@ -68,6 +69,14 @@ Full per-module description and API list:
 	- `Network.fetchText(url)`
 	- `Network.probe(url)`
 	- `Network.download(url, outputPath)`
+- `ImportModule("Audio")`
+	- `Audio.load(path[, options])`
+	- `Audio.inspect(path[, options])`
+	- `Audio.save(path, audio[, options])`
+	- `Audio.saveWav(path, audio[, options])`
+	- `Audio.encodeWav(audio[, options])`
+	- `Audio.decodeWav(bytes)`
+	- load/inspect options: `rawSampleRate`, `targetSampleRate`, `targetChannels`, `resampleQuality`
 - `ImportModule("Git")`
 	- `Git.describe([repoPath])`
 	- `Git.currentBranch([repoPath])`
@@ -121,6 +130,7 @@ Full per-module description and API list:
 - `CUDNN`
 - `Skia`
 - `FFmpeg`
+- `Audio`
 - `ANGLE`
 - `VTK`
 

@@ -31,6 +31,9 @@ std::string ResolveCanonicalModuleName(const std::string& module_name) {
 	if (normalized == "network") {
 		return "Network";
 	}
+	if (normalized == "audio") {
+		return "Audio";
+	}
 	if (normalized == "git") {
 		return "Git";
 	}
@@ -84,6 +87,7 @@ std::vector<std::string> ListModules() {
 		"Container",
 		"System",
 		"Network",
+		"Audio",
 		"Git",
 		"Crypto",
 		"FileSystem",
@@ -122,6 +126,8 @@ bool ImportModule(v8::Isolate* isolate,
 		ok = detail::BuildSystemModule(isolate, context, &module, error_out);
 	} else if (canonical_name == "Network") {
 		ok = detail::BuildNetworkModule(isolate, context, &module, error_out);
+	} else if (canonical_name == "Audio") {
+		ok = detail::BuildAudioModule(isolate, context, &module, error_out);
 	} else if (canonical_name == "Git") {
 		ok = detail::BuildGitModule(isolate, context, &module, error_out);
 	} else if (canonical_name == "Crypto") {
