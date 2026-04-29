@@ -6,9 +6,9 @@
     <parent_path/>
     <source_kind>js</source_kind>
     <typescript_compiler>none</typescript_compiler>
-    <size>22</size>
-    <last_write_time_ticks>-4660178136960000000</last_write_time_ticks>
-    <sha256>f44352f92440523207de167168cc17815bc5f7ac74ece54d3ce10cb71b764516</sha256>
+    <size>151</size>
+    <last_write_time_ticks>-4660176873390000000</last_write_time_ticks>
+    <sha256>f734496c368a951c00113db4dd859e94790d784a5b4578bdc6da5ed7564b6dc7</sha256>
   </script>
   <require>
     <stack_depth>0</stack_depth>
@@ -23,79 +23,79 @@
     <valid>true</valid>
     <rebuilt>true</rebuilt>
     <used>true</used>
-    <size>27</size>
-    <last_write_time_ticks>-4660178136450000000</last_write_time_ticks>
-    <sha256>a9c99f6555ecebeb184c7b362ff9753b9113cf924ef284c0ba6f5df1591c7a36</sha256>
-    <expanded_sha256>f44352f92440523207de167168cc17815bc5f7ac74ece54d3ce10cb71b764516</expanded_sha256>
+    <size>129</size>
+    <last_write_time_ticks>-4660176872550000000</last_write_time_ticks>
+    <sha256>bc855e3f1f4163b4dd630bf59397d0c97f9dcc8d313a0e9de22ac9bcbfd7b40b</sha256>
+    <expanded_sha256>f734496c368a951c00113db4dd859e94790d784a5b4578bdc6da5ed7564b6dc7</expanded_sha256>
     <validation_mode>diff</validation_mode>
     <validation_reason>expanded_text_changed</validation_reason>
     <validation_stats>
-      <total>10</total>
-      <hash>1</hash>
-      <diff>8</diff>
+      <total>21</total>
+      <hash>3</hash>
+      <diff>17</diff>
       <rebuild>1</rebuild>
     </validation_stats>
     <validation_history>
       <count>10</count>
       <validation>
-        <mode>rebuild</mode>
-        <reason>cache_missing_or_invalid</reason>
+        <mode>diff</mode>
+        <reason>expanded_text_changed</reason>
         <status>ready</status>
-        <timestamp_ticks>1777485730737459798</timestamp_ticks>
+        <timestamp_ticks>1777485920366834551</timestamp_ticks>
       </validation>
       <validation>
         <mode>diff</mode>
         <reason>expanded_text_changed</reason>
         <status>ready</status>
-        <timestamp_ticks>1777485741270397256</timestamp_ticks>
+        <timestamp_ticks>1777486970705761653</timestamp_ticks>
       </validation>
       <validation>
         <mode>diff</mode>
         <reason>expanded_text_changed</reason>
         <status>ready</status>
-        <timestamp_ticks>1777485750448181145</timestamp_ticks>
+        <timestamp_ticks>1777486980927245365</timestamp_ticks>
+      </validation>
+      <validation>
+        <mode>diff</mode>
+        <reason>expanded_text_changed</reason>
+        <status>ready</status>
+        <timestamp_ticks>1777486987748393352</timestamp_ticks>
+      </validation>
+      <validation>
+        <mode>diff</mode>
+        <reason>expanded_text_changed</reason>
+        <status>ready</status>
+        <timestamp_ticks>1777487049318003884</timestamp_ticks>
+      </validation>
+      <validation>
+        <mode>diff</mode>
+        <reason>expanded_text_changed</reason>
+        <status>ready</status>
+        <timestamp_ticks>1777487055307893293</timestamp_ticks>
+      </validation>
+      <validation>
+        <mode>diff</mode>
+        <reason>expanded_text_changed</reason>
+        <status>ready</status>
+        <timestamp_ticks>1777487115078202782</timestamp_ticks>
       </validation>
       <validation>
         <mode>hash</mode>
         <reason>metadata_sha256_match</reason>
         <status>ready</status>
-        <timestamp_ticks>1777485754714688843</timestamp_ticks>
+        <timestamp_ticks>1777487117313593717</timestamp_ticks>
+      </validation>
+      <validation>
+        <mode>hash</mode>
+        <reason>metadata_sha256_match</reason>
+        <status>ready</status>
+        <timestamp_ticks>1777487119456591083</timestamp_ticks>
       </validation>
       <validation>
         <mode>diff</mode>
         <reason>expanded_text_changed</reason>
         <status>ready</status>
-        <timestamp_ticks>1777485793935398965</timestamp_ticks>
-      </validation>
-      <validation>
-        <mode>diff</mode>
-        <reason>expanded_text_changed</reason>
-        <status>ready</status>
-        <timestamp_ticks>1777485802255774932</timestamp_ticks>
-      </validation>
-      <validation>
-        <mode>diff</mode>
-        <reason>expanded_text_changed</reason>
-        <status>ready</status>
-        <timestamp_ticks>1777485825001113484</timestamp_ticks>
-      </validation>
-      <validation>
-        <mode>diff</mode>
-        <reason>expanded_text_changed</reason>
-        <status>ready</status>
-        <timestamp_ticks>1777485838097552855</timestamp_ticks>
-      </validation>
-      <validation>
-        <mode>diff</mode>
-        <reason>expanded_text_changed</reason>
-        <status>ready</status>
-        <timestamp_ticks>1777485851254431903</timestamp_ticks>
-      </validation>
-      <validation>
-        <mode>diff</mode>
-        <reason>expanded_text_changed</reason>
-        <status>ready</status>
-        <timestamp_ticks>1777485863550318487</timestamp_ticks>
+        <timestamp_ticks>1777487127455525244</timestamp_ticks>
       </validation>
     </validation_history>
   </cache>
