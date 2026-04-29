@@ -178,7 +178,9 @@ add_executable(FluxTerminalManagerSmoke
     ${CMAKE_CURRENT_SOURCE_DIR}/src/flux/terminal/terminal_interface.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/src/flux/terminal/terminal_buffer.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/src/flux/terminal/terminal_manager.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/flux/terminal/terminal_output_renderer.cc)
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/flux/terminal/terminal_emulator.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/flux/terminal/terminal_output_renderer.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/flux/terminal/terminal_ansi_parser.cc)
 target_include_directories(FluxTerminalManagerSmoke PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
@@ -187,6 +189,7 @@ add_executable(FluxTerminalAnsiSmoke
     ${CMAKE_CURRENT_SOURCE_DIR}/src/flux/terminal/terminal_interface.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/src/flux/terminal/terminal_buffer.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/src/flux/terminal/terminal_manager.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/flux/terminal/terminal_emulator.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/src/flux/terminal/terminal_output_renderer.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/src/flux/terminal/terminal_ansi_parser.cc)
 target_include_directories(FluxTerminalAnsiSmoke PRIVATE

@@ -18,6 +18,7 @@ public:
 	void ResetBuffer();
 	void ResetBuffer(OutputStream stream);
 	std::string Snapshot(OutputStream stream) const;
+	std::string SnapshotPlainText(OutputStream stream) const;
 
 	const TerminalBuffer& buffer() const;
 

@@ -44,6 +44,11 @@ std::string TerminalManager::Snapshot(OutputStream stream) const {
 	return buffer_.Snapshot(stream);
 }
 
+std::string TerminalManager::SnapshotPlainText(OutputStream stream) const {
+	std::lock_guard<std::mutex> lock(mutex_);
+	return buffer_.SnapshotPlainText(stream);
+}
+
 const TerminalBuffer& TerminalManager::buffer() const {
 	return buffer_;
 }

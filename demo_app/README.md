@@ -88,5 +88,6 @@ The standalone C++ terminal manager smoke verifies:
 The standalone ANSI/renderer smoke verifies:
 
 - raw ANSI escape sequences remain in the terminal snapshot buffer
-- `SnapshotPlainText()` strips CSI and OSC ANSI sequences for renderer-facing plain text
+- `SnapshotPlainText()` now runs through the terminal emulator layer instead of using parser output directly
+- renderer-facing plain text strips CSI, OSC, DCS, APC, PM, SOS, and single ESC control paths
 - stdout clearing does not wipe stderr renderer state
