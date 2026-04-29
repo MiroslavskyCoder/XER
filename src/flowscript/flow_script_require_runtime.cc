@@ -401,7 +401,8 @@ bool FlowScriptRequireRuntime::ExecuteScriptFile(const std::filesystem::path& pa
         WriteRequireLine(flux::terminal::OutputStream::kStdout, diff_header.str());
         for (const auto& op : diff_result.operations) {
             const char sign = (op.type == FileDiffOperationType::Added) ? '+' : '-';
-            WriteRequireLine(flux::terminal::OutputStream::kStdout, absl::StrCat(sign, " ", op.line));
+            WriteRequireLine(flux::terminal::OutputStream::kStdout,
+                absl::StrCat(std::string(1, sign), " ", op.line));
         }
     }
 
