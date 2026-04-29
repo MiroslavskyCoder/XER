@@ -8,9 +8,10 @@
 #include <atomic>
 #include <ctime>
 #include <iomanip>
-#include <iostream>
 #include <mutex>
 #include <sstream>
+
+#include "flux/terminal/terminal_output_renderer.h"
 
 namespace EngineDoctor {
 namespace {
@@ -73,9 +74,13 @@ void Logger::log(Level level, const std::string& message) {
 	}
 
 	std::lock_guard<std::mutex> lock(g_log_mutex);
-	std::ostream& stream = level == Level::Error ? std::cerr : std::clog;
-	stream << "[doctor][" << LevelName(level) << "][" << BuildTimestamp() << "] "
-		   << message << '\n';
+	std::ostringstream output;
+	output << "[doctor][" << LevelName(level) << "][" << BuildTimestamp() << "] "
+		   << message;
+	flux::terminal::WriteLine(
+		level == Level::Error ? flux::terminal::OutputStream::kStderr
+		                      : flux::terminal::OutputStream::kStdout,
+		output.str());
 }
 
 } // namespace EngineDoctor

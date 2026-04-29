@@ -17,12 +17,11 @@
 #include "flow_script_require.h"
 #include "flux/terminal/terminal_output_renderer.h"
 #include "resource_guard.h"
+#include "runtime_safety/safe_sandbox.h"
+#include "v8/v8_engine.h"
+#include "v8/v8_initializer.h"
 
 namespace {
-
-std::mutex g_v8_mutex;
-bool g_v8_initialized = false;
-std::unique_ptr<v8::Platform> g_v8_platform;
 
 void WriteFlowScriptLine(flux::terminal::OutputStream stream, const std::string& text) {
     flux::terminal::WriteLine(stream, text);
@@ -32,74 +31,23 @@ void WriteFlowScriptLine(flux::terminal::OutputStream stream, const std::string&
 
 void FlowScript::Init(v8::Isolate* isolate) {
     (void)isolate;
-
-    std::lock_guard<std::mutex> guard(g_v8_mutex);
-    if (g_v8_initialized) {
-        return;
-    }
-
-    v8::V8::InitializeICUDefaultLocation(nullptr);
-    v8::V8::InitializeExternalStartupData(nullptr);
-    // Allow ENGINE_V8_PLATFORM_WORKERS to control the V8 background thread pool.
-    {
-        int v8_workers = 0;
-        const char* raw = std::getenv("ENGINE_V8_PLATFORM_WORKERS");
-        if (raw != nullptr && raw[0] != '\0') {
-            try { v8_workers = std::stoi(raw); } catch (...) {}
-        }
-        g_v8_platform = v8::platform::NewDefaultPlatform(
-            v8_workers > 0 ? v8_workers : 0  // 0 = use V8 default (hardware_concurrency)
-        );
-    }
-    v8::V8::InitializePlatform(g_v8_platform.get());
-    v8::V8::Initialize();
-    g_v8_initialized = true;
+    const EngineParams params = EngineParamsFromEnv();
+    Engine::V8Runtime::EnsureInitialized(params.v8_platform_workers);
 }
 
 void FlowScript::Shutdown() {
-    std::lock_guard<std::mutex> guard(g_v8_mutex);
-    if (!g_v8_initialized) {
-        return;
-    }
-
-    v8::V8::Dispose();
-    v8::V8::DisposePlatform();
-    g_v8_platform.reset();
-    g_v8_initialized = false;
+    Engine::V8Runtime::Shutdown();
 }
 
 v8::Isolate* FlowScript::CreateIsolate() {
-    Init(nullptr);
-
     const EngineParams params = EngineParamsFromEnv();
-
-    auto* allocator = v8::ArrayBuffer::Allocator::NewDefaultAllocator();
-    v8::Isolate::CreateParams create_params;
-    create_params.array_buffer_allocator = allocator;
-
-    // Apply soft memory cap: ENGINE_MAX_MEMORY_USED (MiB) → set as V8 flag.
-    // v8::ResourceConstraints::set_max_old_space_size was removed in newer V8;
-    // use the --max-old-space-size flag string instead.
-    if (params.max_memory_used > 0) {
-        const std::string flag = "--max-old-space-size=" + std::to_string(params.max_memory_used);
-        v8::V8::SetFlagsFromString(flag.c_str(), flag.size());
+    std::string warning;
+    v8::Isolate* isolate = Engine::V8Runtime::CreateManagedIsolate(params, &warning);
+    if (!warning.empty()) {
+        WriteFlowScriptLine(flux::terminal::OutputStream::kStderr,
+            absl::StrCat("[flow_script] ", warning));
     }
-
-    // Apply OS-level memory limit before allocating the isolate.
-    // memory_hard_limit_mib overrides max_memory_used when explicitly set.
-    const int hard_mib = params.memory_hard_limit_mib > 0
-                         ? params.memory_hard_limit_mib
-                         : params.max_memory_used;
-    {
-        std::string limit_error;
-        ApplyProcessMemoryLimits(hard_mib, &limit_error);
-        if (!limit_error.empty()) {
-            WriteFlowScriptLine(flux::terminal::OutputStream::kStderr,
-                absl::StrCat("[flow_script] ", limit_error));
-        }
-    }
-
-    return v8::Isolate::New(create_params);
+    return isolate;
 }
 
 void FlowScript::DisposeIsolate(v8::Isolate* isolate) {
@@ -107,10 +55,8 @@ void FlowScript::DisposeIsolate(v8::Isolate* isolate) {
         return;
     }
 
-    auto* allocator = isolate->GetArrayBufferAllocator();
     Engine::ErrorHandler::BindIsolate(nullptr);
-    isolate->Dispose();
-    delete allocator;
+    Engine::V8Runtime::DisposeManagedIsolate(isolate);
 }
 
 FlowScript::FlowScript(std::string path) : path_(std::move(path)), env_(nullptr) {}
@@ -134,11 +80,13 @@ bool FlowScript::Run() const {
     Engine::ErrorHandler::BindIsolate(isolate);
 
     const EngineParams params = EngineParamsFromEnv();
+    const Engine::RuntimeSafety::SandboxSettings sandbox_settings = Engine::RuntimeSafety::ResolveSandboxSettings(params);
 
     if (params.is_verbose()) {
         WriteFlowScriptLine(flux::terminal::OutputStream::kStderr, absl::StrCat("[flow_script] run: ", path_));
-        if (params.sandbox) {
-            WriteFlowScriptLine(flux::terminal::OutputStream::kStderr, "[flow_script]   sandbox mode enabled");
+        if (sandbox_settings.enabled) {
+            WriteFlowScriptLine(flux::terminal::OutputStream::kStderr,
+                absl::StrCat("[flow_script]   ", Engine::RuntimeSafety::BuildSandboxSummary(sandbox_settings)));
         }
         if (params.max_memory_used > 0) {
             WriteFlowScriptLine(flux::terminal::OutputStream::kStderr,
@@ -160,7 +108,7 @@ bool FlowScript::Run() const {
 
         do {
             // In sandbox mode, skip ImportModule binding (no dynamic module loading).
-            if (!params.sandbox) {
+            if (sandbox_settings.allow_dynamic_modules) {
                 bool import_bound = context->Global()
                                         ->Set(
                                             context,

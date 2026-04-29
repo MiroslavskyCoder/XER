@@ -11,8 +11,12 @@
 
 #include "async_io/io_thread_pool.h"
 #include "cache/cache_configuration.h"
+#include "engine_params.h"
 #include "error_handler/err_monitor.h"
 #include "helper/string.h"
+#include "runtime_safety/safe_memory_guard.h"
+#include "runtime_safety/safe_sandbox.h"
+#include "runtime_safety/safe_thread_monitor.h"
 
 namespace Engine::RuntimeSafety {
 namespace {
@@ -32,11 +36,13 @@ std::string BuildStartupSummary(const StartupOptions& options, const StartupStat
 		Helper::String::BuildKeyValueLine("sandbox", state.sandbox_enabled ? "enabled" : "disabled"),
 		options.script_path.empty() ? std::string() : Helper::String::BuildKeyValueLine("script", options.script_path.string())
 	};
-	const auto filtered = lines
-		| ranges::views::filter([](const std::string& line) {
-			return !Helper::String::IsBlank(line);
-		})
-		| ranges::to<std::vector<std::string>>();
+	std::vector<std::string> filtered;
+	filtered.reserve(lines.size());
+	for (const std::string& line : lines) {
+		if (!Helper::String::IsBlank(line)) {
+			filtered.push_back(line);
+		}
+	}
 	return absl::StrJoin(filtered, ", ");
 }
 
@@ -51,6 +57,14 @@ bool BootstrapStartup(const StartupOptions& options, StartupState* state, std::s
 	}
 
 	const Engine::Cache::CacheConfiguration cache_config = Engine::Cache::CacheConfigurationFromEnvironment();
+	const EngineParams params = EngineParamsFromEnv();
+	const MemoryGuardSnapshot memory_guard = CaptureMemoryGuardSnapshot(params);
+	if (!ValidateMemoryGuardSnapshot(memory_guard, error_out)) {
+		Engine::ErrorHandler::ReportStartupError("runtime_safety",
+			error_out != nullptr ? *error_out : std::string("Invalid memory guard configuration"));
+		return false;
+	}
+	const SandboxSettings sandbox_settings = ResolveSandboxSettings(params);
 	if (!Engine::Cache::PrepareCacheDirectory(cache_config, error_out)) {
 		Engine::ErrorHandler::ReportStartupError("runtime_safety",
 			error_out != nullptr ? *error_out : std::string("Failed to prepare cache directory"));
@@ -63,11 +77,21 @@ bool BootstrapStartup(const StartupOptions& options, StartupState* state, std::s
 	resolved_state.cache_directory = cache_config.directory;
 	resolved_state.async_io_workers = thread_pool.GetThreadCount();
 	resolved_state.async_io_queue_depth = ResolveQueueDepth(options, resolved_state.async_io_workers);
-	resolved_state.sandbox_enabled = options.sandbox;
+	resolved_state.sandbox_enabled = sandbox_settings.enabled;
 	*state = resolved_state;
 
 	if (options.verbose) {
-		Engine::ErrorHandler::ReportStartupEvent("runtime_safety", BuildStartupSummary(options, resolved_state));
+		const ThreadMonitorSnapshot thread_monitor = CaptureThreadMonitorSnapshot(
+			params,
+			resolved_state.async_io_workers,
+			resolved_state.async_io_queue_depth);
+		std::vector<std::string> details = {
+			BuildStartupSummary(options, resolved_state),
+			BuildMemoryGuardSummary(memory_guard),
+			BuildSandboxSummary(sandbox_settings),
+			BuildThreadMonitorSummary(thread_monitor)
+		};
+		Engine::ErrorHandler::ReportStartupEvent("runtime_safety", absl::StrJoin(details, ", "));
 	}
 	return true;
 }

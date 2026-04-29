@@ -10,8 +10,8 @@
 #include "engine_params.h"
 #include "flux/terminal/terminal_output_renderer.h"
 #include "flow_script_require_support.h"
-#include "helper/stack_error.h"
 #include "helper/tool_to.h"
+#include "v8/v8_script_runner.h"
 
 namespace flow_script_detail {
 
@@ -423,29 +423,9 @@ bool FlowScriptRequireRuntime::ExecuteScriptFile(const std::filesystem::path& pa
 
     stack_.push_back({path});
 
-    v8::TryCatch try_catch(isolate_);
-    v8::Local<v8::String> source_string =
-        v8::String::NewFromUtf8(isolate_, compiled_source.c_str()).ToLocalChecked();
-    v8::Local<v8::String> script_name =
-        v8::String::NewFromUtf8(isolate_, path.string().c_str()).ToLocalChecked();
-    v8::ScriptOrigin origin(isolate_, script_name);
-
-    v8::Local<v8::Script> script;
-    if (!v8::Script::Compile(context, source_string, &origin).ToLocal(&script)) {
-        if (error_out != nullptr) {
-            *error_out = StackError::BuildV8Report(
-                isolate_, context, try_catch, "script compile", source);
-        }
-        stack_.pop_back();
-        return false;
-    }
-
     v8::Local<v8::Value> result;
-    if (!script->Run(context).ToLocal(&result)) {
-        if (error_out != nullptr) {
-            *error_out = StackError::BuildV8Report(
-                isolate_, context, try_catch, "script runtime", source);
-        }
+    if (!Engine::V8Runtime::CompileAndRun(
+            isolate_, context, compiled_source, path.string(), &result, error_out)) {
         stack_.pop_back();
         return false;
     }
