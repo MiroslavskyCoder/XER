@@ -38,20 +38,36 @@ bool SaveCompilableEntryCc(
 
 }  // namespace
 
-bool RuntimeLive::InterfaceCompiler::Runtime(const RuntimeCallbacks& callbacks) const {
-    if (cache_dir_.empty() || (source_.empty() && source_files_.empty())) {
-        if (callbacks.raw_err) {
-            callbacks.raw_err("Cache directory or source is empty.\n");
+bool RuntimeLive::InterfaceCompiler::CompileAndRun(
+    ExecutionResult* result,
+    const RuntimeCallbacks* callbacks) const {
+    ExecutionResult local_result;
+    ExecutionResult* out = result != nullptr ? result : &local_result;
+    *out = ExecutionResult();
+    out->cache_dir = cache_dir_;
+
+    const auto emit_out = [&](const std::string& text) {
+        if (callbacks != nullptr && callbacks->raw_out) {
+            callbacks->raw_out(text);
         }
+    };
+    const auto emit_err = [&](const std::string& text) {
+        if (callbacks != nullptr && callbacks->raw_err) {
+            callbacks->raw_err(text);
+        }
+    };
+
+    if (cache_dir_.empty() || (source_.empty() && source_files_.empty())) {
+        out->error = "Cache directory or source is empty.";
+        emit_err(out->error + "\n");
         return false;
     }
 
     std::error_code ec;
     std::filesystem::create_directories(cache_dir_, ec);
     if (ec) {
-        if (callbacks.raw_err) {
-            callbacks.raw_err("Unable to create cache directory.\n");
-        }
+        out->error = "Unable to create cache directory.";
+        emit_err(out->error + "\n");
         return false;
     }
 
@@ -70,11 +86,10 @@ bool RuntimeLive::InterfaceCompiler::Runtime(const RuntimeCallbacks& callbacks) 
                 compiler_source.source_with_stdio(),
                 false,
                 &write_error)) {
-            if (callbacks.raw_err) {
-                callbacks.raw_err("Unable to write source file.\n");
-                if (!write_error.empty()) {
-                    callbacks.raw_err(write_error + "\n");
-                }
+            out->error = "Unable to write source file.";
+            emit_err(out->error + "\n");
+            if (!write_error.empty()) {
+                emit_err(write_error + "\n");
             }
             return false;
         }
@@ -85,9 +100,8 @@ bool RuntimeLive::InterfaceCompiler::Runtime(const RuntimeCallbacks& callbacks) 
             std::error_code dir_ec;
             std::filesystem::create_directories(file_path.parent_path(), dir_ec);
             if (dir_ec) {
-                if (callbacks.raw_err) {
-                    callbacks.raw_err("Unable to create source directory structure.\n");
-                }
+                out->error = "Unable to create source directory structure.";
+                emit_err(out->error + "\n");
                 return false;
             }
 
@@ -97,11 +111,10 @@ bool RuntimeLive::InterfaceCompiler::Runtime(const RuntimeCallbacks& callbacks) 
                     source_file_entry.content,
                     false,
                     &write_error)) {
-                if (callbacks.raw_err) {
-                    callbacks.raw_err("Unable to write source file.\n");
-                    if (!write_error.empty()) {
-                        callbacks.raw_err(write_error + "\n");
-                    }
+                out->error = "Unable to write source file.";
+                emit_err(out->error + "\n");
+                if (!write_error.empty()) {
+                    emit_err(write_error + "\n");
                 }
                 return false;
             }
@@ -112,20 +125,18 @@ bool RuntimeLive::InterfaceCompiler::Runtime(const RuntimeCallbacks& callbacks) 
         }
 
         if (compile_units.empty()) {
-            if (callbacks.raw_err) {
-                callbacks.raw_err("No source files provided for compilation.\n");
-            }
+            out->error = "No source files provided for compilation.";
+            emit_err(out->error + "\n");
             return false;
         }
 
         if (IsCppLanguage(language_)) {
             std::string write_error;
             if (!SaveCompilableEntryCc(cache_dir_, compile_units, &write_error)) {
-                if (callbacks.raw_err) {
-                    callbacks.raw_err("Unable to preserve entry.cc.\n");
-                    if (!write_error.empty()) {
-                        callbacks.raw_err(write_error + "\n");
-                    }
+                out->error = "Unable to preserve entry.cc.";
+                emit_err(out->error + "\n");
+                if (!write_error.empty()) {
+                    emit_err(write_error + "\n");
                 }
                 return false;
             }
@@ -144,44 +155,51 @@ bool RuntimeLive::InterfaceCompiler::Runtime(const RuntimeCallbacks& callbacks) 
     const Compiler compiler;
     Compiler::ExecutionReport report;
     if (!compiler.CompileAndRunDetailed(compiler_source, &report)) {
-        if (callbacks.raw_err) {
-            callbacks.raw_err("Failed to invoke Clang/LLVM compilation API.\n");
-        }
+        out->error = "Failed to invoke Clang/LLVM compilation API.";
+        emit_err(out->error + "\n");
         return false;
     }
 
-    RuntimeLiveSummary summary;
-    summary.compile_exit_code = report.compile_exit_code;
-    summary.run_exit_code = report.run_exit_code;
-    summary.compile_invoked = report.compile_invoked;
-    summary.run_invoked = report.run_invoked;
-    summary.source_units = static_cast<int>(compile_units.empty() ? 1 : compile_units.size());
-    summary.compiler_binary = report.compiler_binary;
+    out->summary.compile_exit_code = report.compile_exit_code;
+    out->summary.run_exit_code = report.run_exit_code;
+    out->summary.compile_invoked = report.compile_invoked;
+    out->summary.run_invoked = report.run_invoked;
+    out->summary.source_units = static_cast<int>(compile_units.empty() ? 1 : compile_units.size());
+    out->summary.compiler_binary = report.compiler_binary;
+    out->compiler_args = report.compiler_args;
     if (!report.compiler_binary.empty()) {
-        summary.compiler_command = compiler_source.BuildCompilerCommandPreview(report.compiler_binary);
+        out->summary.compiler_command = compiler_source.BuildCompilerCommandPreview(report.compiler_binary);
     }
 
-    if (callbacks.raw_out) {
-        callbacks.raw_out(ToolTo::ReadTextFile(compiler_source.compile_out_path()));
-    }
-    if (callbacks.raw_err) {
-        callbacks.raw_err(ToolTo::ReadTextFile(compiler_source.compile_err_path()));
-    }
+    out->source_path = compiler_source.source_path().string();
+    out->binary_path = compiler_source.binary_path().string();
+    out->compile_out_path = compiler_source.compile_out_path().string();
+    out->compile_err_path = compiler_source.compile_err_path().string();
+    out->run_out_path = compiler_source.run_out_path().string();
+    out->run_err_path = compiler_source.run_err_path().string();
+    out->compile_stdout = ToolTo::ReadTextFile(compiler_source.compile_out_path());
+    out->compile_stderr = ToolTo::ReadTextFile(compiler_source.compile_err_path());
 
-    if (callbacks.raw_out) {
-        callbacks.raw_out(BuildRuntimeLiveSummaryText(summary));
-    }
+    emit_out(out->compile_stdout);
+    emit_err(out->compile_stderr);
+
+    emit_out(BuildRuntimeLiveSummaryText(out->summary));
 
     if (report.compile_exit_code != 0) {
+        out->ok = false;
         return false;
     }
 
-    if (callbacks.raw_out) {
-        callbacks.raw_out(ToolTo::ReadTextFile(compiler_source.run_out_path()));
-    }
-    if (callbacks.raw_err) {
-        callbacks.raw_err(ToolTo::ReadTextFile(compiler_source.run_err_path()));
-    }
+    out->run_stdout = ToolTo::ReadTextFile(compiler_source.run_out_path());
+    out->run_stderr = ToolTo::ReadTextFile(compiler_source.run_err_path());
 
-    return report.run_exit_code == 0;
+    emit_out(out->run_stdout);
+    emit_err(out->run_stderr);
+
+    out->ok = report.run_exit_code == 0;
+    return out->ok;
+}
+
+bool RuntimeLive::InterfaceCompiler::Runtime(const RuntimeCallbacks& callbacks) const {
+    return CompileAndRun(nullptr, &callbacks);
 }

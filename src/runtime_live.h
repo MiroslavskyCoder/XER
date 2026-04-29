@@ -1,5 +1,7 @@
 #pragma once
 
+#include "runtime_live_summary.h"
+
 #include <functional>
 #include <string>
 #include <vector>
@@ -25,6 +27,24 @@ public:
 		std::function<void(const std::string&)> raw_err;
 	};
 
+	struct ExecutionResult {
+		bool ok = false;
+		std::string error;
+		RuntimeLiveSummary summary;
+		std::string cache_dir;
+		std::string source_path;
+		std::string binary_path;
+		std::string compile_out_path;
+		std::string compile_err_path;
+		std::string run_out_path;
+		std::string run_err_path;
+		std::vector<std::string> compiler_args;
+		std::string compile_stdout;
+		std::string compile_stderr;
+		std::string run_stdout;
+		std::string run_stderr;
+	};
+
 	class InterfaceCompiler {
 	public:
 		struct SourceFile {
@@ -44,6 +64,9 @@ public:
 		void AddEntryFile(const SourceFile& source_file);
 
 		void ClearEntryFiles();
+
+		bool CompileAndRun(ExecutionResult* result,
+					   const RuntimeCallbacks* callbacks = nullptr) const;
 
 		bool Runtime(const RuntimeCallbacks& callbacks) const;
 
