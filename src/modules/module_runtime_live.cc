@@ -1,7 +1,7 @@
 #include "modules/module_builders.h"
 
-#include "compiler_source.h"
-#include "runtime_live.h"
+#include "compilerapi/compiler_source.h"
+#include "compilerapi/runtime_live.h"
 
 #include <filesystem>
 #include <string>

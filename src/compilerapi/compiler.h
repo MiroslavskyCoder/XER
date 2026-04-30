@@ -1,7 +1,7 @@
 #pragma once
 
-#include "compiler_api.h"
-#include "compiler_source.h"
+#include "compilerapi/compiler_api.h"
+#include "compilerapi/compiler_source.h"
 
 #include <string>
 #include <vector>

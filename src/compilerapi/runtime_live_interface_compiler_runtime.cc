@@ -1,13 +1,13 @@
 #include "runtime_live.h"
 
-#include "compiler.h"
-#include "compiler_source.h"
+#include "compilerapi/compiler.h"
+#include "compilerapi/compiler_source.h"
 #include "cache/cache_constants.h"
 #include "cache/cache_manager.h"
 #include "cache/persistent_storage.h"
 #include "flux/terminal/terminal_output_renderer.h"
 #include "helper/string.h"
-#include "runtime_live_summary.h"
+#include "compilerapi/runtime_live_summary.h"
 
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_join.h>

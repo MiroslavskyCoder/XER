@@ -34,7 +34,7 @@ bool CPUInfoProvider::Initialize() {
 #elif defined(__linux__)
     // Linux CPU detection
     cpu_info_.logical_cores = sysconf(_SC_NPROCESSORS_ONLN);
-    cpu_info_.physical_cores = cpu_info_.logical_cores / 2;  // Simplified
+    cpu_info_.physical_cores = cpu_info_.logical_cores / 2;  // Simplified 
     
     DetectCPUCapabilities();
     DetectCoreCount();
