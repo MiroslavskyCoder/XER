@@ -174,21 +174,21 @@ bool ImportModule(v8::Isolate* isolate,
 		return false;
 	}
 
-	// --- PXER: экспортировать все JS-модули, зарегистрированные плагинами ---
-	{
-		auto pxer_js_modules = Engine::Native::Plugin::Pxer::PluginHost::Shared().GetJsModuleBuilders();
-		for (const auto& entry : pxer_js_modules) {
-			const std::string& name = entry.first;
-			void* builder_fn = entry.second;
-			using BuilderFn = int(*)(void*, void*, void*, void*);
-			BuilderFn fn = reinterpret_cast<BuilderFn>(builder_fn);
-			v8::Local<v8::Object> pxer_module = v8::Object::New(isolate);
-			int ok = fn(isolate, *context, *pxer_module, nullptr);
-			if (ok) {
-				Engine::Helper::ExportGlobalModule(isolate, context, name.c_str(), pxer_module);
-			}
-		}
-	}
+	// // --- PXER: экспортировать все JS-модули, зарегистрированные плагинами ---
+	// {
+	// 	auto pxer_js_modules = Engine::Native::Plugin::Pxer::PluginHost::Shared().GetJsModuleBuilders();
+	// 	for (const auto& entry : pxer_js_modules) {
+	// 		const std::string& name = entry.first;
+	// 		void* builder_fn = entry.second;
+	// 		using BuilderFn = int(*)(void*, void*, void*, void*);
+	// 		BuilderFn fn = reinterpret_cast<BuilderFn>(builder_fn);
+	// 		v8::Local<v8::Object> pxer_module = v8::Object::New(isolate);
+	// 		int ok = fn(isolate, *context, *pxer_module, nullptr);
+	// 		if (ok) {
+	// 			Engine::Helper::ExportGlobalModule(isolate, context, name.c_str(), pxer_module);
+	// 		}
+	// 	}
+	// }
 	return true;
 }
 

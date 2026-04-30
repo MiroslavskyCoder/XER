@@ -98,12 +98,12 @@ public:
 	std::vector<std::string> ConfigKeys() const;
 	std::vector<std::string> RegisteredCalls() const;
         
-    // --- PXER EXTENSIONS: PUBLIC ACCESSORS ---
-    std::unordered_map<std::string, void*> GetJsModuleBuilders() const;
-    std::unordered_map<std::string, void*> GetFluxTypes() const;
-    std::unordered_map<std::string, void*> GetFluxTriggers() const;
-    std::unordered_map<std::string, void*> GetGlobalHooks() const;
-    // PXER EXTENSIONS: JS/V8, Flux, Hooks
+    // // --- PXER EXTENSIONS: PUBLIC ACCESSORS ---
+    // std::unordered_map<std::string, void*> GetJsModuleBuilders() const;
+    // std::unordered_map<std::string, void*> GetFluxTypes() const;
+    // std::unordered_map<std::string, void*> GetFluxTriggers() const;
+    // std::unordered_map<std::string, void*> GetGlobalHooks() const;
+    // // PXER EXTENSIONS: JS/V8, Flux, Hooks
 
 private:
 	PluginHost();

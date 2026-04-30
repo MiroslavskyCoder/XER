@@ -1135,29 +1135,29 @@ int PluginHost::HostRegisterGlobalHook(PxerPluginHandle* handle, const char* hoo
 }
 
 // --- PXER EXTENSIONS: PUBLIC ACCESSORS ---
-std::unordered_map<std::string, void*> PluginHost::GetJsModuleBuilders() const {
-	PluginHostState& state = MutableState();
-	std::lock_guard<std::mutex> lock(state.mutex);
-	return state.js_module_builders;
-}
+// std::unordered_map<std::string, void*> PluginHost::GetJsModuleBuilders() const {
+// 	PluginHostState& state = MutableState();
+// 	std::lock_guard<std::mutex> lock(state.mutex);
+// 	return state.js_module_builders;
+// }
 
-std::unordered_map<std::string, void*> PluginHost::GetFluxTypes() const {
-	PluginHostState& state = MutableState();
-	std::lock_guard<std::mutex> lock(state.mutex);
-	return state.flux_types;
-}
+// std::unordered_map<std::string, void*> PluginHost::GetFluxTypes() const {
+// 	PluginHostState& state = MutableState();
+// 	std::lock_guard<std::mutex> lock(state.mutex);
+// 	return state.flux_types;
+// }
 
-std::unordered_map<std::string, void*> PluginHost::GetFluxTriggers() const {
-	PluginHostState& state = MutableState();
-	std::lock_guard<std::mutex> lock(state.mutex);
-	return state.flux_triggers;
-}
+// std::unordered_map<std::string, void*> PluginHost::GetFluxTriggers() const {
+// 	PluginHostState& state = MutableState();
+// 	std::lock_guard<std::mutex> lock(state.mutex);
+// 	return state.flux_triggers;
+// }
 
-std::unordered_map<std::string, void*> PluginHost::GetGlobalHooks() const {
-	PluginHostState& state = MutableState();
-	std::lock_guard<std::mutex> lock(state.mutex);
-	return state.global_hooks;
-}
+// std::unordered_map<std::string, void*> PluginHost::GetGlobalHooks() const {
+// 	PluginHostState& state = MutableState();
+// 	std::lock_guard<std::mutex> lock(state.mutex);
+// 	return state.global_hooks;
+// }
 // PXER: Диагностика и управление расширениями по instance_id
 std::vector<std::string> PluginHost::ListJsModulesByInstance(uint64_t instance_id) {
 	PluginHostState& state = MutableState();
