@@ -1,0 +1,3 @@
+/media/lxxv/Yoshi A/DEv/XER/plugins/build/CMakeFiles/pxer_example_plugin.dir
+/media/lxxv/Yoshi A/DEv/XER/plugins/build/CMakeFiles/edit_cache.dir
+/media/lxxv/Yoshi A/DEv/XER/plugins/build/CMakeFiles/rebuild_cache.dir
