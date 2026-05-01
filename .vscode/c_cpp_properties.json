@@ -25,6 +25,21 @@
             "cStandard": "c17",
             "cppStandard": "gnu++20",
             "intelliSenseMode": "linux-clang-x64"
+        },
+        {
+            "name": "Windows",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "${workspaceFolder}/src/**",
+                "C:/CMakeLibraies/include",
+                "C:/CMakeLibraies/include/libxml2"
+            ],
+            "defines": [
+                "ENGINE_HAS_QT6=1",
+                "HAS_QT_WIDGETS=1",
+                "ENGINE_SKIA_NATIVE_INCLUDES=1",
+                "ENGINE_HAS_SKIA_BRIDGE=1"
+            ]
         }
     ],
     "version": 4

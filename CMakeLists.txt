@@ -11,7 +11,7 @@ set(CMAKE_CUDA_STANDARD 17)
  
 set(CMAKE_CUDA_ARCHITECTURES "75;86;90")
 
-project(EngineBuilder LANGUAGES C CXX CUDA)
+project(XER LANGUAGES C CXX CUDA)
 
 include(GNUInstallDirs)
   
@@ -29,7 +29,7 @@ find_package(ICU COMPONENTS uc i18n QUIET)
 find_package(SQLite3 QUIET)
 find_package(V8 QUIET)  
 
-project(EngineBuilder LANGUAGES C CXX)
+project(XER LANGUAGES C CXX)
 
 include(GNUInstallDirs)
 
@@ -50,5 +50,5 @@ include(cmake/targets/javascript.cmake)
 include(cmake/targets/qt6_bridge.cmake)
 include(cmake/targets/main.cmake)
 
-install(TARGETS EngineBuilder
+install(TARGETS XER
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})

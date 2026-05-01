@@ -17,11 +17,9 @@
 #include <unordered_set>
 #include <utility>
 #include <vector>
-
-#if ENGINE_HAS_FFI
+ 
 #include <dlfcn.h>
-#include <ffi.h>
-#endif
+#include <ffi.h> 
 
 namespace Engine::Native::Plugin::Pxer {
 namespace {
@@ -51,8 +49,7 @@ std::vector<std::string> SortedMapKeys(const MapType& values) {
 bool TopicMatches(const std::string& subscription, const std::string& topic) {
 	return subscription.empty() || subscription == "*" || subscription == topic;
 }
-
-#if ENGINE_HAS_FFI
+ 
 std::string DlErrorOr(const char* fallback) {
 	const char* error = ::dlerror();
 	return error != nullptr ? std::string(error) : std::string(fallback);
@@ -230,8 +227,7 @@ bool CallAsync(PxerPluginAsyncFn function,
 		return false;
 	}
 	return true;
-}
-#endif
+} 
 
 }  // namespace
 }  // namespace Engine::Native::Plugin::Pxer
@@ -342,31 +338,17 @@ PluginHost::PluginHost() {
 	host_api_.register_global_hook = &PluginHost::HostRegisterGlobalHook;
 }
 
-bool PluginHost::Available() const {
-#if ENGINE_HAS_FFI
-	return true;
-#else
-	return false;
-#endif
+bool PluginHost::Available() const { 
+	return true; 
 }
 
-std::string PluginHost::AvailabilitySummary() const {
-#if ENGINE_HAS_FFI
-	return "PXER native plugins available via libffi";
-#else
-	return "PXER native plugins unavailable: libffi was not detected at build time";
-#endif
+std::string PluginHost::AvailabilitySummary() const { 
+	return "PXER native plugins available via libffi"; 
 }
 
 bool PluginHost::Load(const std::filesystem::path& plugin_path,
 		      PluginSummary* summary_out,
-		      std::string* error_out) {
-#if !ENGINE_HAS_FFI
-	if (error_out != nullptr) {
-		*error_out = AvailabilitySummary();
-	}
-	return false;
-#else
+		      std::string* error_out) { 
 	const std::filesystem::path resolved_path = std::filesystem::absolute(plugin_path).lexically_normal();
 	::dlerror();
 	void* library_handle = ::dlopen(resolved_path.c_str(), RTLD_NOW | RTLD_LOCAL);
@@ -463,8 +445,7 @@ bool PluginHost::Load(const std::filesystem::path& plugin_path,
 			}
 		}
 	}
-	return true;
-#endif
+	return true; 
 }
 
 bool PluginHost::Unload(uint64_t instance_id, std::string* error_out) {
@@ -505,8 +486,7 @@ bool PluginHost::Unload(uint64_t instance_id, std::string* error_out) {
 		erase_by_instance(state.flux_types, "flux_type");
 		erase_by_instance(state.flux_triggers, "flux_trigger");
 		erase_by_instance(state.global_hooks, "global_hook");
-	}
-#if ENGINE_HAS_FFI
+	} 
 	if (record != nullptr && record->api != nullptr && record->api->on_unload != nullptr) {
 		std::string local_error;
 		if (!CallLifecycle(record->api->on_unload, &host_api_, &record->handle, &local_error)) {
@@ -515,8 +495,7 @@ bool PluginHost::Unload(uint64_t instance_id, std::string* error_out) {
 			}
 			return false;
 		}
-	}
-#endif
+	} 
 	void* library_handle = nullptr;
 	{
 		std::lock_guard<std::mutex> lock(state.mutex);
@@ -532,14 +511,10 @@ bool PluginHost::Unload(uint64_t instance_id, std::string* error_out) {
 		}
 		library_handle = iterator->second->library_handle;
 		state.plugins.erase(iterator);
-	}
-#if ENGINE_HAS_FFI
+	} 
 	if (library_handle != nullptr) {
 		::dlclose(library_handle);
-	}
-#else
-	(void)library_handle;
-#endif
+	} 
 	return true;
 }
 
@@ -660,8 +635,7 @@ bool PluginHost::Invoke(uint64_t instance_id,
 		return false;
 	}
 	PxerOwnedString plugin_result{};
-	std::string local_error;
-#if ENGINE_HAS_FFI
+	std::string local_error; 
 	if (!CallInvoke(record->api->invoke,
 			&host_api_,
 			&record->handle,
@@ -676,14 +650,7 @@ bool PluginHost::Invoke(uint64_t instance_id,
 			*error_out = local_error.empty() ? "plugin invocation failed" : local_error;
 		}
 		return false;
-	}
-#else
-	(void)plugin_result;
-	if (error_out != nullptr) {
-		*error_out = AvailabilitySummary();
-	}
-	return false;
-#endif
+	} 
 	result_out->assign(plugin_result.data != nullptr ? plugin_result.data : "", plugin_result.size);
 	if (record->api->release_string != nullptr && plugin_result.data != nullptr) {
 		record->api->release_string(&plugin_result);
@@ -728,8 +695,7 @@ bool PluginHost::EmitEvent(const std::string& topic,
 			}
 		}
 	}
-	std::string first_error;
-#if ENGINE_HAS_FFI
+	std::string first_error; 
 	for (uint64_t recipient_id : recipients) {
 		PluginRecord* record = nullptr;
 		{
@@ -754,8 +720,7 @@ bool PluginHost::EmitEvent(const std::string& topic,
 				first_error = local_error;
 			}
 		}
-	}
-#endif
+	} 
 	if (!first_error.empty()) {
 		if (error_out != nullptr) {
 			*error_out = first_error;

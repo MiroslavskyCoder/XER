@@ -5,102 +5,102 @@
 
 # ── OpenCV ───────────────────────────────────────────────────
 if(ENGINE_WRAPPER_OPENCV_CC)
-    add_library(EngineBridgeOpenCV STATIC ${ENGINE_WRAPPER_OPENCV_CC})
-    target_sources(EngineBridgeOpenCV PRIVATE ${ENGINE_WRAPPER_OPENCV_H})
-    target_include_directories(EngineBridgeOpenCV PUBLIC
+    add_library(XEROpenCV STATIC ${ENGINE_WRAPPER_OPENCV_CC})
+    target_sources(XEROpenCV PRIVATE ${ENGINE_WRAPPER_OPENCV_H})
+    target_include_directories(XEROpenCV PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/src)
-    target_compile_definitions(EngineBridgeOpenCV PRIVATE
+    target_compile_definitions(XEROpenCV PRIVATE
         ENGINE_HAS_OPENCV_BRIDGE=${ENGINE_HAS_OPENCV_BRIDGE})
     if(OpenCV_FOUND)
-        target_include_directories(EngineBridgeOpenCV PRIVATE ${OpenCV_INCLUDE_DIRS})
-        target_link_libraries(EngineBridgeOpenCV PRIVATE ${OpenCV_LIBS})
+        target_include_directories(XEROpenCV PRIVATE ${OpenCV_INCLUDE_DIRS})
+        target_link_libraries(XEROpenCV PRIVATE ${OpenCV_LIBS})
     endif()
 endif()
 
 # ── CUDA ─────────────────────────────────────────────────────
 if(ENGINE_WRAPPER_CUDA_CC)
-    add_library(EngineBridgeCuda STATIC ${ENGINE_WRAPPER_CUDA_CC})
-    target_sources(EngineBridgeCuda PRIVATE ${ENGINE_WRAPPER_CUDA_H})
-    target_include_directories(EngineBridgeCuda PUBLIC
+    add_library(XERBridgeCuda STATIC ${ENGINE_WRAPPER_CUDA_CC})
+    target_sources(XERBridgeCuda PRIVATE ${ENGINE_WRAPPER_CUDA_H})
+    target_include_directories(XERBridgeCuda PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/src)
-    target_compile_definitions(EngineBridgeCuda PRIVATE
+    target_compile_definitions(XERBridgeCuda PRIVATE
         ENGINE_HAS_CUDA_BRIDGE=${ENGINE_HAS_CUDA_BRIDGE})
     if(CUDAToolkit_FOUND)
-        target_include_directories(EngineBridgeCuda PRIVATE
+        target_include_directories(XERBridgeCuda PRIVATE
             ${CUDAToolkit_INCLUDE_DIRS})
         if(TARGET CUDA::cudart)
-            target_link_libraries(EngineBridgeCuda PRIVATE CUDA::cudart)
+            target_link_libraries(XERBridgeCuda PRIVATE CUDA::cudart)
         endif()
     endif()
 endif()
 
 # ── cuDNN ────────────────────────────────────────────────────
 if(ENGINE_WRAPPER_CUDNN_CC)
-    add_library(EngineBridgeCudnn STATIC ${ENGINE_WRAPPER_CUDNN_CC})
-    target_sources(EngineBridgeCudnn PRIVATE ${ENGINE_WRAPPER_CUDNN_H})
-    target_include_directories(EngineBridgeCudnn PUBLIC
+    add_library(XERBridgeCudnn STATIC ${ENGINE_WRAPPER_CUDNN_CC})
+    target_sources(XERBridgeCudnn PRIVATE ${ENGINE_WRAPPER_CUDNN_H})
+    target_include_directories(XERBridgeCudnn PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/src)
-    target_compile_definitions(EngineBridgeCudnn PRIVATE
+    target_compile_definitions(XERBridgeCudnn PRIVATE
         ENGINE_HAS_CUDNN_BRIDGE=${ENGINE_HAS_CUDNN_BRIDGE})
     if(CUDNN_INCLUDE_DIR)
-        target_include_directories(EngineBridgeCudnn PRIVATE ${CUDNN_INCLUDE_DIR})
+        target_include_directories(XERBridgeCudnn PRIVATE ${CUDNN_INCLUDE_DIR})
     endif()
     if(CUDNN_LIBRARY)
-        target_link_libraries(EngineBridgeCudnn PRIVATE ${CUDNN_LIBRARY})
+        target_link_libraries(XERBridgeCudnn PRIVATE ${CUDNN_LIBRARY})
     endif()
 endif()
 
 # ── Skia ─────────────────────────────────────────────────────
 if(ENGINE_WRAPPER_SKIA_CC)
-    add_library(EngineBridgeSkia STATIC ${ENGINE_WRAPPER_SKIA_CC})
-    target_sources(EngineBridgeSkia PRIVATE ${ENGINE_WRAPPER_SKIA_H})
-    target_include_directories(EngineBridgeSkia PUBLIC
+    add_library(XERBridgeSkia STATIC ${ENGINE_WRAPPER_SKIA_CC})
+    target_sources(XERBridgeSkia PRIVATE ${ENGINE_WRAPPER_SKIA_H})
+    target_include_directories(XERBridgeSkia PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/src)
-    target_compile_definitions(EngineBridgeSkia PRIVATE
+    target_compile_definitions(XERBridgeSkia PRIVATE
         ENGINE_HAS_SKIA_BRIDGE=${ENGINE_HAS_SKIA_BRIDGE})
     if(ENGINE_SKIA_INCLUDE_DIRS)
-        target_include_directories(EngineBridgeSkia PRIVATE
+        target_include_directories(XERBridgeSkia PRIVATE
             ${ENGINE_SKIA_INCLUDE_DIRS})
     endif()
     if(ENGINE_SKIA_LIBRARIES)
-        target_link_libraries(EngineBridgeSkia PRIVATE ${ENGINE_SKIA_LIBRARIES})
+        target_link_libraries(XERBridgeSkia PRIVATE ${ENGINE_SKIA_LIBRARIES})
     endif()
 endif()
 
 # ── FFmpeg ───────────────────────────────────────────────────
 if(ENGINE_WRAPPER_FFMPEG_CC)
-    add_library(EngineBridgeFfmpeg STATIC ${ENGINE_WRAPPER_FFMPEG_CC})
-    target_sources(EngineBridgeFfmpeg PRIVATE ${ENGINE_WRAPPER_FFMPEG_H})
-    target_include_directories(EngineBridgeFfmpeg PUBLIC
+    add_library(XERBridgeFfmpeg STATIC ${ENGINE_WRAPPER_FFMPEG_CC})
+    target_sources(XERBridgeFfmpeg PRIVATE ${ENGINE_WRAPPER_FFMPEG_H})
+    target_include_directories(XERBridgeFfmpeg PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/src)
-    target_compile_definitions(EngineBridgeFfmpeg PRIVATE
+    target_compile_definitions(XERBridgeFfmpeg PRIVATE
         ENGINE_HAS_FFMPEG_BRIDGE=${ENGINE_HAS_FFMPEG_BRIDGE}
         ENGINE_HAS_FFMPEG_AVFILTER=${ENGINE_HAS_FFMPEG_AVFILTER}
         ENGINE_HAS_FFMPEG_AVDEVICE=${ENGINE_HAS_FFMPEG_AVDEVICE})
     if(ENGINE_FFMPEG_INCLUDE_DIRS)
-        target_include_directories(EngineBridgeFfmpeg PRIVATE
+        target_include_directories(XERBridgeFfmpeg PRIVATE
             ${ENGINE_FFMPEG_INCLUDE_DIRS})
     endif()
     if(ENGINE_FFMPEG_LIBRARIES)
-        target_link_libraries(EngineBridgeFfmpeg PRIVATE ${ENGINE_FFMPEG_LIBRARIES})
+        target_link_libraries(XERBridgeFfmpeg PRIVATE ${ENGINE_FFMPEG_LIBRARIES})
     endif()
 endif()
 
 # ── ANGLE ────────────────────────────────────────────────────
 if(ENGINE_WRAPPER_ANGLE_CC)
-    add_library(EngineBridgeAngle STATIC ${ENGINE_WRAPPER_ANGLE_CC})
-    target_sources(EngineBridgeAngle PRIVATE ${ENGINE_WRAPPER_ANGLE_H})
-    target_include_directories(EngineBridgeAngle PUBLIC
+    add_library(XERBridgeAngle STATIC ${ENGINE_WRAPPER_ANGLE_CC})
+    target_sources(XERBridgeAngle PRIVATE ${ENGINE_WRAPPER_ANGLE_H})
+    target_include_directories(XERBridgeAngle PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/src)
-    target_compile_definitions(EngineBridgeAngle PRIVATE
+    target_compile_definitions(XERBridgeAngle PRIVATE
         ENGINE_HAS_ANGLE_BRIDGE=${ENGINE_HAS_ANGLE_BRIDGE})
     if(ANGLE_INCLUDE_DIR)
-        target_include_directories(EngineBridgeAngle PRIVATE ${ANGLE_INCLUDE_DIR})
+        target_include_directories(XERBridgeAngle PRIVATE ${ANGLE_INCLUDE_DIR})
     endif()
     if(ANGLE_EGL_LIBRARY)
-        target_link_libraries(EngineBridgeAngle PRIVATE ${ANGLE_EGL_LIBRARY})
+        target_link_libraries(XERBridgeAngle PRIVATE ${ANGLE_EGL_LIBRARY})
     endif()
     if(ANGLE_GLESV2_LIBRARY)
-        target_link_libraries(EngineBridgeAngle PRIVATE ${ANGLE_GLESV2_LIBRARY})
+        target_link_libraries(XERBridgeAngle PRIVATE ${ANGLE_GLESV2_LIBRARY})
     endif()
 endif()

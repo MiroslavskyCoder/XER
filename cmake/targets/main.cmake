@@ -2,10 +2,10 @@
 # EngineBuilder main executable
 # ============================================================
 
-add_executable(EngineBuilder ${ENGINE_PROJECT_CC})
-target_sources(EngineBuilder PRIVATE ${ENGINE_PROJECT_H})
+add_executable(XER ${ENGINE_PROJECT_CC})
+target_sources(XER PRIVATE ${ENGINE_PROJECT_H})
 
-target_include_directories(EngineBuilder PRIVATE
+target_include_directories(XER PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/src/doctor
     ${LIBXML2_INCLUDE_DIRS}
@@ -17,22 +17,22 @@ target_include_directories(EngineBuilder PRIVATE
     ${LLVM_DEFINITIONS})
 
 if(ENGINE_HAS_ZSTD)
-    target_include_directories(EngineBuilder PRIVATE ${ZSTD_INCLUDE_DIR})
+    target_include_directories(XER PRIVATE ${ZSTD_INCLUDE_DIR})
 endif()
 if(ENGINE_HAS_BROTLI)
-    target_include_directories(EngineBuilder PRIVATE ${BROTLI_INCLUDE_DIR})
+    target_include_directories(XER PRIVATE ${BROTLI_INCLUDE_DIR})
 endif()
 if(ENGINE_HAS_FFI)
-    target_include_directories(EngineBuilder PRIVATE ${FFI_INCLUDE_DIR})
+    target_include_directories(XER PRIVATE ${FFI_INCLUDE_DIR})
 endif()
 if(ENGINE_HAS_FFTW3F)
-    target_include_directories(EngineBuilder PRIVATE ${FFTW3_INCLUDE_DIR})
+    target_include_directories(XER PRIVATE ${FFTW3_INCLUDE_DIR})
 endif()
 if(ENGINE_HAS_ICU)
-    target_include_directories(EngineBuilder PRIVATE ${ICU_INCLUDE_DIRS})
+    target_include_directories(XER PRIVATE ${ICU_INCLUDE_DIRS})
 endif()
 
-target_compile_definitions(EngineBuilder PRIVATE
+target_compile_definitions(XER PRIVATE
     ${LLVM_DEFINITIONS}
     ENGINE_HAS_ZSTD=${ENGINE_HAS_ZSTD}
     ENGINE_HAS_BROTLI=${ENGINE_HAS_BROTLI}
@@ -43,9 +43,9 @@ target_compile_definitions(EngineBuilder PRIVATE
     ENGINE_HAS_QT6=${ENGINE_HAS_QT6})
 
 # ── Required link deps ───────────────────────────────────────
-target_link_libraries(EngineBuilder PRIVATE
-    EngineBuilderAsyncIO
-    EngineJavaScript
+target_link_libraries(XER PRIVATE
+    XERAsyncIO
+    XERJavaScript
     ${NODE_LIBRARY}
     CURL::libcurl
     OpenSSL::Crypto
@@ -57,106 +57,106 @@ target_link_libraries(EngineBuilder PRIVATE
     ${CLANG_AVAILABLE_LIBS})
 
 if(CMAKE_DL_LIBS)
-    target_link_libraries(EngineBuilder PRIVATE ${CMAKE_DL_LIBS})
+    target_link_libraries(XER PRIVATE ${CMAKE_DL_LIBS})
 endif()
 
 # ── Optional system libs ─────────────────────────────────────
 if(ENGINE_HAS_ZSTD)
-    target_link_libraries(EngineBuilder PRIVATE ${ZSTD_LIBRARY})
+    target_link_libraries(XER PRIVATE ${ZSTD_LIBRARY})
 endif()
 
 if(ENGINE_HAS_BROTLI)
-    target_link_libraries(EngineBuilder PRIVATE
+    target_link_libraries(XER PRIVATE
         ${BROTLI_ENC_LIBRARY}
         ${BROTLI_DEC_LIBRARY}
         ${BROTLI_COMMON_LIBRARY})
 endif()
 
 if(ENGINE_HAS_FFI)
-    target_link_libraries(EngineBuilder PRIVATE ${FFI_LIBRARY})
+    target_link_libraries(XER PRIVATE ${FFI_LIBRARY})
 endif()
 
 if(ENGINE_HAS_FFTW3F)
-    target_link_libraries(EngineBuilder PRIVATE ${FFTW3F_LIBRARY})
+    target_link_libraries(XER PRIVATE ${FFTW3F_LIBRARY})
 endif()
 
 if(ENGINE_HAS_ICU)
-    target_link_libraries(EngineBuilder PRIVATE ${ICU_LIBRARIES})
+    target_link_libraries(XER PRIVATE ${ICU_LIBRARIES})
 endif()
 
 if(TARGET LibXml2::LibXml2)
-    target_link_libraries(EngineBuilder PRIVATE LibXml2::LibXml2)
+    target_link_libraries(XER PRIVATE LibXml2::LibXml2)
 else()
-    target_link_libraries(EngineBuilder PRIVATE ${LIBXML2_LIBRARIES})
+    target_link_libraries(XER PRIVATE ${LIBXML2_LIBRARIES})
 endif()
 
 if(SQLite3_FOUND)
-    target_link_libraries(EngineBuilder PRIVATE SQLite::SQLite3)
+    target_link_libraries(XER PRIVATE SQLite::SQLite3)
 endif()
 
 # libuv
 if(libuv_FOUND AND TARGET libuv::libuv)
-    target_link_libraries(EngineBuilder PRIVATE libuv::libuv)
+    target_link_libraries(XER PRIVATE libuv::libuv)
 else()
     pkg_check_modules(LIBUV libuv QUIET)
     if(LIBUV_FOUND)
-        target_include_directories(EngineBuilder PRIVATE ${LIBUV_INCLUDE_DIRS})
-        target_link_libraries(EngineBuilder PRIVATE ${LIBUV_LIBRARIES})
+        target_include_directories(XER PRIVATE ${LIBUV_INCLUDE_DIRS})
+        target_link_libraries(XER PRIVATE ${LIBUV_LIBRARIES})
     endif()
 endif()
 
 # jsoncpp
 if(TARGET JsonCpp::JsonCpp)
-    target_link_libraries(EngineBuilder PRIVATE JsonCpp::JsonCpp)
+    target_link_libraries(XER PRIVATE JsonCpp::JsonCpp)
 elseif(TARGET jsoncpp_lib)
-    target_link_libraries(EngineBuilder PRIVATE jsoncpp_lib)
+    target_link_libraries(XER PRIVATE jsoncpp_lib)
 else()
     pkg_check_modules(JSONCPP jsoncpp QUIET)
     if(JSONCPP_FOUND)
-        target_include_directories(EngineBuilder PRIVATE ${JSONCPP_INCLUDE_DIRS})
-        target_link_libraries(EngineBuilder PRIVATE ${JSONCPP_LIBRARIES})
+        target_include_directories(XER PRIVATE ${JSONCPP_INCLUDE_DIRS})
+        target_link_libraries(XER PRIVATE ${JSONCPP_LIBRARIES})
     endif()
 endif()
 
 # re2
 if(TARGET re2::re2)
-    target_link_libraries(EngineBuilder PRIVATE re2::re2)
+    target_link_libraries(XER PRIVATE re2::re2)
 else()
     pkg_check_modules(RE2 re2 QUIET)
     if(RE2_FOUND)
-        target_include_directories(EngineBuilder PRIVATE ${RE2_INCLUDE_DIRS})
-        target_link_libraries(EngineBuilder PRIVATE ${RE2_LIBRARIES})
+        target_include_directories(XER PRIVATE ${RE2_INCLUDE_DIRS})
+        target_link_libraries(XER PRIVATE ${RE2_LIBRARIES})
     endif()
 endif()
 
 # range-v3
 if(TARGET range-v3::range-v3)
-    target_link_libraries(EngineBuilder PRIVATE range-v3::range-v3)
+    target_link_libraries(XER PRIVATE range-v3::range-v3)
 elseif(TARGET range-v3)
-    target_link_libraries(EngineBuilder PRIVATE range-v3)
+    target_link_libraries(XER PRIVATE range-v3)
 else()
     pkg_check_modules(RANGEV3 range-v3 QUIET)
     if(RANGEV3_FOUND)
-        target_include_directories(EngineBuilder PRIVATE ${RANGEV3_INCLUDE_DIRS})
-        target_link_libraries(EngineBuilder PRIVATE ${RANGEV3_LIBRARIES})
+        target_include_directories(XER PRIVATE ${RANGEV3_INCLUDE_DIRS})
+        target_link_libraries(XER PRIVATE ${RANGEV3_LIBRARIES})
     endif()
 endif()
 
 if(TARGET absl::flat_hash_map)
-    target_link_libraries(EngineBuilder PRIVATE absl::flat_hash_map)
+    target_link_libraries(XER PRIVATE absl::flat_hash_map)
 endif()
 
 # ── Bridge static libs ───────────────────────────────────────
-foreach(_bridge EngineQt6Bridge EngineJavaScript
-                EngineBridgeOpenCV EngineBridgeCuda EngineBridgeCudnn
-                EngineBridgeSkia EngineBridgeFfmpeg EngineBridgeAngle)
+foreach(_bridge XERQt6Bridge XERJavaScript
+                XERBridgeOpenCV XERBridgeCuda XERBridgeCudnn
+                XERBridgeSkia XERBridgeFfmpeg XERBridgeAngle)
     if(TARGET ${_bridge})
-        target_link_libraries(EngineBuilder PRIVATE ${_bridge})
+        target_link_libraries(XER PRIVATE ${_bridge})
     endif()
 endforeach()
 
 if(Qt6Core_FOUND)
-    target_link_libraries(EngineBuilder PRIVATE Qt6::Core)
+    target_link_libraries(XER PRIVATE Qt6::Core)
 endif()
 
 # ── Interface alias for all Qt6 targets ──────────────────────
