@@ -11,11 +11,9 @@
 #include <range/v3/algorithm/equal.hpp>
 #include <range/v3/algorithm/lexicographical_compare.hpp>
 #include <range/v3/algorithm/search.hpp>
-
-#if ENGINE_HAS_ICU
+ 
 #include <unicode/normalizer2.h>
-#include <unicode/unistr.h>
-#endif
+#include <unicode/unistr.h> 
 
 namespace Engine::Helper {
 namespace {
@@ -57,8 +55,7 @@ std::string JsBuffer::ToString(ConstSpan bytes, bool normalize_utf8) {
 }
 
 std::string JsBuffer::NormalizeUtf8(std::string_view text) {
-	std::string normalized(text);
-#if ENGINE_HAS_ICU
+	std::string normalized(text); 
 	UErrorCode status = U_ZERO_ERROR;
 	const icu::Normalizer2* normalizer = icu::Normalizer2::getNFCInstance(status);
 	if (U_FAILURE(status) || normalizer == nullptr) {
@@ -72,8 +69,7 @@ std::string JsBuffer::NormalizeUtf8(std::string_view text) {
 		return normalized;
 	}
 	normalized.clear();
-	output.toUTF8String(normalized);
-#endif
+	output.toUTF8String(normalized); 
 	return normalized;
 }
 

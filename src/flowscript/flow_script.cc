@@ -13,6 +13,7 @@
 #include "engine_params.h"
 #include "flow_script_console.h"
 #include "flow_script_event_bus.h"
+#include "flow_script_event_bus_static.h"
 #include "flow_script_import_module.h"
 #include "flow_script_require.h"
 #include "flux/terminal/terminal_output_renderer.h"
@@ -21,18 +22,19 @@
 #include "v8/v8_engine.h"
 #include "v8/v8_initializer.h"
 
+
 namespace {
 
 void WriteFlowScriptLine(flux::terminal::OutputStream stream, const std::string& text) {
     flux::terminal::WriteLine(stream, text);
 }
-
+ 
 }  // namespace
 
 void FlowScript::Init(v8::Isolate* isolate) {
     (void)isolate;
     const EngineParams params = EngineParamsFromEnv();
-    Engine::V8Runtime::EnsureInitialized(params.v8_platform_workers);
+    Engine::V8Runtime::EnsureInitialized(params.v8_platform_workers);  
 }
 
 void FlowScript::Shutdown() {
@@ -97,14 +99,17 @@ bool FlowScript::Run() const {
         }
     }
 
+    if (!flow_script_detail::StaticEvent::state) {
+        flow_script_detail::StaticEvent::state = std::make_unique<flow_script_detail::JsEventBusState>();
+    }
+
     bool success = false;
     {
         v8::Isolate::Scope isolate_scope(isolate);
         v8::HandleScope handle_scope(isolate);
         v8::Local<v8::Context> context = v8::Context::New(isolate);
-        v8::Context::Scope context_scope(context);
-        flow_script_detail::JsEventBusState event_bus_state;
-        event_bus_state.runtime.Attach(isolate, context);
+        v8::Context::Scope context_scope(context); 
+        flow_script_detail::StaticEvent::state->runtime.Attach(isolate, context);
 
         do {
             // In sandbox mode, skip ImportModule binding (no dynamic module loading).
@@ -135,7 +140,7 @@ bool FlowScript::Run() const {
 				break;
 			}
 
-            if (!flow_script_detail::BindEventBus(isolate, context, &event_bus_state)) {
+            if (!flow_script_detail::BindEventBus(isolate, context, flow_script_detail::StaticEvent::state.get())) {
 				WriteFlowScriptLine(flux::terminal::OutputStream::kStderr, "Failed to bind EventBus");
                 break;
             }
@@ -168,6 +173,8 @@ bool FlowScript::Run() const {
 
             success = true;
         } while (false);
+
+        flow_script_detail::StaticEvent::state->runtime.Reset();
     }
 
     DisposeIsolate(isolate);

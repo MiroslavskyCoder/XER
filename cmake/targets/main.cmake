@@ -148,7 +148,7 @@ endif()
 
 # ── Bridge static libs ───────────────────────────────────────
 foreach(_bridge XERQt6Bridge XERJavaScript
-                XERBridgeOpenCV XERBridgeCuda XERBridgeCudnn
+                XEROpenCV XERBridgeCuda XERBridgeCudnn
                 XERBridgeSkia XERBridgeFfmpeg XERBridgeAngle)
     if(TARGET ${_bridge})
         target_link_libraries(XER PRIVATE ${_bridge})

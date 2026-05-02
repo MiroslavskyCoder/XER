@@ -2,6 +2,7 @@
 
 #include <string>
 
+#include "flow_script_event_bus_static.h"
 #include "flux/v8_console_diagnostics.h"
 #include "flux/v8_console_table.h"
 #include "flux/v8_console_terminal.h"
@@ -51,7 +52,7 @@ std::string JoinArgumentsFromIndex(v8::Isolate* isolate,
 v8::Local<v8::FunctionTemplate> MakeConsoleTemplate(v8::Isolate* isolate) {
 	return Engine::Helper::MakeClass(
 		isolate,
-		"Console",
+		"console",
 		&ConsoleConstructor,
 		{{"log", &ConsoleLogCallback},
 		 {"info", &ConsoleInfoCallback},
@@ -96,20 +97,59 @@ std::string JoinArguments(v8::Isolate* isolate, const v8::FunctionCallbackInfo<v
 	return flux::console::JoinArguments(isolate, args);
 }
 
-void ConsoleLogCallback(const v8::FunctionCallbackInfo<v8::Value>& args) {
-	flux::console::WriteLine(flux::console::Stream::kStdout, JoinArguments(args.GetIsolate(), args));
+std::string replaceBusEvent(std::string type, std::string msg) {
+	if (!flow_script_detail::StaticEvent::state) {
+		return msg;
+	}
+	v8::Isolate* isolate = flow_script_detail::StaticEvent::state->runtime.isolate();
+	if (!isolate) {
+		return msg;
+	}
+	v8::Local<v8::Context> context = isolate->GetCurrentContext();
+	v8::Local<v8::Value> t_func;
+	
+	if (context->Global()->Get(context, Engine::Helper::ToV8Str(isolate, "t")).ToLocal(&t_func) 
+		&& t_func->IsFunction()) {
+		v8::Local<v8::Value> argv[] = {
+			Engine::Helper::ToV8Str(isolate, type),
+			Engine::Helper::ToV8Str(isolate, msg)
+		};
+		v8::Local<v8::Value> result;
+		if (t_func.As<v8::Function>()->Call(context, context->Global(), 2, argv).ToLocal(&result) 
+			&& result->IsString()) {
+			msg = Utf8(isolate, result);
+		}
+	}
+	
+	context->Global()
+		->Set(
+			context,
+			Engine::Helper::ToV8Str(isolate, "lastBusEventType"),
+			Engine::Helper::ToV8Str(isolate, type))
+		.FromMaybe(false);
+	context->Global()
+		->Set(
+			context,
+			Engine::Helper::ToV8Str(isolate, "lastBusEventMsg"),
+			Engine::Helper::ToV8Str(isolate, msg))
+		.FromMaybe(false);
+	return msg;
+}
+
+void ConsoleLogCallback(const v8::FunctionCallbackInfo<v8::Value>& args) { 
+	flux::console::WriteLine(flux::console::Stream::kStdout, replaceBusEvent("log", JoinArguments(args.GetIsolate(), args)));
 }
 
 void ConsoleInfoCallback(const v8::FunctionCallbackInfo<v8::Value>& args) {
-	flux::console::WriteLine(flux::console::Stream::kStdout, JoinArguments(args.GetIsolate(), args));
+	flux::console::WriteLine(flux::console::Stream::kStdout, replaceBusEvent("info", JoinArguments(args.GetIsolate(), args)));
 }
 
 void ConsoleWarnCallback(const v8::FunctionCallbackInfo<v8::Value>& args) {
-	flux::console::WriteLine(flux::console::Stream::kStderr, JoinArguments(args.GetIsolate(), args));
+	flux::console::WriteLine(flux::console::Stream::kStderr, replaceBusEvent("warn", JoinArguments(args.GetIsolate(), args)));
 }
 
 void ConsoleErrorCallback(const v8::FunctionCallbackInfo<v8::Value>& args) {
-	flux::console::WriteLine(flux::console::Stream::kStderr, JoinArguments(args.GetIsolate(), args));
+	flux::console::WriteLine(flux::console::Stream::kStderr, replaceBusEvent("error", JoinArguments(args.GetIsolate(), args)));
 }
 
 void ConsoleDirCallback(const v8::FunctionCallbackInfo<v8::Value>& args) {
@@ -174,6 +214,7 @@ void ConsoleSnapshotCallback(const v8::FunctionCallbackInfo<v8::Value>& args) {
 
 void ConsoleClearSnapshotCallback(const v8::FunctionCallbackInfo<v8::Value>& args) {
 	flux::console::ClearSnapshotFromArgs(args.GetIsolate(), args);
-}  // namespace flow_script_detail
+}
+
 }  // namespace flow_script_detail
 
