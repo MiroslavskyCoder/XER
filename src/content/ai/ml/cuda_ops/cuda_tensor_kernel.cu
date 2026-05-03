@@ -46,7 +46,7 @@ cudaError_t CudaTensorKernel::Conv2DForward(const float* input,
     }
     
     if (!g_cudnn_handle) {
-        return cudaErrorNotInitialized;
+        return cudaErrorInitializationError;
     }
     
     // Create tensor descriptors (simplified - would need full setup in production)

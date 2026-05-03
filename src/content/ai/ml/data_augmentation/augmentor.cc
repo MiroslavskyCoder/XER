@@ -1,6 +1,6 @@
 ﻿#include "augmentor.h"
 
-namespace Engine::MLData::Augmentation {
+namespace Engine::ML::DataAugmentation {
 
 void AugmentationPipeline::AddAugmentor(std::shared_ptr<Augmentor> augmentor) {
     if (augmentor) {
@@ -8,9 +8,9 @@ void AugmentationPipeline::AddAugmentor(std::shared_ptr<Augmentor> augmentor) {
     }
 }
 
-std::shared_ptr<Types::Tensor> AugmentationPipeline::Apply(const Types::Tensor& input) {
-    auto result = std::make_shared<Types::Tensor>(input.GetShape(), input.GetDataType());
+Engine::MLData::Types::Tensor AugmentationPipeline::Apply(const Engine::MLData::Types::Tensor& input) {
+    auto result = Engine::MLData::Types::Tensor(input.GetShape(), input.GetDataType());
     return result;
 }
 
-} // namespace Engine::MLData::Augmentation
+} // namespace Engine::ML::DataAugmentation
