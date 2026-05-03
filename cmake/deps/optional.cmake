@@ -13,6 +13,13 @@ find_package(range-v3 QUIET)
 find_package(OpenCV QUIET)
 find_package(CUDAToolkit QUIET)
 find_package(Skia QUIET CONFIG)
+find_package(Eigen3 QUIET)
+find_package(OpenVINO QUIET)
+find_package(CUDA QUIET)
+find_package(CUDAToolkit QUIET)
+find_package(CUTLASS QUIET)
+find_package(fp16 QUIET)
+find_package(pthreadpool QUIET)
 find_path(FFI_INCLUDE_DIR NAMES ffi.h)
 find_library(FFI_LIBRARY NAMES ffi libffi)
 find_path(FFTW3_INCLUDE_DIR NAMES fftw3.h)
@@ -59,6 +66,8 @@ set(ENGINE_HAS_CUDNN_BRIDGE 0)
 if(CUDNN_INCLUDE_DIR AND CUDNN_LIBRARY)
     set(ENGINE_HAS_CUDNN_BRIDGE 1)
 endif()
+
+
 
 # ── Skia ─────────────────────────────────────────────────────
 set(ENGINE_HAS_SKIA_BRIDGE 0)

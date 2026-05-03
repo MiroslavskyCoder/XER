@@ -43,7 +43,7 @@ cudaError_t CudaAsyncCopy::DeviceToDevice(const void* device_src,
 
 void* CudaAsyncCopy::AllocatePinned(size_t bytes) {
     if (bytes == 0) {
-        return nullptr;
+        return nullptr;x
     }
     
     void* ptr = nullptr;

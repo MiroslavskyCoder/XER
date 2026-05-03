@@ -53,6 +53,7 @@ target_link_libraries(XER PRIVATE
     absl::strings
     absl::str_format
     absl::hash
+    Eigen3::Eigen
     ${LLVM_ALL_COMPONENT_LIBS}
     ${CLANG_AVAILABLE_LIBS})
 
