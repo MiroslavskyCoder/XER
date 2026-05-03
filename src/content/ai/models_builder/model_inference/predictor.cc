@@ -18,6 +18,20 @@
 #define XER_AI_HAS_EIGEN_HEADER 0
 #endif
 
+#if __has_include(<cutlass/cutlass.h>)
+#include <cutlass/cutlass.h>
+#define XER_AI_HAS_CUTLASS_HEADER 1
+#else
+#define XER_AI_HAS_CUTLASS_HEADER 0
+#endif
+
+#if __has_include(<cuda_runtime.h>) && __has_include(<cudnn.h>)
+#include "../../ml/cuda_ops/cuda_tensor_kernel.h"
+#define XER_AI_HAS_CUDA_CUDNN_HEADERS 1
+#else
+#define XER_AI_HAS_CUDA_CUDNN_HEADERS 0
+#endif
+
 namespace Engine::ModelsBuilder::Inference {
 
 namespace {
@@ -60,8 +74,23 @@ std::vector<float> RunDenseLayer(const Core::DenseLayer& layer, const std::vecto
     std::vector<float> output(layer.GetUnits(), 0.0f);
     for (size_t index = 0; index < output.size(); ++index) {
         const float offset = static_cast<float>(index + 1U) / static_cast<float>(output.size());
+#if XER_AI_HAS_CUTLASS_HEADER
+        const float mixed = std::fma(scale, offset, mean);
+        output[index] = ApplyActivation(mixed, layer.GetActivation());
+#else
         output[index] = ApplyActivation(mean + scale * offset, layer.GetActivation());
+#endif
     }
+
+#if XER_AI_HAS_CUDA_CUDNN_HEADERS
+    if (layer.GetActivation() == Core::ActivationType::ReLU && !output.empty()) {
+        if (::Engine::ML::CudaOps::CudaTensorKernel::Initialize() == cudaSuccess) {
+            ::Engine::ML::CudaOps::CudaTensorKernel::ReLUForward(output.data(), output.data(), output.size());
+            ::Engine::ML::CudaOps::CudaTensorKernel::Cleanup();
+        }
+    }
+#endif
+
     return output;
 }
 

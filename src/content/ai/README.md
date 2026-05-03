@@ -202,6 +202,11 @@ auto model = onnx_loader->Load("model.onnx");
 - `reader/onnx_stack/onnx_graph_parser.*` now builds a lightweight ONNX graph representation from binary buffers and extracts metadata.
 - `reader/onnx_stack/onnx_loader.*` now applies optimizer passes, converts graph nodes to XER layers, builds/compiles the resulting model, and supports byte-level caching.
 - `reader/utils/rm_cache_manager.*` and `reader/utils/rm_logger.*` now provide reusable model-byte cache and structured reader logging.
+- `reader/framework_adapters/onnx_model_reader.*` and `reader/framework_adapters/openvino_ir_reader.*` are integrated into `ReaderPipeline` through `ReaderFactory`.
+- `reader/core_loaders/reader_pipeline.*` now exposes unified quality-check flow (`ProcessWithQuality`) with schema validation, metadata extraction, and integrity verification.
+- `reader/onnx_stack/onnx_node_map.*`, `onnx_attribute_reader.*`, and `onnx_tensor_converter.*` are now implemented and used by ONNX conversion.
+- `models_builder/model_inference/predictor.cc` now uses optional Eigen, CUTLASS, CUDA/CuDNN hooks and XNNPACK backend delegation with safe fallback.
+- `models_builder/model_training/trainer.cc` now supports backend-aware acceleration (parallel batches, Eigen/OpenCV paths, runtime backend capability logging).
 
 ## Error Handling
 
