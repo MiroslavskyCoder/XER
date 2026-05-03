@@ -199,6 +199,9 @@ auto model = onnx_loader->Load("model.onnx");
 - `models_builder/utility/ai_runtime_features.*` performs compile-time capability checks for: range-v3, absl, zlib, icu, libuv, CUDA, CuDNN, CUTLASS, Eigen, OpenCV, XNNPACK, FlatBuffers, OpenVINO, ONNX, TensorFlow, pthreadpool, fp16.
 - `models_builder/utility/mb_thread_pool.*` is now implemented and bridged to `src/async_io/io_thread_pool.*` to reuse Engine-wide worker infrastructure.
 - `model_core/model.cc` now emits a runtime banner at compile stage showing enabled AI feature groups.
+- `reader/onnx_stack/onnx_graph_parser.*` now builds a lightweight ONNX graph representation from binary buffers and extracts metadata.
+- `reader/onnx_stack/onnx_loader.*` now applies optimizer passes, converts graph nodes to XER layers, builds/compiles the resulting model, and supports byte-level caching.
+- `reader/utils/rm_cache_manager.*` and `reader/utils/rm_logger.*` now provide reusable model-byte cache and structured reader logging.
 
 ## Error Handling
 

@@ -5,6 +5,9 @@
 
 #include "../../models_builder/model_core/dense_layer.h"
 
+#include "../utils/rm_cache_manager.h"
+#include "../utils/rm_logger.h"
+
 #include <fstream>
 #include <map>
 #include <sstream>
@@ -31,6 +34,13 @@ uint32_t InferDenseUnits(const OnnxNode& node) {
 }  // namespace
 
 std::shared_ptr<Core::Model> OnnxLoader::Load(const std::string& filepath) {
+    Utils::ReaderLogger::GetInstance().Info("Loading ONNX model from path: " + filepath);
+
+    if (const auto cached = Utils::ReaderCacheManager::GetInstance().Get(filepath); cached.has_value()) {
+        Utils::ReaderLogger::GetInstance().Debug("Using cached ONNX bytes for: " + filepath);
+        return LoadFromBuffer(cached->data(), cached->size());
+    }
+
     std::ifstream file(filepath, std::ios::binary);
     if (!file.is_open()) {
         throw std::runtime_error("Failed to open ONNX file: " + filepath);
@@ -49,6 +59,8 @@ std::shared_ptr<Core::Model> OnnxLoader::Load(const std::string& filepath) {
         throw std::runtime_error("Failed to read ONNX file: " + filepath);
     }
 
+    Utils::ReaderCacheManager::GetInstance().Put(filepath, buffer);
+
     return LoadFromBuffer(buffer.data(), buffer.size());
 }
 
@@ -62,6 +74,9 @@ std::shared_ptr<Core::Model> OnnxLoader::LoadFromBuffer(const uint8_t* buffer,
     if (!OnnxGraphParser::ParseBuffer(buffer, size, graph)) {
         throw std::runtime_error("Failed to parse ONNX graph from buffer");
     }
+
+    Utils::ReaderLogger::GetInstance().Info(
+            "Parsed ONNX graph, nodes=" + std::to_string(graph.nodes.size()));
 
     std::vector<OnnxNode> optimized_nodes = graph.nodes;
     OnnxOptimizer::Optimize(optimized_nodes);
@@ -90,6 +105,8 @@ std::shared_ptr<Core::Model> OnnxLoader::LoadFromBuffer(const uint8_t* buffer,
     if (!model->Compile()) {
         throw std::runtime_error("Failed to compile converted ONNX model");
     }
+
+    Utils::ReaderLogger::GetInstance().Info("ONNX model converted and compiled successfully");
 
     return model;
 }

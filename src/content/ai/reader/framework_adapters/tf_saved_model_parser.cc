@@ -1,5 +1,7 @@
 #include "tf_saved_model_parser.h"
 
+#include "tf_pb_reader.h"
+
 #include <sys/stat.h>
 
 namespace Engine::ModelsBuilder::Reader::Framework {
@@ -11,10 +13,12 @@ LoadResult TfSavedModelParser::Load(const std::string& filepath) {
   if (::stat(pb.c_str(), &st) != 0)
     return {nullptr, false, "No saved_model.pb in: " + filepath};
 
-  // Delegate to TfPbReader
-  auto model = std::make_shared<Core::Model>("tf_saved_model");
-  model->AddLayer(std::make_shared<Core::Layer>("Dense"));
-  return {model, true, ""};
+  TfPbReader pb_reader;
+  LoadResult pb_result = pb_reader.Load(pb);
+  if (!pb_result.success) {
+    return {nullptr, false, "Failed to parse saved_model.pb: " + pb_result.error};
+  }
+  return pb_result;
 }
 
 bool TfSavedModelParser::CanLoad(const std::string& filepath) const {

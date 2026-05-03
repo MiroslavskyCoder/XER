@@ -1,5 +1,7 @@
 #include "pt_model_parser.h"
 
+#include "../../models_builder/model_core/dense_layer.h"
+
 namespace Engine::ModelsBuilder::Reader::Framework {
 
 LoadResult PtModelParser::Load(const std::string& filepath) {
@@ -12,7 +14,9 @@ LoadResult PtModelParser::Load(const std::string& filepath) {
 
   // Placeholder: full parsing needs libtorch or custom ZIP+pickling
   auto model = std::make_shared<Core::Model>("pytorch_model");
-  model->AddLayer(std::make_shared<Core::Layer>("Linear"));
+  model->AddLayer(std::make_shared<Core::DenseLayer>(256U));
+  model->Build({1U, 256U});
+  model->Compile();
   return {model, true, ""};
 }
 
