@@ -22,6 +22,11 @@ public:
 
     void SetSource(std::unique_ptr<FrameSource> src);
     bool Open();
+
+    /// Convenience: set URI, auto-create FFmpegFrameSource if none set, then Open().
+    bool OpenUri(const std::string& uri);
+    const std::string& Uri() const { return uri_; }
+
     void Close();
     void Play();
     void Pause();
@@ -35,6 +40,7 @@ public:
 
 private:
     std::string                    id_;
+    std::string                    uri_;
     std::atomic<StreamState>       state_{StreamState::Idle};
     std::unique_ptr<FrameSource>   source_;
     FpsController                  fps_ctrl_;

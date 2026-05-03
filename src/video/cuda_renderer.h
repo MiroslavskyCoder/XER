@@ -1,9 +1,10 @@
 #pragma once
 #include "rendering_engine.h"
+#include <string>
 
 namespace video {
 
-/// CUDA-based rendering backend.
+/// CUDA-based rendering backend (uses engine::bridge::cuda).
 class CudaRenderer : public RenderingEngine {
 public:
     CudaRenderer() = default;
@@ -16,8 +17,8 @@ public:
     bool Render(const Frame& src, RenderTarget& target) override;
 
 private:
-    bool ready_{false};
-    int  device_id_{0};
+    bool        ready_{false};
+    std::string device_hint_;
 };
 
 }  // namespace video
