@@ -1,6 +1,5 @@
 #include "graph_serializer.h"
 
-#include <flatbuffers/flatbuffers.h>
 #include <cstring>
 #include <stdexcept>
 

@@ -20,7 +20,7 @@ Tensor TensorConcat(const std::vector<Tensor>& tensors, int axis) {
         total_rows += t.Shape()[0];
     }
 
-    Tensor out({total_rows, cols});
+    Tensor out(std::vector<size_t>{total_rows, cols});
     auto& od = out.MutableData();
     Eigen::Index row = 0;
     for (const auto& t : tensors) {

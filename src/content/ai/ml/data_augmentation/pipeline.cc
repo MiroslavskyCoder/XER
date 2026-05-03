@@ -1,2 +1,3 @@
 #include "pipeline.h"
-// Implementation is header-only for now
+
+// Compatibility translation unit.

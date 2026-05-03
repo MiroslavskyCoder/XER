@@ -1,5 +1,7 @@
 #include "opt_memory_reuse.h"
 
+#include <unordered_set>
+
 namespace Engine::ModelsBuilder::Optimization {
 
 std::unordered_map<std::string, OptMemoryReuse::ReuseEntry>

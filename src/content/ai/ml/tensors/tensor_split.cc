@@ -11,7 +11,7 @@ std::vector<Tensor> TensorSplit(const Tensor& t, int num_splits) {
     const size_t chunk = rows / num_splits;
     std::vector<Tensor> out;
     for (int i = 0; i < num_splits; ++i) {
-        Tensor part({chunk, cols});
+        Tensor part(std::vector<size_t>{chunk, cols});
         part.MutableData() = t.Data().middleRows(
             static_cast<Eigen::Index>(i * chunk), static_cast<Eigen::Index>(chunk));
         out.push_back(std::move(part));
@@ -25,7 +25,7 @@ std::vector<Tensor> TensorSplitSizes(const Tensor& t, const std::vector<size_t>&
     std::vector<Tensor> out;
     Eigen::Index row = 0;
     for (size_t sz : sizes) {
-        Tensor part({sz, cols});
+        Tensor part(std::vector<size_t>{sz, cols});
         part.MutableData() = t.Data().middleRows(row, static_cast<Eigen::Index>(sz));
         row += static_cast<Eigen::Index>(sz);
         out.push_back(std::move(part));

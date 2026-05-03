@@ -3,7 +3,9 @@
 namespace Engine::ModelsBuilder::LayerFactory {
 
 LayerPooling::LayerPooling(const std::string& name, Config config)
-    : Core::Layer(name), config_(config) {}
+    : Core::Layer(Core::LayerType::MaxPool), config_(config) {
+  SetLayerName(name);
+}
 
 std::shared_ptr<Core::Layer> MakePooling(const std::string& name,
                                           LayerPooling::Config config) {

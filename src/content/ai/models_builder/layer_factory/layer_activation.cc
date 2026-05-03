@@ -4,7 +4,9 @@ namespace Engine::ModelsBuilder::LayerFactory {
 
 LayerActivation::LayerActivation(const std::string& name, ActType act,
                                    float alpha)
-    : Core::Layer(name), act_(act), alpha_(alpha) {}
+    : Core::Layer(Core::LayerType::Activation), act_(act), alpha_(alpha) {
+  SetLayerName(name);
+}
 
 std::shared_ptr<Core::Layer> MakeActivation(
     const std::string& name, LayerActivation::ActType act, float alpha) {

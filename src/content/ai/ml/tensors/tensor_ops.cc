@@ -125,7 +125,7 @@ Tensor TensorConcat::Concatenate(const std::vector<Tensor>& tensors, int axis) {
             total_rows += t.Shape()[0];
         }
         
-        Tensor result({total_rows, cols}, tensors[0].GetDevice());
+        Tensor result(std::vector<size_t>{total_rows, cols}, tensors[0].GetDevice());
         size_t row_offset = 0;
         
         for (const auto& t : tensors) {

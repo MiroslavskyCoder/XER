@@ -3,7 +3,9 @@
 namespace Engine::ModelsBuilder::LayerFactory {
 
 LayerConv3D::LayerConv3D(const std::string& name, Config config)
-    : Core::Layer(name), config_(config) {}
+    : Core::Layer(Core::LayerType::Conv2D), config_(config) {
+  SetLayerName(name);
+}
 
 std::shared_ptr<Core::Layer> MakeConv3D(const std::string& name,
                                          LayerConv3D::Config config) {
