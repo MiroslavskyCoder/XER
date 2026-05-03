@@ -198,6 +198,7 @@ auto model = onnx_loader->Load("model.onnx");
 
 - `models_builder/utility/ai_runtime_features.*` performs compile-time capability checks for: range-v3, absl, zlib, icu, libuv, CUDA, CuDNN, CUTLASS, Eigen, OpenCV, XNNPACK, FlatBuffers, OpenVINO, ONNX, TensorFlow, pthreadpool, fp16.
 - `models_builder/utility/mb_thread_pool.*` is now implemented and bridged to `src/async_io/io_thread_pool.*` to reuse Engine-wide worker infrastructure.
+- `models_builder/utility/mb_memory_profiler.*` now provides runtime memory snapshots and peak resident/virtual usage tracking.
 - `model_core/model.cc` now emits a runtime banner at compile stage showing enabled AI feature groups.
 - `reader/onnx_stack/onnx_graph_parser.*` now builds a lightweight ONNX graph representation from binary buffers and extracts metadata.
 - `reader/onnx_stack/onnx_loader.*` now applies optimizer passes, converts graph nodes to XER layers, builds/compiles the resulting model, and supports byte-level caching.
@@ -207,6 +208,9 @@ auto model = onnx_loader->Load("model.onnx");
 - `reader/onnx_stack/onnx_node_map.*`, `onnx_attribute_reader.*`, and `onnx_tensor_converter.*` are now implemented and used by ONNX conversion.
 - `models_builder/model_inference/predictor.cc` now uses optional Eigen, CUTLASS, CUDA/CuDNN hooks and XNNPACK backend delegation with safe fallback.
 - `models_builder/model_training/trainer.cc` now supports backend-aware acceleration (parallel batches, Eigen/OpenCV paths, runtime backend capability logging).
+- `models_builder/training_metrics/*` now provides working metric collectors for accuracy, loss tracking, gradient norms, bucketed timing (with RAII scoped timer), and resource usage snapshots.
+- `ml/utils/*` now provides working utilities: logger, math ops (with optional Eigen path), profiler, random generator, config parser, type converter (with fp16 round-trip), and backend-aware version manager.
+- `ml/data_structures/*` now provides working containers and pipelines: thread-safe queues, buffer queue, memory pool, shared memory segment abstraction, dataset base/iterator/shuffle/sampler/window, batch builder, dataset map, and feature cache manager.
 
 ## Error Handling
 
