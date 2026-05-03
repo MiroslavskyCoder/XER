@@ -12,7 +12,7 @@ NetworkContext& NetworkContext::Instance() {
 }
 
 void NetworkContext::Reset() {
-    request_ctx_ = url::URLRequestContext{};
+    request_ctx_ = url::URLRequestContext();
     Cache().Clear();
     ServerProperties().Clear();
 }

@@ -16,10 +16,11 @@ namespace network::url {
 struct URLRequestContext {
     std::string              user_agent   = "XER/1.0";
     proxy::ProxyConfig       proxy_config;
-    cert::CertStorage        cert_storage;
     dns::DnsConfig           dns_config;
     uint32_t                 socket_timeout_ms = 30000;
     bool                     skip_ssl_verify   = false;
+    // Note: CertStorage will be default-initialized
+    cert::CertStorage        cert_storage;
 };
 
 }  // namespace network::url

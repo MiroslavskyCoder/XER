@@ -79,4 +79,81 @@ std::string MakeHostPortPair(const std::string& host, std::uint16_t port) {
     return oss.str();
 }
 
+bool SplitHostPort(const std::string& host_port_str,
+                   std::string* host, uint16_t* port) {
+    if (!host || !port) return false;
+    
+    std::string str = host_port_str;
+    
+    // Handle IPv6 literals: "[::1]:8080"
+    if (str.front() == '[') {
+        size_t close_pos = str.find(']');
+        if (close_pos == std::string::npos) return false;
+        
+        *host = str.substr(1, close_pos - 1);  // Extract IPv6 address without brackets
+        
+        // Check for ":port" after ]
+        if (close_pos + 1 >= str.size()) {
+            *port = 0;  // No port specified
+            return true;
+        }
+        if (str[close_pos + 1] != ':') return false;
+        
+        std::string port_str = str.substr(close_pos + 2);
+        try {
+            int p = std::stoi(port_str);
+            if (!IsValidPort(p)) return false;
+            *port = static_cast<uint16_t>(p);
+        } catch (...) {
+            return false;
+        }
+        return true;
+    }
+    
+    // Handle regular "host:port"
+    size_t colon_pos = str.rfind(':');
+    if (colon_pos == std::string::npos) {
+        *host = str;
+        *port = 0;
+        return true;
+    }
+    
+    *host = str.substr(0, colon_pos);
+    std::string port_str = str.substr(colon_pos + 1);
+    
+    try {
+        int p = std::stoi(port_str);
+        if (!IsValidPort(p)) return false;
+        *port = static_cast<uint16_t>(p);
+    } catch (...) {
+        return false;
+    }
+    return true;
+}
+
+std::string CanonicalizeScheme(const std::string& scheme) {
+    std::string out = scheme;
+    std::transform(out.begin(), out.end(), out.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return out;
+}
+
+bool IsSecureScheme(const std::string& scheme) {
+    std::string canonical = CanonicalizeScheme(scheme);
+    return canonical == "https" || canonical == "wss" || canonical == "ftps";
+}
+
+uint16_t DefaultPortForScheme(const std::string& scheme) {
+    std::string canonical = CanonicalizeScheme(scheme);
+    if (canonical == "http")      return 80;
+    if (canonical == "https")     return 443;
+    if (canonical == "ftp")       return 21;
+    if (canonical == "ftps")      return 990;
+    if (canonical == "ws")        return 80;
+    if (canonical == "wss")       return 443;
+    if (canonical == "quic")      return 443;
+    if (canonical == "spdy")      return 443;
+    return 0;  // Unknown scheme
+}
+
 }  // namespace network

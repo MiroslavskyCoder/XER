@@ -77,15 +77,13 @@ public:
     // Get the underlying stream wrapper (for advanced usage).
     SocketStream* stream() { return stream_.get(); }
 
-private:
-    friend class SocketServer;  // Allow SocketServer to construct from existing fd
-    
-    // Protected constructor for injecting an existing file descriptor.
-    // Only called by SocketServer::Accept().
+    // Constructor for injecting an existing file descriptor.
+    // Package-internal use only (called by SocketServer::Accept()).
     explicit TcpClientSocket(int fd) : fd_(fd) {
         stream_ = std::make_unique<SocketStream>(fd_);
     }
 
+private:
     int fd_ = -1;
     std::unique_ptr<SocketStream> stream_;
 };

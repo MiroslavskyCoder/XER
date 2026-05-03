@@ -4,6 +4,7 @@
  */
 #include "content/network/dns/host_resolver_impl.h"
 
+#include <arpa/inet.h>
 #include <netdb.h>
 #include <sys/socket.h>
 #include <sys/types.h>

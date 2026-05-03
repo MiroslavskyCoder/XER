@@ -4,8 +4,9 @@
  */
 #pragma once
 
-#include <string>
 #include <map>
+#include <string>
+#include <vector>
 
 namespace network::http {
 

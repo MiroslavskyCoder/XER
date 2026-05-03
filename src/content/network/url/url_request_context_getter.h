@@ -19,7 +19,7 @@ public:
     void SetContext(URLRequestContext ctx);
 
 private:
-    std::unique_ptr<URLRequestContext> ctx_;
+    mutable std::unique_ptr<URLRequestContext> ctx_;
 };
 
 }  // namespace network::url

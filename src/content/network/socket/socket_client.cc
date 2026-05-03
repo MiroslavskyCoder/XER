@@ -9,7 +9,7 @@ namespace network::socket {
 
 std::unique_ptr<transport::TransportClientSocket>
 CreateSocketForScheme(const std::string& scheme) {
-    if (network::util::IsSecureScheme(scheme))
+    if (network::IsSecureScheme(scheme))
         return std::make_unique<SslClientSocket>();
     return std::make_unique<TcpClientSocket>();
 }

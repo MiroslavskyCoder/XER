@@ -10,6 +10,7 @@
 
 #include <cstring>
 #include <random>
+#include <sstream>
 #include <stdexcept>
 
 namespace network::dns {

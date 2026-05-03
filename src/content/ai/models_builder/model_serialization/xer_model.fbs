@@ -1,0 +1,231 @@
+/// FlatBuffers schema for XER neural network model serialization
+/// Generate C++ code with: flatc --cpp xer_model.fbs
+
+namespace Engine.ModelsBuilder.Serialization;
+
+/// Data type enumeration
+enum DataType : ubyte {
+    Float32 = 0,      ///< 32-bit floating point (default)
+    Float16 = 1,      ///< 16-bit half precision
+    Int8 = 2,         ///< 8-bit signed integer (quantized)
+    Int32 = 3         ///< 32-bit signed integer
+}
+
+/// Layer type enumeration
+enum LayerType : ubyte {
+    Dense = 0,
+    Conv2D = 1,
+    MaxPool = 2,
+    Activation = 3,
+    Dropout = 4,
+    BatchNorm = 5,
+    Flatten = 6,
+    LSTM = 7
+}
+
+/// Activation function type
+enum ActivationType : ubyte {
+    ReLU = 0,
+    Sigmoid = 1,
+    Tanh = 2,
+    Linear = 3,
+    SoftMax = 4
+}
+
+/// Model architecture type
+enum ModelType : ubyte {
+    Sequential = 0,
+    Functional = 1,
+    Subclass = 2
+}
+
+/// Quantization parameters (per-channel)
+table QuantizationParams {
+    /// Per-channel scale factors (one per output channel)
+    scale: [float] (required);
+    
+    /// Per-channel zero-points (integer offset)
+    zero_point: [byte];
+    
+    /// Original data type before quantization
+    original_dtype: DataType = Float32;
+    
+    /// Quantized data type
+    quantized_dtype: DataType = Int8;
+}
+
+/// Tensor data with optional compression
+table TensorData {
+    /// Tensor shape (e.g., [out_channels, in_channels, kernel_h, kernel_w])
+    shape: [uint32] (required);
+    
+    /// Data buffer (may be compressed)
+    data: [ubyte] (required);
+    
+    /// Data type
+    dtype: DataType = Float32;
+    
+    /// Optional quantization parameters (if quantized)
+    quantization: QuantizationParams;
+    
+    /// Whether data is compressed (gzip, zstd, etc.)
+    is_compressed: bool = false;
+}
+
+/// Layer parameter (weight or bias)
+table LayerParameter {
+    /// Parameter name (e.g., "kernel", "bias", "gamma", "beta")
+    name: string (required);
+    
+    /// Parameter data
+    data: TensorData (required);
+}
+
+/// Dense layer configuration
+table DenseConfig {
+    /// Input features
+    input_size: uint32 (required);
+    
+    /// Output features
+    output_size: uint32 (required);
+    
+    /// Activation function
+    activation: ActivationType = Linear;
+    
+    /// Whether to include bias term
+    use_bias: bool = true;
+}
+
+/// Conv2D layer configuration
+table Conv2DConfig {
+    /// Input channels
+    in_channels: uint32 (required);
+    
+    /// Output channels (filters)
+    out_channels: uint32 (required);
+    
+    /// Kernel size (square: kernel_size x kernel_size)
+    kernel_size: uint32 (required);
+    
+    /// Stride
+    stride: uint32 = 1;
+    
+    /// Padding
+    padding: uint32 = 0;
+    
+    /// Dilation
+    dilation: uint32 = 1;
+    
+    /// Activation function
+    activation: ActivationType = Linear;
+}
+
+/// Activation layer configuration
+table ActivationConfig {
+    /// Activation type
+    activation_type: ActivationType = ReLU;
+}
+
+/// MaxPool layer configuration
+table MaxPoolConfig {
+    /// Pool kernel size (square)
+    kernel_size: uint32 (required);
+    
+    /// Stride
+    stride: uint32 = 1;
+    
+    /// Padding
+    padding: uint32 = 0;
+}
+
+/// BatchNorm layer configuration
+table BatchNormConfig {
+    /// Number of features
+    num_features: uint32 (required);
+    
+    /// Momentum for running statistics
+    momentum: float = 0.1;
+    
+    /// Small constant for numerical stability
+    epsilon: float = 1e-5;
+}
+
+/// Dropout layer configuration
+table DropoutConfig {
+    /// Dropout probability
+    rate: float (required);
+}
+
+/// Unified layer configuration (one field set)
+table LayerConfig {
+    dense: DenseConfig;
+    conv2d: Conv2DConfig;
+    activation: ActivationConfig;
+    maxpool: MaxPoolConfig;
+    batchnorm: BatchNormConfig;
+    dropout: DropoutConfig;
+}
+
+/// Neural network layer
+table Layer {
+    /// Layer name (for debugging)
+    name: string;
+    
+    /// Layer type
+    type: LayerType (required);
+    
+    /// Layer configuration (based on type)
+    config: LayerConfig (required);
+    
+    /// Layer parameters (weights, biases, etc.)
+    parameters: [LayerParameter];
+    
+    /// Layer trainable parameters (for fine-tuning tracking)
+    trainable_parameters: [string];
+}
+
+/// Complete neural network model
+table Model {
+    /// Model name
+    name: string (required);
+    
+    /// Model architecture type
+    model_type: ModelType = Sequential;
+    
+    /// XER version that created this model
+    version: uint32 = 1;
+    
+    /// Input shape [batch, features...]
+    input_shape: [uint32] (required);
+    
+    /// Output shape [batch, features...]
+    output_shape: [uint32] (required);
+    
+    /// List of layers
+    layers: [Layer] (required);
+    
+    /// Global model parameters (learning rate, regularization, etc.)
+    hyperparameters: [KeyValue];
+    
+    /// Training metadata
+    training_steps: uint64 = 0;
+    training_loss: float = 0.0;
+    validation_accuracy: float = 0.0;
+    
+    /// Creation timestamp (unix timestamp)
+    created_at: uint64;
+    
+    /// Last modified timestamp
+    modified_at: uint64;
+    
+    /// Optional description
+    description: string;
+}
+
+/// Key-value pair for hyperparameters
+table KeyValue {
+    key: string (required);
+    value: string (required);
+}
+
+root_type Model;

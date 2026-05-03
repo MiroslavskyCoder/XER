@@ -12,7 +12,7 @@ namespace network::cert {
 // Persistent store for trusted CA certificates (PEM bundles).
 class CertStorage {
 public:
-    explicit CertStorage(const std::string& bundle_path = "");
+    CertStorage(const std::string& bundle_path = "");
 
     // Load PEM bundle from file. Returns false on failure.
     bool Load(const std::string& path);

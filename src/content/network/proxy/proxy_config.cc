@@ -36,7 +36,7 @@ ProxyConfig ProxyConfig::FromEnv() {
 
     std::string host;
     uint16_t port = 0;
-    network::util::SplitHostPort(url, &host, &port);
+    network::SplitHostPort(url, &host, &port);
 
     cfg.proxy = {type, host, port};
     return cfg;

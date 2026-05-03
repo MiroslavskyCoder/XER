@@ -59,4 +59,26 @@ std::string CanonicaliseHost(const std::string& host);
 // Builds a host:port string, wrapping IPv6 literals in brackets.
 std::string MakeHostPortPair(const std::string& host, std::uint16_t port);
 
+// Splits a "host:port" string into separate components.
+// Returns false if port is not a valid number.
+// Handles IPv6 literals by unwrapping brackets (e.g., "[::1]:8080").
+bool SplitHostPort(const std::string& host_port_str,
+                   std::string* host, uint16_t* port);
+
+// Canonicalizes a URL scheme (lowercase, standard forms).
+// @param scheme   Input scheme (e.g., "HTTP", "HTTPS")
+// @return         Canonical scheme ("http", "https", etc.)
+std::string CanonicalizeScheme(const std::string& scheme);
+
+// Checks if a scheme requires secure connection (TLS/SSL).
+// Secure schemes: https, wss (WebSocket Secure), ftps, etc.
+// @param scheme   Canonicalized scheme
+// @return         True if scheme is secure
+bool IsSecureScheme(const std::string& scheme);
+
+// Gets the default port for a URL scheme.
+// @param scheme   Canonicalized scheme (e.g., "http", "https")
+// @return         Default port number, or 0 if scheme is unknown
+uint16_t DefaultPortForScheme(const std::string& scheme);
+
 }  // namespace network

@@ -28,7 +28,7 @@ NetworkSelector::CreateSocket(const std::string& scheme,
         auto sock = SocketProxy::ConnectThrough(
             info.server, host, port, error);
         if (!sock) return nullptr;
-        if (network::util::IsSecureScheme(scheme)) {
+        if (network::IsSecureScheme(scheme)) {
             // Wrap in TLS (over the proxy tunnel) — return plain for now
         }
         return sock;

@@ -22,7 +22,7 @@ bool URLRequestJob::ParseURL(const std::string& url,
                               std::string* path) const {
     const auto sep = url.find("://");
     if (sep == std::string::npos) return false;
-    *scheme = network::util::CanonicalizeScheme(url.substr(0, sep));
+    *scheme = network::CanonicalizeScheme(url.substr(0, sep));
     std::string rest = url.substr(sep + 3);
     const auto slash = rest.find('/');
     std::string host_port;
@@ -33,9 +33,9 @@ bool URLRequestJob::ParseURL(const std::string& url,
         *path = rest.substr(slash);
     }
     std::string h; uint16_t p = 0;
-    network::util::SplitHostPort(host_port, &h, &p);
+    network::SplitHostPort(host_port, &h, &p);
     *host = h;
-    *port = p ? p : network::util::DefaultPortForScheme(*scheme);
+    *port = p ? p : network::DefaultPortForScheme(*scheme);
     return true;
 }
 
