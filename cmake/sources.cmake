@@ -73,7 +73,7 @@ list(FILTER ENGINE_SRC_CC EXCLUDE REGEX "/src/javascript/")
 list(FILTER ENGINE_SRC_CC EXCLUDE REGEX "/src/wrapper/")
 list(FILTER ENGINE_SRC_CC EXCLUDE REGEX "/src/doctor/")
 list(FILTER ENGINE_SRC_CC EXCLUDE REGEX "/src/content/ai/ml/data_augmentation/")
-list(FILTER ENGINE_SRC_CC EXCLUDE REGEX "/src/v8/v8_runtime_checker\\.cc$")
+list(FILTER ENGINE_SRC_CC EXCLUDE REGEX "/src/v8/v8_runtime_checker\\.cc")
 list(FILTER ENGINE_SRC_CU EXCLUDE REGEX "/src/wrapper/")
 list(APPEND ENGINE_SRC_CC "${CMAKE_CURRENT_SOURCE_DIR}/src/xer/encode/sxer84321.c")
 
