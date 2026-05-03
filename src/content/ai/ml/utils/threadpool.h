@@ -1,9 +1,15 @@
 #pragma once
 
-#include <pthreadpool.h>
 #include <cstddef>
 #include <functional>
 #include <vector>
+
+#if __has_include(<pthreadpool.h>)
+#include <pthreadpool.h>
+#define XER_AI_HAS_PTHREADPOOL 1
+#else
+#define XER_AI_HAS_PTHREADPOOL 0
+#endif
 
 namespace Engine::ML::Utils {
 
@@ -59,7 +65,11 @@ public:
                            size_t tile_h, size_t tile_w);
 
 private:
-    pthreadpool_t threadpool_;
+#if XER_AI_HAS_PTHREADPOOL
+    void* threadpool_;
+#else
+    size_t num_threads_;
+#endif
 };
 
 } // namespace Engine::ML::Utils

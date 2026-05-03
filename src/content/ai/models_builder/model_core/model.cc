@@ -2,6 +2,7 @@
 
 #include "../utility/mb_error_handler.h"
 #include "../utility/mb_logger.h"
+#include "../utility/ai_runtime_features.h"
 
 #include <sstream>
 
@@ -110,6 +111,8 @@ bool Model::Compile() {
     }
 
     is_compiled_ = true;
+    static const std::string runtime_banner = Utility::BuildRuntimeBanner();
+    Utility::ModelBuilderLogger::GetInstance().Info(runtime_banner);
     Utility::ModelBuilderLogger::GetInstance().Info(
         "Compiled model '" + model_name_ + "' with " + std::to_string(layers_.size()) + " layers.");
     return true;

@@ -20,6 +20,11 @@ class Tensor {
 public:
     explicit Tensor(const std::vector<uint32_t>& shape, DataType dtype = DataType::FLOAT32);
     ~Tensor();
+
+    Tensor(const Tensor& other);
+    Tensor& operator=(const Tensor& other);
+    Tensor(Tensor&& other) noexcept;
+    Tensor& operator=(Tensor&& other) noexcept;
     
     std::vector<uint32_t> GetShape() const { return shape_; }
     DataType GetDataType() const { return data_type_; }
@@ -29,8 +34,12 @@ public:
     const void* GetData() const { return data_; }
     
     size_t GetMemorySize() const { return memory_size_; }
+    void Zero();
 
 private:
+    bool Allocate();
+    void Release();
+
     std::vector<uint32_t> shape_;
     DataType data_type_;
     uint64_t element_count_;

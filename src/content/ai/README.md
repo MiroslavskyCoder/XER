@@ -43,7 +43,8 @@ XER AI Module
 │   ├── weight_management/   - Weight initialization & validation
 │   ├── graph_engine/        - Computation graph
 │   ├── hardware_binding/    - GPU/CPU binding strategies
-│   └── training_metrics/    - Metrics collection
+│   ├── training_metrics/    - Metrics collection
+│   └── utility/             - Runtime feature detection + thread pool bridge
 │
 ├── ml/                      [Machine Learning utilities]
 │   ├── cuda_ops/            - CUDA kernel operations
@@ -192,6 +193,12 @@ auto model = onnx_loader->Load("model.onnx");
 - **Data Loaders** - pthreadpool-based thread-safe prefetching
 - **Model Inference** - Single-threaded (thread pool managed at Engine level)
 - **Training** - Gradient computation parallelization via OpenMP
+
+## Runtime Integration (New)
+
+- `models_builder/utility/ai_runtime_features.*` performs compile-time capability checks for: range-v3, absl, zlib, icu, libuv, CUDA, CuDNN, CUTLASS, Eigen, OpenCV, XNNPACK, FlatBuffers, OpenVINO, ONNX, TensorFlow, pthreadpool, fp16.
+- `models_builder/utility/mb_thread_pool.*` is now implemented and bridged to `src/async_io/io_thread_pool.*` to reuse Engine-wide worker infrastructure.
+- `model_core/model.cc` now emits a runtime banner at compile stage showing enabled AI feature groups.
 
 ## Error Handling
 

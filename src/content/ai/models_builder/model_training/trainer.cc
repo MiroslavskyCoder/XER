@@ -10,8 +10,10 @@
 #include <boost/random/uniform_int_distribution.hpp>
 
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <numeric>
 #include <vector>
 #include <random>
@@ -78,6 +80,8 @@ bool Trainer::Train(const std::vector<float>& x_train, const std::vector<float>&
 
     optimizer_->SetLearningRate(config.learning_rate);
     epoch_losses_.clear();
+    best_loss_ = std::numeric_limits<float>::infinity();
+    uint32_t stale_epochs = 0U;
 
     Inference::Predictor predictor(model_);
     std::vector<size_t> indices(x_train.size());
@@ -124,16 +128,40 @@ bool Trainer::Train(const std::vector<float>& x_train, const std::vector<float>&
         const float epoch_loss = boost::accumulators::mean(epoch_accumulator);
         epoch_losses_.push_back(epoch_loss);
 
+        const bool is_first_epoch = std::isinf(best_loss_);
+        const bool improved = is_first_epoch ||
+            (best_loss_ - epoch_loss) >= std::max(0.0f, config.early_stopping_min_delta);
+        if (improved) {
+            best_loss_ = epoch_loss;
+            stale_epochs = 0U;
+        } else {
+            ++stale_epochs;
+        }
+
+        float running_mean = 0.0f;
+        if (!epoch_losses_.empty()) {
+            running_mean = std::accumulate(epoch_losses_.begin(), epoch_losses_.end(), 0.0f)
+                         / static_cast<float>(epoch_losses_.size());
+        }
+
         if (config.verbose) {
             Utility::ModelBuilderLogger::GetInstance().Info(
                 "Epoch " + std::to_string(epoch) +
                 " optimizer=" + optimizer_->GetOptimizerName() +
                 " lr=" + std::to_string(optimizer_->GetLearningRate()) +
-                " loss=" + std::to_string(epoch_loss));
+                " loss=" + std::to_string(epoch_loss) +
+                " running_loss=" + std::to_string(running_mean));
         }
 
         if (callback_) {
             callback_(epoch, epoch_loss);
+        }
+
+        if (config.early_stopping_patience > 0U && stale_epochs >= config.early_stopping_patience) {
+            Utility::ModelBuilderLogger::GetInstance().Info(
+                "Early stopping triggered at epoch " + std::to_string(epoch) +
+                ", best_loss=" + std::to_string(best_loss_));
+            break;
         }
     }
     

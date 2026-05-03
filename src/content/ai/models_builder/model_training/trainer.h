@@ -15,6 +15,8 @@ struct TrainingConfig {
     float learning_rate;
     bool shuffle_data;
     bool verbose;
+    uint32_t early_stopping_patience = 0;
+    float early_stopping_min_delta = 0.0f;
 };
 
 using TrainingCallback = std::function<void(uint32_t, float)>;
@@ -31,6 +33,7 @@ public:
     
     void SetCallback(TrainingCallback callback) { callback_ = callback; }
     const std::vector<float>& GetEpochLosses() const { return epoch_losses_; }
+    float GetBestLoss() const { return best_loss_; }
 
 private:
     std::shared_ptr<Core::Model> model_;
@@ -38,6 +41,7 @@ private:
     std::shared_ptr<Optimization::LossFunction> loss_;
     TrainingCallback callback_;
     std::vector<float> epoch_losses_;
+    float best_loss_ = 0.0f;
 };
 
 } // namespace Engine::ModelsBuilder::Training
