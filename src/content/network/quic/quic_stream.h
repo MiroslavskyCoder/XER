@@ -12,6 +12,16 @@
 
 namespace network::quic {
 
+// QUIC protocol stream for multiplexed, reliable communication.
+// Each QUIC connection can have multiple concurrent streams.
+// Supports flow control, priority, and graceful reset.
+// 
+// Usage:
+//   auto stream = connection.CreateStream();
+//   stream->WriteData(data);
+//   stream->OnDataAvailable = [](const std::vector<uint8_t>& data) { 
+//       /* handle received data */ 
+//   };
 class QuicStream {
 public:
     explicit QuicStream(QuicStreamId id) : id_(id) {}

@@ -17,16 +17,37 @@
 
 namespace network::core {
 
-// Top-level context aggregating all network subsystem singletons.
+// Top-level network context that aggregates all subsystem singletons.
+// Provides centralized access to HTTP session, DNS, proxy, certificate,
+// and request configuration throughout the network module.
+// 
+// This is the main entry point for network operations. All components
+// (HTTP, WebSocket, FTP, QUIC, etc.) should use this context.
+// 
+// Usage:
+//   auto& ctx = NetworkContext::Instance();
+//   auto& cache = ctx.Cache();
+//   auto& session = ctx.HttpSession();
 class NetworkContext {
 public:
+    // Get the singleton network context.
+    // Creates the instance on first call.
     static NetworkContext& Instance();
 
+    // Get the URL request context (contains cookies, proxy config, timeout, etc.).
     url::URLRequestContext&          RequestContext()     { return request_ctx_; }
+    
+    // Get the HTTP network session for managing HTTP/2 connections.
     http::HttpNetworkSession&        HttpSession()        { return http::HttpNetworkSession::Default(); }
+    
+    // Get the HTTP cache for storing responses.
     http::HttpCache&                 Cache()              { return http::HttpCache::Instance(); }
+    
+    // Get the HTTP server properties cache (alternate protocols, etc.).
     http::HttpServerProperties&      ServerProperties()   { return http::HttpServerProperties::Instance(); }
 
+    // Reset all network state (for cleanup or restart).
+    // Should be called before isolate shutdown to clean up resources.
     void Reset();
 
 private:

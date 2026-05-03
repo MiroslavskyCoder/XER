@@ -11,11 +11,19 @@
 
 namespace network::dns {
 
+// Resolved DNS address entry with TTL (time-to-live).
 struct ResolvedAddress {
-    std::string address;   // IPv4 or IPv6 string
+    // IPv4 or IPv6 address in standard string format
+    std::string address;   
+    
+    // Time-to-live in seconds (cache validity)
     uint32_t    ttl_sec = 0;
 };
 
+// Callback invoked when DNS resolution completes (async).
+// @param ok    True if resolution succeeded
+// @param addrs Vector of resolved addresses (valid only if ok=true)
+// @param error Error message (valid only if ok=false)
 using ResolveCallback = std::function<void(bool ok,
                                            const std::vector<ResolvedAddress>& addrs,
                                            const std::string& error)>;
