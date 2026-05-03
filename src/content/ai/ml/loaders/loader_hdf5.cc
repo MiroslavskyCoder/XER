@@ -1,5 +1,10 @@
 #include "loader_hdf5.h"
+
 #include <stdexcept>
+
+#include <absl/strings/str_format.h>
+#include <absl/strings/string_view.h>
+#include <range/v3/view.hpp>
 
 #if __has_include(<hdf5/serial/H5Cpp.h>)
 #  include <hdf5/serial/H5Cpp.h>
@@ -13,6 +18,11 @@ namespace Engine::ML::Loaders {
 
 Dataset LoaderHdf5::Load(const std::string& path) {
 #ifdef LOADER_HDF5_AVAILABLE
+    Dataset cached;
+    if (TryLoadCachedDataset(Name(), path, &cached)) {
+        return cached;
+    }
+
     try {
         H5::H5File file(path, H5F_ACC_RDONLY);
         H5::DataSet xds = file.openDataSet("X");
@@ -38,6 +48,7 @@ Dataset LoaderHdf5::Load(const std::string& path) {
             yds.read(ds.y.data(), H5::PredType::NATIVE_INT);
         } catch (const H5::Exception&) {}
 
+        StoreCachedDataset(Name(), path, ds);
         return ds;
     } catch (const H5::Exception& ex) {
         throw std::runtime_error(std::string("Hdf5Loader: ") + ex.getCDetailMsg());

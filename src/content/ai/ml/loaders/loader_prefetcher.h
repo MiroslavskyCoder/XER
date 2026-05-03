@@ -4,22 +4,26 @@
 #include <future>
 #include <string>
 
+#include <absl/strings/string_view.h>
+#include <range/v3/view.hpp>
+
 namespace Engine::ML::Loaders {
 
-/// Async prefetch wrapper: loads dataset in a background thread
+/// Async prefetch wrapper — enqueues load onto IO::AsyncIO::IOThreadPool,
+/// returns result via std::future<Dataset>.
 class LoaderPrefetcher {
 public:
     explicit LoaderPrefetcher(std::unique_ptr<LoaderBase> inner)
         : inner_(std::move(inner)) {}
 
-    /// Begin async load
+    /// Enqueue an async load onto the shared IO thread pool
     void Prefetch(const std::string& path);
-    /// Block until loaded and return result
+    /// Block until the enqueued load completes and return the result
     Dataset Collect();
 
 private:
     std::unique_ptr<LoaderBase> inner_;
-    std::future<Dataset> future_;
+    std::future<Dataset>         future_;
 };
 
 }  // namespace Engine::ML::Loaders

@@ -1,7 +1,12 @@
 #include "loader_stream.h"
+
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
+
+#include <absl/strings/str_format.h>
+#include <absl/strings/string_view.h>
+#include <range/v3/view.hpp>
 
 namespace Engine::ML::Loaders {
 

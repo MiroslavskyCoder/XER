@@ -1,6 +1,11 @@
 #include "loader_json.h"
+
 #include <fstream>
 #include <stdexcept>
+
+#include <absl/strings/str_format.h>
+#include <absl/strings/string_view.h>
+#include <range/v3/view.hpp>
 
 #if __has_include(<jsoncpp/json/json.h>)
 #  include <jsoncpp/json/json.h>
@@ -14,6 +19,11 @@ namespace Engine::ML::Loaders {
 
 Dataset LoaderJson::Load(const std::string& path) {
 #ifdef LOADER_JSON_AVAILABLE
+    Dataset cached;
+    if (TryLoadCachedDataset(Name(), path, &cached)) {
+        return cached;
+    }
+
     std::ifstream f(path);
     if (!f.is_open())
         throw std::runtime_error("JsonLoader: cannot open " + path);
@@ -35,6 +45,7 @@ Dataset LoaderJson::Load(const std::string& path) {
         }
         if (root.isMember("y"))
             for (const auto& v : root["y"]) ds.y.push_back(v.asInt());
+        StoreCachedDataset(Name(), path, ds);
         return ds;
     }
 
@@ -51,6 +62,7 @@ Dataset LoaderJson::Load(const std::string& path) {
             ds.X.push_back(std::move(r));
         }
     }
+    StoreCachedDataset(Name(), path, ds);
     return ds;
 #else
     (void)path;

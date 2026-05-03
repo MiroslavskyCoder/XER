@@ -31,6 +31,9 @@ endif()
 if(ENGINE_HAS_ICU)
     target_include_directories(XER PRIVATE ${ICU_INCLUDE_DIRS})
 endif()
+if(ENGINE_HAS_HDF5)
+    target_include_directories(XER PRIVATE ${HDF5_INCLUDE_DIRS})
+endif()
 
 target_compile_definitions(XER PRIVATE
     ${LLVM_DEFINITIONS}
@@ -38,6 +41,7 @@ target_compile_definitions(XER PRIVATE
     ENGINE_HAS_BROTLI=${ENGINE_HAS_BROTLI}
     ENGINE_HAS_FFI=${ENGINE_HAS_FFI}
     ENGINE_HAS_FFTW3F=${ENGINE_HAS_FFTW3F}
+    ENGINE_HAS_HDF5=${ENGINE_HAS_HDF5}
     ENGINE_HAS_ICU=${ENGINE_HAS_ICU}
     ENGINE_HAS_SQLITE3=${ENGINE_HAS_SQLITE3}
     ENGINE_HAS_QT6=${ENGINE_HAS_QT6})
@@ -79,6 +83,10 @@ endif()
 
 if(ENGINE_HAS_FFTW3F)
     target_link_libraries(XER PRIVATE ${FFTW3F_LIBRARY})
+endif()
+
+if(ENGINE_HAS_HDF5)
+    target_link_libraries(XER PRIVATE ${HDF5_LIBRARIES})
 endif()
 
 if(ENGINE_HAS_ICU)

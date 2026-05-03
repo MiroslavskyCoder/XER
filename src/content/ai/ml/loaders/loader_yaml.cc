@@ -1,6 +1,11 @@
 #include "loader_yaml.h"
+
 #include <sstream>
 #include <stdexcept>
+
+#include <absl/strings/str_format.h>
+#include <absl/strings/string_view.h>
+#include <range/v3/view.hpp>
 
 // libxml2 requires -I/usr/include/libxml2 (set by CMake via pkg-config libxml-2.0)
 #if __has_include(<libxml/parser.h>)
@@ -32,6 +37,11 @@ static std::vector<float> ParseNodeFloats(xmlNodePtr node) {
 
 Dataset LoaderYaml::Load(const std::string& path) {
 #ifdef LOADER_YAML_AVAILABLE
+    Dataset cached;
+    if (TryLoadCachedDataset(Name(), path, &cached)) {
+        return cached;
+    }
+
     xmlDoc* doc = xmlReadFile(path.c_str(), nullptr,
                               XML_PARSE_NOERROR | XML_PARSE_NOWARNING);
     if (!doc)
@@ -56,6 +66,7 @@ Dataset LoaderYaml::Load(const std::string& path) {
 
     xmlFreeDoc(doc);
     xmlCleanupParser();
+    StoreCachedDataset(Name(), path, ds);
     return ds;
 #else
     (void)path;

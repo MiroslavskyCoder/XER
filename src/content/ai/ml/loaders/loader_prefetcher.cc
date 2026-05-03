@@ -1,12 +1,28 @@
 #include "loader_prefetcher.h"
 
+#include <memory>
+#include <future>
+#include <stdexcept>
+
+#include <absl/strings/string_view.h>
+#include <range/v3/view.hpp>
+
+#include "async_io/io_thread_pool.h"
+
 namespace Engine::ML::Loaders {
 
 void LoaderPrefetcher::Prefetch(const std::string& path) {
-    LoaderBase* p = inner_.get();
-    future_ = std::async(std::launch::async, [p, path]() {
-        return p->Load(path);
-    });
+    auto prom = std::make_shared<std::promise<Dataset>>();
+    future_ = prom->get_future();
+    LoaderBase* loader = inner_.get();
+    IO::AsyncIO::IOThreadPool::GetSharedInstance().Enqueue(
+        [loader, path, prom]() mutable {
+            try {
+                prom->set_value(loader->Load(path));
+            } catch (...) {
+                prom->set_exception(std::current_exception());
+            }
+        });
 }
 
 Dataset LoaderPrefetcher::Collect() {

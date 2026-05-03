@@ -2,6 +2,10 @@
 #include "audio/file_io_codecs/codec_wav_float.h"
 #include "audio/file_io_codecs/codec_ffmpeg_decode_helper.h"
 
+#include <absl/strings/str_format.h>
+#include <absl/strings/string_view.h>
+#include <range/v3/view.hpp>
+
 #include <fstream>
 #include <filesystem>
 #include <algorithm>
@@ -10,6 +14,11 @@
 namespace Engine::ML::Loaders {
 
 Dataset LoaderAudio::Load(const std::string& path) {
+    Dataset cached;
+    if (TryLoadCachedDataset(Name(), path, &cached)) {
+        return cached;
+    }
+
     std::ifstream f(path, std::ios::binary);
     if (!f.is_open())
         throw std::runtime_error("AudioLoader: cannot open " + path);
@@ -34,7 +43,9 @@ Dataset LoaderAudio::Load(const std::string& path) {
             throw std::runtime_error("AudioLoader: FFmpeg decode failed (" + ext + "): " + err);
     }
 
-    return Dataset{{{std::move(samples)}}, {}};
+    Dataset ds{{{std::move(samples)}}, {}};
+    StoreCachedDataset(Name(), path, ds);
+    return ds;
 }
 
 }  // namespace Engine::ML::Loaders
