@@ -14,7 +14,8 @@
                 "/usr/include/x86_64-linux-gnu/qt6/QtPdf",
                 "/usr/include/x86_64-linux-gnu/qt6/QtWebEngineWidgets",
                 "/usr/include/jsoncpp",
-                "/usr/include/eigen3"
+                "/usr/include/eigen3",
+                "/usr/include/hdf5/openmpi"
             ],
             "defines": [
                 "ENGINE_HAS_QT6=1",
