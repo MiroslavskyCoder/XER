@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../../../models_builder/model_core/model.h"
+#include "../../models_builder/model_core/model.h"
 #include <string>
 #include <memory>
 

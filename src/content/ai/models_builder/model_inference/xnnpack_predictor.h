@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../../model_core/model.h"
-#include "../../model_core/layer.h"
+#include "../model_core/model.h"
+#include "../model_core/layer.h"
 #include <memory>
 #include <vector>
 
@@ -59,10 +59,13 @@ private:
     xnn_subgraph_t subgraph_;
     xnn_runtime_t runtime_;
     float latency_ms_;
+    size_t num_threads_;
+    bool xnnpack_ready_;
     
     // Helper methods
     bool BuildSubgraph();
     bool CreateRuntime();
+    bool ValidateInput(const std::vector<float>& input) const;
 };
 
 /// @brief Quantized model inference (int8)

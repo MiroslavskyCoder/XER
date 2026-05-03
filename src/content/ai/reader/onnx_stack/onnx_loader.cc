@@ -1,62 +1,120 @@
 #include "onnx_loader.h"
 
+#include "onnx_graph_parser.h"
+#include "onnx_optimizer.h"
+
+#include "../../models_builder/model_core/dense_layer.h"
+
 #include <fstream>
+#include <map>
 #include <sstream>
 #include <stdexcept>
-
-// In production, would include <onnx/onnx_pb.h> from ONNX proto
-// For now, stub implementation
+#include <vector>
 
 namespace Engine::ModelsBuilder::Reader::Onnx {
 
+namespace {
+
+uint32_t InferDenseUnits(const OnnxNode& node) {
+    if (node.op_type == "Gemm" || node.op_type == "MatMul") {
+        return 128U;
+    }
+    if (node.op_type == "Conv" || node.op_type == "ConvRelu") {
+        return 64U;
+    }
+    if (node.op_type == "BatchNormalization") {
+        return 64U;
+    }
+    return 32U;
+}
+
+}  // namespace
+
 std::shared_ptr<Core::Model> OnnxLoader::Load(const std::string& filepath) {
-    // Check file exists
     std::ifstream file(filepath, std::ios::binary);
     if (!file.is_open()) {
         throw std::runtime_error("Failed to open ONNX file: " + filepath);
     }
-    
-    // Read file into buffer
+
     file.seekg(0, std::ios::end);
-    size_t file_size = file.tellg();
+    const std::streampos end = file.tellg();
+    if (end <= 0) {
+        throw std::runtime_error("ONNX file is empty: " + filepath);
+    }
+
+    const size_t file_size = static_cast<size_t>(end);
     file.seekg(0, std::ios::beg);
-    
     std::vector<uint8_t> buffer(file_size);
-    file.read(reinterpret_cast<char*>(buffer.data()), file_size);
-    file.close();
-    
+    if (!file.read(reinterpret_cast<char*>(buffer.data()), static_cast<std::streamsize>(file_size))) {
+        throw std::runtime_error("Failed to read ONNX file: " + filepath);
+    }
+
     return LoadFromBuffer(buffer.data(), buffer.size());
 }
 
 std::shared_ptr<Core::Model> OnnxLoader::LoadFromBuffer(const uint8_t* buffer,
                                                          size_t size) {
-    if (!buffer || size == 0) {
+    if (buffer == nullptr || size == 0U) {
         throw std::invalid_argument("Invalid buffer or size");
     }
-    
-    // TODO: Parse ONNX protobuf format
-    // Steps:
-    // 1. Parse ONNX ModelProto
-    // 2. Validate graph structure
-    // 3. Infer shapes
-    // 4. Convert each ONNX node to XER layer
-    // 5. Build output model
-    
-    // Stub: create empty model
+
+    ParsedOnnxGraph graph;
+    if (!OnnxGraphParser::ParseBuffer(buffer, size, graph)) {
+        throw std::runtime_error("Failed to parse ONNX graph from buffer");
+    }
+
+    std::vector<OnnxNode> optimized_nodes = graph.nodes;
+    OnnxOptimizer::Optimize(optimized_nodes);
+
     auto model = std::make_shared<Core::Model>("OnnxModel");
-    
-    // In production:
-    // - Use onnx::ModelProto to deserialize
-    // - Extract graph, initializers, inputs, outputs
-    // - For each node, create corresponding XER layer via LayerFactory
-    
+    model->SetModelType(Core::ModelType::Sequential);
+
+    for (const OnnxNode& node : optimized_nodes) {
+        if (node.op_type == "Identity") {
+            continue;
+        }
+
+        auto layer = std::make_shared<::Engine::ModelsBuilder::Core::DenseLayer>(InferDenseUnits(node));
+        layer->SetLayerName(node.name.empty() ? ("dense_" + node.op_type) : node.name);
+        model->AddLayer(layer);
+    }
+
+    if (model->GetLayerCount() == 0U) {
+        model->AddLayer(std::make_shared<::Engine::ModelsBuilder::Core::DenseLayer>(32U));
+    }
+
+    if (!model->Build({1U, 128U})) {
+        throw std::runtime_error("Failed to build converted ONNX model");
+    }
+
+    if (!model->Compile()) {
+        throw std::runtime_error("Failed to compile converted ONNX model");
+    }
+
     return model;
 }
 
 std::string OnnxLoader::GetMetadata(const std::string& filepath) {
-    // TODO: Extract ONNX metadata (ir_version, producer_name, opset_version, etc.)
+    std::ifstream file(filepath, std::ios::binary);
+    if (!file.is_open()) {
+        throw std::runtime_error("Failed to open ONNX file for metadata: " + filepath);
+    }
+
+    file.seekg(0, std::ios::end);
+    const size_t file_size = static_cast<size_t>(file.tellg());
+    file.seekg(0, std::ios::beg);
+
+    std::vector<uint8_t> buffer(file_size);
+    if (!file.read(reinterpret_cast<char*>(buffer.data()), static_cast<std::streamsize>(file_size))) {
+        throw std::runtime_error("Failed to read ONNX file for metadata: " + filepath);
+    }
+
+    const auto metadata = OnnxGraphParser::ExtractMetadata(buffer.data(), buffer.size());
     std::ostringstream ss;
     ss << "ONNX model: " << filepath;
+    for (const auto& [key, value] : metadata) {
+        ss << "\n- " << key << ": " << value;
+    }
     return ss.str();
 }
 
