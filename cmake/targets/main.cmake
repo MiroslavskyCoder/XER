@@ -52,12 +52,14 @@ target_link_libraries(XER PRIVATE
     XERJavaScript
     ${NODE_LIBRARY}
     CURL::libcurl
+    OpenSSL::SSL
     OpenSSL::Crypto
     ZLIB::ZLIB
     absl::strings
     absl::str_format
     absl::hash
     Eigen3::Eigen
+    pthreadpool
     ${LLVM_ALL_COMPONENT_LIBS}
     ${CLANG_AVAILABLE_LIBS})
 

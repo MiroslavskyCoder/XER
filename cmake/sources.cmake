@@ -61,6 +61,10 @@ file(GLOB_RECURSE ENGINE_WRAPPER_ANGLE_H CONFIGURE_DEPENDS
 set(ENGINE_QT6_PROJECT_CC ${ENGINE_QT6_SUPPORT_CC} ${ENGINE_QT6_MODULE_CC})
 set(ENGINE_QT6_PROJECT_H  ${ENGINE_QT6_SUPPORT_H}  ${ENGINE_QT6_MODULE_H})
 
+# CUDA sources
+file(GLOB_RECURSE ENGINE_SRC_CU CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cu")
+
 # Core sources — strip sub-trees that belong to separate static libs
 list(FILTER ENGINE_SRC_CC EXCLUDE REGEX "/src/wrapper/qt6/")
 list(FILTER ENGINE_SRC_CC EXCLUDE REGEX "/src/modules/qt6/")
@@ -70,7 +74,7 @@ list(FILTER ENGINE_SRC_CC EXCLUDE REGEX "/src/wrapper/")
 list(FILTER ENGINE_SRC_CC EXCLUDE REGEX "/src/doctor/")
 list(FILTER ENGINE_SRC_CC EXCLUDE REGEX "/src/content/ai/ml/data_augmentation/")
 list(FILTER ENGINE_SRC_CC EXCLUDE REGEX "/src/v8/v8_runtime_checker\\.cc$")
-
+list(FILTER ENGINE_SRC_CU EXCLUDE REGEX "/src/wrapper/")
 list(APPEND ENGINE_SRC_CC "${CMAKE_CURRENT_SOURCE_DIR}/src/xer/encode/sxer84321.c")
 
 list(FILTER ENGINE_SRC_H EXCLUDE REGEX "/src/wrapper/qt6/")
@@ -117,5 +121,5 @@ set(ENGINE_DOCTOR_RUNTIME_H
     "${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/analysis/analysis_pipeline.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/analysis/analysis_engine.h")
 
-set(ENGINE_PROJECT_CC ${ENGINE_SRC_CC} ${ENGINE_DOCTOR_RUNTIME_CC})
+set(ENGINE_PROJECT_CC ${ENGINE_SRC_CC} ${ENGINE_DOCTOR_RUNTIME_CC} ${ENGINE_SRC_CU})
 set(ENGINE_PROJECT_H  ${ENGINE_SRC_H} ${ENGINE_DOCTOR_RUNTIME_H})
