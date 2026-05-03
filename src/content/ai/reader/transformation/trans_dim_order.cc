@@ -1,4 +1,5 @@
 #include "trans_dim_order.h"
+#include "../../models_builder/layer_factory/layer_linear.h"
 
 namespace Engine::ModelsBuilder::Reader::Transform {
 
@@ -23,7 +24,7 @@ std::shared_ptr<Core::Layer> TransDimOrder::MakeTransposeLayer(
     name = "Transpose_NCHW_to_NHWC";
   else
     name = "Transpose_NHWC_to_NCHW";
-  return std::make_shared<Core::Layer>(name);
+  return LayerFactory::MakeLinear(name, {});
 }
 
 }  // namespace Engine::ModelsBuilder::Reader::Transform

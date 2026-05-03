@@ -1,4 +1,5 @@
 #include "trans_type_cast.h"
+#include "../../models_builder/layer_factory/layer_linear.h"
 
 namespace Engine::ModelsBuilder::Reader::Transform {
 
@@ -12,10 +13,10 @@ std::shared_ptr<Core::Model> TransTypeCast::Apply(
       (target_dtype == DType::Float16) ? "Cast_Float16" : "Cast_Int8";
 
   auto new_model = std::make_shared<Core::Model>(model->GetModelName());
-  new_model->AddLayer(std::make_shared<Core::Layer>(cast_name + "_in"));
+  new_model->AddLayer(LayerFactory::MakeLinear(cast_name + "_in", {}));
   for (size_t i = 0; i < model->GetLayerCount(); ++i)
     new_model->AddLayer(model->GetLayer(i));
-  new_model->AddLayer(std::make_shared<Core::Layer>("Cast_Float32_out"));
+  new_model->AddLayer(LayerFactory::MakeLinear("Cast_Float32_out", {}));
   return new_model;
 }
 

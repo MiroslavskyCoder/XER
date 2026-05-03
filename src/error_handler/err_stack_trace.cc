@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <memory>
 #include <sstream>
+#include <vector>
 
 namespace Engine::ErrorHandler {
 
