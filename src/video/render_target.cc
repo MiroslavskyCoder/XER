@@ -1,6 +1,17 @@
-/**
- * @author LXXV 
- * This file is a placeholder for render_target.cc in the video module.
- * @module video
- * @description This module provides video processing capabilities, including frame management, rendering, compositing, and effects. The listed files represent the structure of the module, but their implementations are currently placeholders.
- */
+#include "render_target.h"
+
+namespace video {
+
+RenderTarget::RenderTarget(int width, int height, PixelFormat fmt) {
+    Resize(width, height, fmt);
+}
+
+void RenderTarget::Resize(int width, int height, PixelFormat fmt) {
+    width_  = width;
+    height_ = height;
+    fmt_    = fmt;
+    frame_  = std::make_unique<Frame>();
+    frame_->Allocate(width, height, fmt);
+}
+
+}  // namespace video

@@ -1,6 +1,17 @@
-/**
- * @author LXXV 
- * This file is a placeholder for frame_importer.cc in the video module.
- * @module video
- * @description This module provides video processing capabilities, including frame management, rendering, compositing, and effects. The listed files represent the structure of the module, but their implementations are currently placeholders.
- */
+#include "frame_importer.h"
+
+namespace video {
+
+FrameImporter::FrameImporter(FrameCache* cache) : cache_(cache) {}
+
+std::shared_ptr<Frame> FrameImporter::FromCache(const std::string& key) {
+    if (!cache_) return nullptr;
+    return cache_->Get(key);
+}
+
+std::shared_ptr<Frame> FrameImporter::FromFile(const std::string& /*path*/) {
+    // TODO: delegate to image/video loader pipeline
+    return nullptr;
+}
+
+}  // namespace video

@@ -1,6 +1,14 @@
-/**
- * @author LXXV 
- * This file is a placeholder for mask_point.h in the video module.
- * @module video
- * @description This module provides video processing capabilities, including frame management, rendering, compositing, and effects. The listed files represent the structure of the module, but their implementations are currently placeholders.
- */
+#pragma once
+
+namespace video {
+
+/// A single 2D point defining a mask vertex.
+struct MaskPoint {
+    float x{0.0f};
+    float y{0.0f};
+
+    MaskPoint() = default;
+    MaskPoint(float x, float y) : x(x), y(y) {}
+};
+
+}  // namespace video

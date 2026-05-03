@@ -1,6 +1,21 @@
-/**
- * @author LXXV 
- * This file is a placeholder for video_configuration.h in the video module.
- * @module video
- * @description This module provides video processing capabilities, including frame management, rendering, compositing, and effects. The listed files represent the structure of the module, but their implementations are currently placeholders.
- */
+#pragma once
+#include "video_constants.h"
+#include <string>
+
+namespace video {
+
+struct VideoConfiguration {
+    RendererType renderer{RendererType::Vulkan};
+    int  target_fps{kDefaultFps};
+    int  max_cache_frames{kMaxFrameCacheSize};
+    bool hw_decode{true};
+    bool hw_encode{true};
+    std::string cache_dir{"/tmp/xer_video_cache"};
+
+    static VideoConfiguration& Default() {
+        static VideoConfiguration cfg;
+        return cfg;
+    }
+};
+
+}  // namespace video

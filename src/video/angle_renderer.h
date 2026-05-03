@@ -1,6 +1,22 @@
-/**
- * @author LXXV 
- * This file is a placeholder for angle_renderer.h in the video module.
- * @module video
- * @description This module provides video processing capabilities, including frame management, rendering, compositing, and effects. The listed files represent the structure of the module, but their implementations are currently placeholders.
- */
+#pragma once
+#include "rendering_engine.h"
+
+namespace video {
+
+/// ANGLE (cross-platform OpenGL ES on Direct3D/Vulkan/Metal) rendering backend.
+class AngleRenderer : public RenderingEngine {
+public:
+    AngleRenderer() = default;
+    ~AngleRenderer() override;
+
+    bool Initialize(const std::string& device_hint = "") override;
+    void Shutdown() override;
+    bool IsReady() const override { return ready_; }
+    RendererType Type() const override { return RendererType::Angle; }
+    bool Render(const Frame& src, RenderTarget& target) override;
+
+private:
+    bool ready_{false};
+};
+
+}  // namespace video

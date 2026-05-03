@@ -1,6 +1,27 @@
-/**
- * @author LXXV 
- * This file is a placeholder for cuda_renderer.cc in the video module.
- * @module video
- * @description This module provides video processing capabilities, including frame management, rendering, compositing, and effects. The listed files represent the structure of the module, but their implementations are currently placeholders.
- */
+#include "cuda_renderer.h"
+#include <cstring>
+
+namespace video {
+
+CudaRenderer::~CudaRenderer() { Shutdown(); }
+
+bool CudaRenderer::Initialize(const std::string& /*device_hint*/) {
+    // TODO: cudaSetDevice, create CUDA stream
+    ready_ = true;
+    return true;
+}
+
+void CudaRenderer::Shutdown() { ready_ = false; }
+
+bool CudaRenderer::Render(const Frame& src, RenderTarget& target) {
+    if (!ready_ || !src.IsValid()) return false;
+    Frame* dst = target.GetFrame();
+    if (!dst || !dst->IsValid()) return false;
+    if (src.Width() == dst->Width() && src.Height() == dst->Height() &&
+        src.Format() == dst->Format()) {
+        std::memcpy(dst->Data(), src.Data(), src.Width() * src.Height() * 4);
+    }
+    return true;
+}
+
+}  // namespace video

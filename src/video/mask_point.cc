@@ -1,6 +1,5 @@
-/**
- * @author LXXV 
- * This file is a placeholder for mask_point.cc in the video module.
- * @module video
- * @description This module provides video processing capabilities, including frame management, rendering, compositing, and effects. The listed files represent the structure of the module, but their implementations are currently placeholders.
- */
+#include "mask_point.h"
+
+namespace video {
+// POD struct — no out-of-line definitions.
+}  // namespace video

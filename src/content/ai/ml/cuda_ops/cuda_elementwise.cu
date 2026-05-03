@@ -1,15 +1,26 @@
 #include "cuda_elementwise.h"
 
 #include <cuda_runtime.h>
+#include <math.h>
 
 namespace Engine::ML::CudaOps {
 
-// Forward declare CUDA kernels
-__global__ void kernel_add_float(const float* A, const float* B, float* C, size_t n);
-__global__ void kernel_relu_float(const float* A, float* B, size_t n);
-__global__ void kernel_sigmoid_float(const float* A, float* B, size_t n);
+__global__ void kernel_add_float(const float* A, const float* B, float* C, size_t n) {
+    size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < n) C[idx] = A[idx] + B[idx];
+}
 
-cudaError_t CudaElementwise::BinaryOp(CudaElementwise::BinaryOp op,
+__global__ void kernel_relu_float(const float* A, float* B, size_t n) {
+    size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < n) B[idx] = A[idx] > 0.0f ? A[idx] : 0.0f;
+}
+
+__global__ void kernel_sigmoid_float(const float* A, float* B, size_t n) {
+    size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < n) B[idx] = 1.0f / (1.0f + expf(-A[idx]));
+}
+
+cudaError_t CudaElementwise::ElementwiseBinary(CudaElementwise::BinaryOp op,
                                        const float* device_A,
                                        const float* device_B,
                                        float* device_C,
@@ -42,7 +53,7 @@ cudaError_t CudaElementwise::BinaryOp(CudaElementwise::BinaryOp op,
     return cudaGetLastError();
 }
 
-cudaError_t CudaElementwise::UnaryOp(CudaElementwise::UnaryOp op,
+cudaError_t CudaElementwise::ElementwiseUnary(CudaElementwise::UnaryOp op,
                                       const float* device_A,
                                       float* device_B,
                                       size_t elements,
@@ -70,7 +81,7 @@ cudaError_t CudaElementwise::UnaryOp(CudaElementwise::UnaryOp op,
     return cudaGetLastError();
 }
 
-cudaError_t CudaElementwise::BinaryOpWithScale(CudaElementwise::BinaryOp op,
+cudaError_t CudaElementwise::ElementwiseBinaryScaled(CudaElementwise::BinaryOp op,
                                                 float scale,
                                                 const float* device_A,
                                                 const float* device_B,
@@ -78,7 +89,7 @@ cudaError_t CudaElementwise::BinaryOpWithScale(CudaElementwise::BinaryOp op,
                                                 size_t elements,
                                                 cudaStream_t stream) {
     // First perform binary operation
-    cudaError_t err = BinaryOp(op, device_A, device_B, device_D, elements, stream);
+    cudaError_t err = ElementwiseBinary(op, device_A, device_B, device_D, elements, stream);
     if (err != cudaSuccess) {
         return err;
     }

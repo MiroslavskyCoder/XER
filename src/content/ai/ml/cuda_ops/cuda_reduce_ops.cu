@@ -4,9 +4,31 @@
 
 namespace Engine::ML::CudaOps {
 
-// Forward declare CUDA reduction kernels
-__global__ void kernel_reduce_sum(const float* input, float* output, size_t n);
-__global__ void kernel_reduce_max(const float* input, float* output, size_t n);
+__global__ void kernel_reduce_sum(const float* input, float* output, size_t n) {
+    extern __shared__ float sdata[];
+    size_t tid = threadIdx.x;
+    size_t idx = blockIdx.x * blockDim.x + tid;
+    sdata[tid] = (idx < n) ? input[idx] : 0.0f;
+    __syncthreads();
+    for (unsigned int s = blockDim.x / 2; s > 0; s >>= 1) {
+        if (tid < s) sdata[tid] += sdata[tid + s];
+        __syncthreads();
+    }
+    if (tid == 0) atomicAdd(output, sdata[0]);
+}
+
+__global__ void kernel_reduce_max(const float* input, float* output, size_t n) {
+    extern __shared__ float sdata[];
+    size_t tid = threadIdx.x;
+    size_t idx = blockIdx.x * blockDim.x + tid;
+    sdata[tid] = (idx < n) ? input[idx] : -3.402823466e+38f;
+    __syncthreads();
+    for (unsigned int s = blockDim.x / 2; s > 0; s >>= 1) {
+        if (tid < s && sdata[tid + s] > sdata[tid]) sdata[tid] = sdata[tid + s];
+        __syncthreads();
+    }
+    if (tid == 0) atomicMax((int*)output, __float_as_int(sdata[0]));
+}
 
 cudaError_t CudaReduceOps::ReduceToScalar(ReduceOp op,
                                            const float* device_input,

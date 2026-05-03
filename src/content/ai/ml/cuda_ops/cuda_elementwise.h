@@ -44,7 +44,7 @@ public:
     /// @param elements Number of elements
     /// @param stream CUDA stream for execution
     /// @return cudaError_t - CUDA error code
-    static cudaError_t BinaryOp(CudaElementwise::BinaryOp op,
+    static cudaError_t ElementwiseBinary(CudaElementwise::BinaryOp op,
                                  const float* device_A,
                                  const float* device_B,
                                  float* device_C,
@@ -58,7 +58,7 @@ public:
     /// @param elements Number of elements
     /// @param stream CUDA stream for execution
     /// @return cudaError_t - CUDA error code
-    static cudaError_t UnaryOp(CudaElementwise::UnaryOp op,
+    static cudaError_t ElementwiseUnary(CudaElementwise::UnaryOp op,
                                 const float* device_A,
                                 float* device_B,
                                 size_t elements,
@@ -73,7 +73,7 @@ public:
     /// @param elements Number of elements
     /// @param stream CUDA stream for execution
     /// @return cudaError_t - CUDA error code
-    static cudaError_t BinaryOpWithScale(CudaElementwise::BinaryOp op,
+    static cudaError_t ElementwiseBinaryScaled(CudaElementwise::BinaryOp op,
                                           float scale,
                                           const float* device_A,
                                           const float* device_B,

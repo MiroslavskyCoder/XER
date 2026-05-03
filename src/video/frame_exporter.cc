@@ -1,6 +1,18 @@
-/**
- * @author LXXV 
- * This file is a placeholder for frame_exporter.cc in the video module.
- * @module video
- * @description This module provides video processing capabilities, including frame management, rendering, compositing, and effects. The listed files represent the structure of the module, but their implementations are currently placeholders.
- */
+#include "frame_exporter.h"
+
+namespace video {
+
+FrameExporter::FrameExporter(FrameCache* cache) : cache_(cache) {}
+
+bool FrameExporter::ToCache(const std::string& key, std::shared_ptr<Frame> frame) {
+    if (!cache_ || !frame) return false;
+    cache_->Store(key, std::move(frame));
+    return true;
+}
+
+bool FrameExporter::ToFile(const std::string& /*path*/, const Frame& /*frame*/) {
+    // TODO: delegate to image/video encoder pipeline
+    return false;
+}
+
+}  // namespace video

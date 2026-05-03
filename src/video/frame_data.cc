@@ -1,6 +1,7 @@
-/**
- * @author LXXV 
- * This file is a placeholder for frame_data.cc in the video module.
- * @module video
- * @description This module provides video processing capabilities, including frame management, rendering, compositing, and effects. The listed files represent the structure of the module, but their implementations are currently placeholders.
- */
+#include "frame_data.h"
+
+// FrameData is a plain struct — no out-of-line definitions required.
+// Validation helpers would go here if needed.
+
+namespace video {
+}  // namespace video
