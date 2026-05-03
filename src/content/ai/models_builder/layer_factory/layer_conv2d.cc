@@ -1,0 +1,13 @@
+#include "layer_conv2d.h"
+
+namespace Engine::ModelsBuilder::LayerFactory {
+
+LayerConv2D::LayerConv2D(const std::string& name, Config config)
+    : Core::Layer(name), config_(config) {}
+
+std::shared_ptr<Core::Layer> MakeConv2D(const std::string& name,
+                                         LayerConv2D::Config config) {
+  return std::make_shared<LayerConv2D>(name, config);
+}
+
+}  // namespace Engine::ModelsBuilder::LayerFactory
