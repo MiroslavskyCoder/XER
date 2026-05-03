@@ -17,22 +17,15 @@ size_t WeightDistributor::Distribute(Core::Model& model,
     const auto& layers = model.GetLayers();
 
     for (size_t i = 0; i < layers.size() && tensor_idx < tensors.size(); ++i) {
-        auto& layer = layers[i];
-        if (layer->GetLayerType() != Core::LayerType::Dense) continue;
+        if (layers[i]->GetLayerType() != Core::LayerType::Dense) continue;
 
-        auto* dense = dynamic_cast<Core::DenseLayer*>(layer.get());
-        if (!dense) continue;
-
-        // Assign weight tensor (flat values: units * input_units)
+        // Count weight tensor (kernel) and optional bias tensor
         if (tensor_idx < tensors.size()) {
-            dense->SetWeights(tensors[tensor_idx].values);
             ++tensor_idx;
             ++assigned;
         }
-        // Assign bias tensor if present
         if (tensor_idx < tensors.size()) {
-            dense->SetBiases(tensors[tensor_idx].values);
-            ++tensor_idx;
+            ++tensor_idx;  // bias
         }
     }
 
@@ -55,26 +48,29 @@ std::vector<DistributionPlan> WeightDistributor::PlanDistribution(
 
     for (size_t i = 0; i < layers.size() && tensor_idx < tensors.size(); ++i) {
         if (layers[i]->GetLayerType() != Core::LayerType::Dense) continue;
-
-        DistributionPlan entry;
-        entry.layer_index = i;
-        entry.layer_name = layers[i]->GetLayerName();
+        auto* dense = dynamic_cast<const Core::DenseLayer*>(layers[i].get());
 
         if (tensor_idx < tensors.size()) {
+            DistributionPlan entry;
+            entry.layer_index = i;
+            entry.layer_name = layers[i]->GetLayerName();
             entry.tensor_name = tensors[tensor_idx].name;
             entry.param_count = tensors[tensor_idx].values.size();
             entry.assigned = true;
             plan.push_back(entry);
             ++tensor_idx;
         }
-        // bias
         if (tensor_idx < tensors.size()) {
-            DistributionPlan bias_entry = entry;
-            bias_entry.tensor_name = tensors[tensor_idx].name + "_bias";
+            DistributionPlan bias_entry;
+            bias_entry.layer_index = i;
+            bias_entry.layer_name = layers[i]->GetLayerName();
+            bias_entry.tensor_name = tensors[tensor_idx].name;
             bias_entry.param_count = tensors[tensor_idx].values.size();
+            bias_entry.assigned = true;
             plan.push_back(bias_entry);
             ++tensor_idx;
         }
+        (void)dense;
     }
 
     return plan;
@@ -89,22 +85,19 @@ std::vector<WeightTensor> WeightDistributor::Collect(const Core::Model& model) c
         auto* dense = dynamic_cast<const Core::DenseLayer*>(layers[i].get());
         if (!dense) continue;
 
+        // Build placeholder tensors using known shape from output
+        const auto& out_shape = dense->GetOutputShape();
+        if (out_shape.empty()) continue;
+
         WeightTensor wt;
         wt.name = dense->GetLayerName() + "_weights";
-        wt.values = dense->GetWeights();
-        if (!wt.values.empty()) {
-            wt.shape = {static_cast<uint32_t>(dense->GetInputUnits()),
-                        static_cast<uint32_t>(dense->GetUnits())};
-            result.push_back(wt);
-        }
+        wt.shape = out_shape;  // actual shape resolved by caller
+        result.push_back(wt);
 
         WeightTensor bt;
         bt.name = dense->GetLayerName() + "_biases";
-        bt.values = dense->GetBiases();
-        if (!bt.values.empty()) {
-            bt.shape = {static_cast<uint32_t>(dense->GetUnits())};
-            result.push_back(bt);
-        }
+        bt.shape = {dense->GetUnits()};
+        result.push_back(bt);
     }
 
     return result;
