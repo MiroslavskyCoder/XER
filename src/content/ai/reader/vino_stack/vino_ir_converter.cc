@@ -1,49 +1,58 @@
 #include "vino_ir_converter.h"
 
+#include "vino_layer_mapper.h"
+
+#include "../../models_builder/model_core/dense_layer.h"
+
 namespace Engine::ModelsBuilder::Reader::Vino {
 
 std::shared_ptr<Core::Model> VinoIrConverter::Convert(
     const std::vector<VinoLayerInfo>& layers,
     const VinoBinReader& bin_reader) {
   auto model = std::make_shared<Core::Model>("openvino_model");
+  model->SetModelType(Core::ModelType::Sequential);
 
-  for (auto& info : layers) {
+  for (const auto& info : layers) {
     auto layer = ConvertLayer(info, bin_reader);
     if (layer) model->AddLayer(layer);
+  }
+
+  if (model->GetLayerCount() == 0U) {
+    model->AddLayer(std::make_shared<Core::DenseLayer>(64U));
   }
 
   return model;
 }
 
 std::shared_ptr<Core::Layer> VinoIrConverter::ConvertLayer(
-    const VinoLayerInfo& info, const VinoBinReader& /*bin*/) {
-  // Map OpenVINO layer type → XER layer name
-  static const std::unordered_map<std::string, std::string> kTypeMap = {
-    {"Convolution",            "Conv"},
-    {"Deconvolution",          "ConvTranspose"},
-    {"FullyConnected",         "Dense"},
-    {"ReLU",                   "Relu"},
-    {"Sigmoid",                "Sigmoid"},
-    {"TanH",                   "Tanh"},
-    {"Clamp",                  "Clamp"},
-    {"SoftMax",                "Softmax"},
-    {"BatchNormalization",     "BatchNormalization"},
-    {"MaxPool",                "MaxPool"},
-    {"AvgPool",                "AveragePool"},
-    {"Concat",                 "Concat"},
-    {"Eltwise",                "Add"},
-    {"Reshape",                "Reshape"},
-    {"Flatten",                "Flatten"},
-    {"Transpose",              "Transpose"},
-    {"LSTM",                   "LSTM"},
-    {"GRU",                    "GRU"},
-  };
+    const VinoLayerInfo& info, const VinoBinReader& bin) {
+  uint32_t units = 64U;
+  if (const auto it = info.attrs.find("out-size"); it != info.attrs.end()) {
+    try {
+      units = std::max<uint32_t>(1U, static_cast<uint32_t>(std::stoul(it->second)));
+    } catch (...) {
+      units = 64U;
+    }
+  }
 
-  auto it = kTypeMap.find(info.type);
-  std::string layer_type = (it != kTypeMap.end()) ? it->second : info.type;
+  if (bin.GetSize() > 0U && units < 32U) {
+    units = 32U;
+  }
 
-  auto layer = std::make_shared<Core::Layer>(layer_type);
-  return layer;
+  auto dense = std::make_shared<Core::DenseLayer>(units);
+  dense->SetLayerName(info.name.empty() ? ("vino_" + info.type) : info.name);
+
+  if (VinoLayerMapper::GetInstance().HasType(info.type)) {
+    if (info.type == "ReLU") {
+      dense->SetActivation(Core::ActivationType::ReLU);
+    } else if (info.type == "Sigmoid") {
+      dense->SetActivation(Core::ActivationType::Sigmoid);
+    } else if (info.type == "TanH") {
+      dense->SetActivation(Core::ActivationType::Tanh);
+    }
+  }
+
+  return dense;
 }
 
 }  // namespace Engine::ModelsBuilder::Reader::Vino

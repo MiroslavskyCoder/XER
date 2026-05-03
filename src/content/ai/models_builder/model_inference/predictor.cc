@@ -1,6 +1,8 @@
 ﻿#include "predictor.h"
 
 #include "../model_core/dense_layer.h"
+#include "xnnpack_predictor.h"
+#include "../utility/ai_runtime_features.h"
 #include "../utility/mb_error_handler.h"
 #include "../utility/mb_logger.h"
 
@@ -8,6 +10,13 @@
 #include <cmath>
 #include <numeric>
 #include <vector>
+
+#if __has_include(<Eigen/Dense>)
+#include <Eigen/Dense>
+#define XER_AI_HAS_EIGEN_HEADER 1
+#else
+#define XER_AI_HAS_EIGEN_HEADER 0
+#endif
 
 namespace Engine::ModelsBuilder::Inference {
 
@@ -30,10 +39,22 @@ float ApplyActivation(const float value, const Core::ActivationType activation) 
 }
 
 std::vector<float> RunDenseLayer(const Core::DenseLayer& layer, const std::vector<float>& input) {
-    const float mean = input.empty()
+    float mean = 0.0f;
+    float energy = 0.0f;
+
+#if XER_AI_HAS_EIGEN_HEADER
+    if (!input.empty()) {
+        Eigen::Map<const Eigen::VectorXf> input_vec(input.data(), static_cast<Eigen::Index>(input.size()));
+        mean = input_vec.mean();
+        energy = input_vec.dot(input_vec);
+    }
+#else
+    mean = input.empty()
         ? 0.0f
         : std::accumulate(input.begin(), input.end(), 0.0f) / static_cast<float>(input.size());
-    const float energy = std::inner_product(input.begin(), input.end(), input.begin(), 0.0f);
+    energy = std::inner_product(input.begin(), input.end(), input.begin(), 0.0f);
+#endif
+
     const float scale = input.empty() ? 0.0f : std::sqrt(energy / static_cast<float>(input.size()));
 
     std::vector<float> output(layer.GetUnits(), 0.0f);
@@ -65,6 +86,17 @@ std::vector<float> Predictor::Predict(const std::vector<float>& input) {
             "Predict called on a model that is not compiled.",
             "ModelsBuilder::Inference::Predictor::Predict");
         return {};
+    }
+
+    const Utility::ExternalLibraryAvailability libs = Utility::DetectExternalLibraries();
+    if (libs.has_xnnpack) {
+        try {
+            XnnPackPredictor xnnpack(*model_);
+            return xnnpack.Predict(input);
+        } catch (...) {
+            Utility::ModelBuilderLogger::GetInstance().Warning(
+                "XNNPACK path failed, using fallback predictor pipeline.");
+        }
     }
 
     std::vector<float> output = input;

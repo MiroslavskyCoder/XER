@@ -17,6 +17,8 @@ struct TrainingConfig {
     bool verbose;
     uint32_t early_stopping_patience = 0;
     float early_stopping_min_delta = 0.0f;
+    bool enable_backend_acceleration = true;
+    bool enable_parallel_batches = true;
 };
 
 using TrainingCallback = std::function<void(uint32_t, float)>;

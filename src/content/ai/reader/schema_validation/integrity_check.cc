@@ -1,5 +1,7 @@
 #include "integrity_check.h"
 
+#include <cstring>
+
 namespace Engine::ModelsBuilder::Reader::Schema {
 
 bool IntegrityCheck::CheckOnnxMagic(const uint8_t* data, size_t size) {

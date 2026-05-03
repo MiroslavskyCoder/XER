@@ -1,6 +1,8 @@
 #pragma once
 
 #include "../../models_builder/model_core/model.h"
+#include <cstddef>
+#include <cstdint>
 #include <string>
 #include <memory>
 

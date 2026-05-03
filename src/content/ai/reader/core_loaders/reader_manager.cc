@@ -3,6 +3,8 @@
 #include "reader_factory.h"
 #include "reader_registry.h"
 
+#include "../framework_adapters/tf_saved_model_parser.h"
+
 namespace Engine::ModelsBuilder::Reader {
 
 ReaderManager::ReaderManager() {
@@ -19,10 +21,19 @@ LoadResult ReaderManager::Load(const std::string& filepath) {
 
 std::unique_ptr<ReaderBase> ReaderManager::CreateReader(const std::string& filepath) const {
 	const std::string extension = ExtractExtension(filepath);
-	if (extension.empty()) {
-		return nullptr;
+	if (!extension.empty()) {
+		if (std::unique_ptr<ReaderBase> by_extension = ReaderRegistry::GetInstance().Create(extension)) {
+			return by_extension;
+		}
 	}
-	return ReaderRegistry::GetInstance().Create(extension);
+
+	// Extensionless fallback: directory-based formats such as TensorFlow SavedModel.
+	auto tf_saved = std::make_unique<Framework::TfSavedModelParser>();
+	if (tf_saved->CanLoad(filepath)) {
+		return tf_saved;
+	}
+
+	return nullptr;
 }
 
 std::string ReaderManager::ExtractExtension(const std::string& filepath) {

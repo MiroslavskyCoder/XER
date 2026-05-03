@@ -1,13 +1,17 @@
 #include "onnx_loader.h"
 
 #include "onnx_graph_parser.h"
+#include "onnx_attribute_reader.h"
+#include "onnx_node_map.h"
 #include "onnx_optimizer.h"
+#include "onnx_tensor_converter.h"
 
 #include "../../models_builder/model_core/dense_layer.h"
 
 #include "../utils/rm_cache_manager.h"
 #include "../utils/rm_logger.h"
 
+#include <algorithm>
 #include <fstream>
 #include <map>
 #include <sstream>
@@ -15,23 +19,6 @@
 #include <vector>
 
 namespace Engine::ModelsBuilder::Reader::Onnx {
-
-namespace {
-
-uint32_t InferDenseUnits(const OnnxNode& node) {
-    if (node.op_type == "Gemm" || node.op_type == "MatMul") {
-        return 128U;
-    }
-    if (node.op_type == "Conv" || node.op_type == "ConvRelu") {
-        return 64U;
-    }
-    if (node.op_type == "BatchNormalization") {
-        return 64U;
-    }
-    return 32U;
-}
-
-}  // namespace
 
 std::shared_ptr<Core::Model> OnnxLoader::Load(const std::string& filepath) {
     Utils::ReaderLogger::GetInstance().Info("Loading ONNX model from path: " + filepath);
@@ -75,6 +62,13 @@ std::shared_ptr<Core::Model> OnnxLoader::LoadFromBuffer(const uint8_t* buffer,
         throw std::runtime_error("Failed to parse ONNX graph from buffer");
     }
 
+    const auto attrs = OnnxAttributeReader::ReadCommonAttributes(buffer, size);
+    const std::vector<float> raw_head = OnnxTensorConverter::ToFloatVector(
+        buffer,
+        std::min<size_t>(size, sizeof(float) * 32U));
+    const std::vector<float> fp16_aware_head = OnnxTensorConverter::FloatToFp16Aware(raw_head);
+    (void)fp16_aware_head;
+
     Utils::ReaderLogger::GetInstance().Info(
             "Parsed ONNX graph, nodes=" + std::to_string(graph.nodes.size()));
 
@@ -84,13 +78,23 @@ std::shared_ptr<Core::Model> OnnxLoader::LoadFromBuffer(const uint8_t* buffer,
     auto model = std::make_shared<Core::Model>("OnnxModel");
     model->SetModelType(Core::ModelType::Sequential);
 
+    const OnnxNodeMap& node_map = OnnxNodeMap::GetInstance();
     for (const OnnxNode& node : optimized_nodes) {
         if (node.op_type == "Identity") {
             continue;
         }
 
-        auto layer = std::make_shared<::Engine::ModelsBuilder::Core::DenseLayer>(InferDenseUnits(node));
+        const NodeMapping mapping = node_map.Resolve(node);
+        uint32_t units = OnnxAttributeReader::ReadUnitsHint(attrs, mapping.default_units);
+        if (units == 0U) {
+            units = 32U;
+        }
+
+        auto layer = std::make_shared<::Engine::ModelsBuilder::Core::DenseLayer>(units);
         layer->SetLayerName(node.name.empty() ? ("dense_" + node.op_type) : node.name);
+        if (mapping.activation.has_value()) {
+            layer->SetActivation(*mapping.activation);
+        }
         model->AddLayer(layer);
     }
 
