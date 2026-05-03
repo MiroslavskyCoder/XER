@@ -209,6 +209,8 @@ auto model = onnx_loader->Load("model.onnx");
 - `models_builder/model_inference/predictor.cc` now uses optional Eigen, CUTLASS, CUDA/CuDNN hooks and XNNPACK backend delegation with safe fallback.
 - `models_builder/model_training/trainer.cc` now supports backend-aware acceleration (parallel batches, Eigen/OpenCV paths, runtime backend capability logging).
 - `models_builder/training_metrics/*` now provides working metric collectors for accuracy, loss tracking, gradient norms, bucketed timing (with RAII scoped timer), and resource usage snapshots.
+- `models_builder/hardware_binding/*` now provides CUDA kernel planning, CuDNN/OpenVINO runtime configuration adapters, ONNX-like model export, and TensorRT conversion descriptor generation with runtime capability fallback.
+- `models_builder/checkpointing/*` now provides metadata serialization, binary checkpoint snapshots, checkpoint manager (save/load/list/prune), and rollback restore flow on top of model serialization.
 - `ml/utils/*` now provides working utilities: logger, math ops (with optional Eigen path), profiler, random generator, config parser, type converter (with fp16 round-trip), and backend-aware version manager.
 - `ml/data_structures/*` now provides working containers and pipelines: thread-safe queues, buffer queue, memory pool, shared memory segment abstraction, dataset base/iterator/shuffle/sampler/window, batch builder, dataset map, and feature cache manager.
 
