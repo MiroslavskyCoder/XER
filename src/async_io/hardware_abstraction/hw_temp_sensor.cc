@@ -120,26 +120,73 @@ bool TemperatureSensor::NeedsAlert() const {
 }
 
 void TemperatureSensor::UpdateReadings() {
-#ifdef _WIN32
-    // Windows temperature reading would go here
-    TemperatureReading cpu_reading;
-    cpu_reading.sensor_name = "CPU";
-    cpu_reading.temperature_celsius = 45.0;  // Placeholder
-    cpu_reading.temperature_critical = 100.0;
-    cpu_reading.is_critical = false;
-    cpu_reading.timestamp_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+    readings_.clear();
+    const int64_t now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now().time_since_epoch()).count();
-    readings_.push_back(cpu_reading);
-#elif defined(__linux__)
-    // Linux reads from /sys/class/thermal/
-    TemperatureReading cpu_reading;
-    cpu_reading.sensor_name = "CPU";
-    cpu_reading.temperature_celsius = 45.0;  // Placeholder
-    cpu_reading.temperature_critical = 100.0;
-    cpu_reading.is_critical = false;
-    cpu_reading.timestamp_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::steady_clock::now().time_since_epoch()).count();
-    readings_.push_back(cpu_reading);
+
+#ifdef __linux__
+    // Enumerate /sys/class/thermal/thermal_zoneN
+    for (int zone = 0; zone < 32; ++zone) {
+        const std::string base = "/sys/class/thermal/thermal_zone" + std::to_string(zone);
+
+        std::ifstream type_f(base + "/type");
+        if (!type_f.is_open()) break;  // no more zones
+
+        std::string sensor_type;
+        std::getline(type_f, sensor_type);
+
+        std::ifstream temp_f(base + "/temp");
+        if (!temp_f.is_open()) continue;
+        int64_t raw_millideg = 0;
+        temp_f >> raw_millideg;
+        const double celsius = static_cast<double>(raw_millideg) / 1000.0;
+
+        // Try to read trip_point_X_temp for critical threshold
+        double critical = 100.0;
+        for (int tp = 0; tp < 8; ++tp) {
+            std::ifstream tt(base + "/trip_point_" + std::to_string(tp) + "_type");
+            if (!tt.is_open()) break;
+            std::string ttype;
+            std::getline(tt, ttype);
+            if (ttype == "critical") {
+                std::ifstream tv(base + "/trip_point_" + std::to_string(tp) + "_temp");
+                if (tv.is_open()) {
+                    int64_t crit_raw = 0;
+                    tv >> crit_raw;
+                    critical = static_cast<double>(crit_raw) / 1000.0;
+                }
+                break;
+            }
+        }
+
+        TemperatureReading r;
+        r.sensor_name = sensor_type;
+        r.temperature_celsius = celsius;
+        r.temperature_critical = critical;
+        r.is_critical = celsius >= critical;
+        r.timestamp_ms = now_ms;
+        readings_.push_back(r);
+    }
+
+    // Fallback: if no zones found, add a synthetic CPU entry
+    if (readings_.empty()) {
+        TemperatureReading r;
+        r.sensor_name = "CPU";
+        r.temperature_celsius = 0.0;
+        r.temperature_critical = 100.0;
+        r.is_critical = false;
+        r.timestamp_ms = now_ms;
+        readings_.push_back(r);
+    }
+#elif defined(_WIN32)
+    // Windows: add a placeholder entry; WMI-based reading is out of scope
+    TemperatureReading r;
+    r.sensor_name = "CPU";
+    r.temperature_celsius = 0.0;
+    r.temperature_critical = 100.0;
+    r.is_critical = false;
+    r.timestamp_ms = now_ms;
+    readings_.push_back(r);
 #endif
 }
 

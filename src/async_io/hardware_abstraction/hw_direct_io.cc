@@ -6,6 +6,8 @@
 #elif defined(__linux__)
     #include <fcntl.h>
     #include <unistd.h>
+    #include <fstream>
+    #include <sstream>
 #endif
 
 namespace AsyncIO::IO::Hardware {
@@ -154,8 +156,38 @@ bool DirectIOManager::VerifyBufferAlignment(const DirectIOBuffer& buffer) const 
 }
 
 double DirectIOManager::GetAverageIOLatencyMS() const {
-    // Placeholder for real implementation
+#ifdef __linux__
+    // /proc/diskstats columns: major minor name reads_completed reads_merged
+    //   sectors_read time_spent_reading_ms writes_completed writes_merged
+    //   sectors_written time_spent_writing_ms ...
+    std::ifstream f("/proc/diskstats");
+    if (!f.is_open()) return 0.0;
+
+    uint64_t total_ios = 0, total_time_ms = 0;
+    std::string line;
+    while (std::getline(f, line)) {
+        std::istringstream iss(line);
+        int major, minor;
+        std::string name;
+        uint64_t reads, reads_merged, sectors_r, time_r_ms;
+        uint64_t writes, writes_merged, sectors_w, time_w_ms;
+        if (!(iss >> major >> minor >> name
+                  >> reads >> reads_merged >> sectors_r >> time_r_ms
+                  >> writes >> writes_merged >> sectors_w >> time_w_ms)) continue;
+        // Skip loop/ram/zram devices
+        if (name.rfind("loop", 0) == 0 || name.rfind("ram", 0) == 0 ||
+            name.rfind("zram", 0) == 0) continue;
+        const uint64_t ios = reads + writes;
+        if (ios > 0) {
+            total_ios    += ios;
+            total_time_ms += (time_r_ms + time_w_ms);
+        }
+    }
+    if (total_ios == 0) return 0.0;
+    return static_cast<double>(total_time_ms) / static_cast<double>(total_ios);
+#else
     return 0.0;
+#endif
 }
 
 uint64_t DirectIOManager::GetTotalBytesTransferred() const {
