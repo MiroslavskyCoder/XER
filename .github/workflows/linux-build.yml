@@ -32,10 +32,10 @@ jobs:
             curl \
             git \
             ca-certificates \
-            clang \
-            lld \
-            llvm-dev \
-            libclang-dev \
+            clang-14 \
+            lld-14 \
+            llvm-14-dev \
+            libclang-14-dev \
             libabsl-dev \
             libxml2-dev \
             libcurl4-openssl-dev \
@@ -73,26 +73,21 @@ jobs:
         shell: bash
         run: |
           set -e
-          echo "CC=clang" >> "$GITHUB_ENV"
-          echo "CXX=clang++" >> "$GITHUB_ENV"
+          echo "CC=clang-14" >> "$GITHUB_ENV"
+          echo "CXX=clang++-14" >> "$GITHUB_ENV"
           echo "CUDAToolkit_ROOT=/usr/local/cuda" >> "$GITHUB_ENV"
           echo "CUDA_HOME=/usr/local/cuda" >> "$GITHUB_ENV"
           echo "CUDA_PATH=/usr/local/cuda" >> "$GITHUB_ENV"
 
-          LLVM_PREFIX=""
-          for d in /usr/lib/llvm-18 /usr/lib/llvm-17 /usr/lib/llvm-16 /usr/lib/llvm-15 /usr/lib/llvm-14; do
-            if [[ -d "$d" ]]; then
-              LLVM_PREFIX="$d"
-              break
-            fi
-          done
+          LLVM_PREFIX="/usr/lib/llvm-14"
+          test -d "$LLVM_PREFIX/lib/cmake/llvm"
+          test -d "$LLVM_PREFIX/lib/cmake/clang"
+          test -f "$LLVM_PREFIX/lib/libclangBasic.a"
 
-          if [[ -n "$LLVM_PREFIX" ]]; then
-            echo "LLVM_PREFIX=$LLVM_PREFIX" >> "$GITHUB_ENV"
-            echo "CMAKE_PREFIX_PATH=$LLVM_PREFIX;$CMAKE_PREFIX_PATH" >> "$GITHUB_ENV"
-            echo "LLVM_DIR=$LLVM_PREFIX/lib/cmake/llvm" >> "$GITHUB_ENV"
-            echo "Clang_DIR=$LLVM_PREFIX/lib/cmake/clang" >> "$GITHUB_ENV"
-          fi
+          echo "LLVM_PREFIX=$LLVM_PREFIX" >> "$GITHUB_ENV"
+          echo "CMAKE_PREFIX_PATH=$LLVM_PREFIX;$CMAKE_PREFIX_PATH" >> "$GITHUB_ENV"
+          echo "LLVM_DIR=$LLVM_PREFIX/lib/cmake/llvm" >> "$GITHUB_ENV"
+          echo "Clang_DIR=$LLVM_PREFIX/lib/cmake/clang" >> "$GITHUB_ENV"
 
       - name: Configure
         run: |
