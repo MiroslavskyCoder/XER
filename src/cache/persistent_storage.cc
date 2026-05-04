@@ -1,5 +1,6 @@
 #include "cache/persistent_storage.h"
 
+#include <chrono>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -13,6 +14,63 @@
 #include "cache/cache_utils.h"
 
 namespace Engine::Cache {
+
+// ---------------------------------------------------------------------------
+// TTL sidecar helpers
+// ---------------------------------------------------------------------------
+namespace {
+
+// Returns the path of the TTL sidecar file for a given cache file.
+// e.g. /cache/scope/key/name  →  /cache/scope/key/name.ttl
+std::filesystem::path TtlSidecarPath(const std::filesystem::path& data_path) {
+	return std::filesystem::path(data_path.string() + ".ttl");
+}
+
+// Returns current Unix time as int64_t seconds.
+std::int64_t NowUnixSeconds() {
+	return std::chrono::duration_cast<std::chrono::seconds>(
+		       std::chrono::system_clock::now().time_since_epoch())
+	    .count();
+}
+
+// Writes a TTL sidecar file containing the expiry Unix timestamp (text).
+// Does nothing if ttl_seconds == 0.
+void WriteTtlSidecar(const std::filesystem::path& data_path,
+		     std::uint32_t ttl_seconds) {
+	if (ttl_seconds == 0) {
+		return;
+	}
+	const std::int64_t expiry = NowUnixSeconds() + ttl_seconds;
+	const std::string expiry_str = std::to_string(expiry) + "\n";
+	const std::filesystem::path sidecar = TtlSidecarPath(data_path);
+	std::ofstream f(sidecar, std::ios::trunc);
+	if (f.is_open()) {
+		f << expiry_str;
+	}
+}
+
+// Returns true if the cache entry at data_path is expired.
+// If expired, removes the data file and its sidecar.
+// Returns false (not expired) when no sidecar exists.
+bool CheckAndEvictIfExpired(const std::filesystem::path& data_path) {
+	const std::filesystem::path sidecar = TtlSidecarPath(data_path);
+	std::ifstream f(sidecar);
+	if (!f.is_open()) {
+		return false;  // No TTL recorded — treat as never-expiring.
+	}
+	std::int64_t expiry = 0;
+	f >> expiry;
+	if (expiry <= 0 || NowUnixSeconds() < expiry) {
+		return false;  // Not yet expired.
+	}
+	// Expired — remove data file and sidecar (best-effort).
+	std::error_code ec;
+	std::filesystem::remove(data_path, ec);
+	std::filesystem::remove(sidecar, ec);
+	return true;
+}
+
+}  // namespace
 
 PersistentStorage::PersistentStorage(std::filesystem::path root)
 	: root_(std::move(root)) {}
@@ -47,8 +105,16 @@ std::filesystem::path PersistentStorage::ResolveRelative(const std::filesystem::
 }
 
 bool PersistentStorage::Exists(const CacheEntry& entry) const {
+	const std::filesystem::path path = PathFor(entry);
 	std::error_code error;
-	return std::filesystem::exists(PathFor(entry), error) && !error;
+	if (!std::filesystem::exists(path, error) || error) {
+		return false;
+	}
+	// Evict and report as missing if the entry has expired.
+	if (CheckAndEvictIfExpired(path)) {
+		return false;
+	}
+	return true;
 }
 
 bool PersistentStorage::Remove(const CacheEntry& entry, std::string* error_out) {
@@ -64,7 +130,13 @@ bool PersistentStorage::ReadBinary(const CacheEntry& entry,
 bool PersistentStorage::WriteBinary(const CacheEntry& entry,
 				  const std::vector<std::uint8_t>& bytes,
 				  std::string* error_out) {
-	return WriteBinaryRelative(PathFor(entry).lexically_relative(root_), bytes, error_out);
+	if (!WriteBinaryRelative(PathFor(entry).lexically_relative(root_), bytes, error_out)) {
+		return false;
+	}
+	if (entry.ttl_seconds > 0) {
+		WriteTtlSidecar(PathFor(entry), entry.ttl_seconds);
+	}
+	return true;
 }
 
 bool PersistentStorage::ExistsRelative(const std::filesystem::path& relative_path) const {
