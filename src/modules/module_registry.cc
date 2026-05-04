@@ -39,10 +39,7 @@ std::string ResolveCanonicalModuleName(const std::string& module_name) {
 	}
 	if (normalized == "crypto") {
 		return "Crypto";
-	}
-	if (normalized == "doctor") {
-		return "Doctor";
-	}
+	} 
 	if (normalized == "filesystem" || normalized == "fs") {
 		return "FileSystem";
 	}
@@ -79,6 +76,12 @@ std::string ResolveCanonicalModuleName(const std::string& module_name) {
 	if (normalized == "vtk") {
 		return "VTK";
 	}
+	if (normalized == "ai") {
+		return "AI";
+	}
+	if (normalized == "sd" || normalized == "stablediffusion") {
+		return "SD";
+	}
 	return std::string();
 }
 
@@ -94,8 +97,7 @@ std::vector<std::string> ListModules() {
 		"IO/Async",
 		"Provider",
 		"RuntimeLive",
-		"Util",
-		"Doctor",
+		"Util", 
 		"OpenCV",
 		"CUDA",
 		"CUDNN",
@@ -103,6 +105,8 @@ std::vector<std::string> ListModules() {
 		"FFmpeg",
 		"ANGLE",
 		"VTK",
+		"AI",
+		"SD",
 	};
 }
 
@@ -141,9 +145,7 @@ bool ImportModule(v8::Isolate* isolate,
 	} else if (canonical_name == "Provider") {
 		ok = detail::BuildProviderModule(isolate, context, &module, error_out);
 	} else if (canonical_name == "RuntimeLive") {
-		ok = detail::BuildRuntimeLiveModule(isolate, context, &module, error_out);
-	} else if (canonical_name == "Doctor") {
-		ok = detail::BuildDoctorModule(isolate, context, &module, error_out);
+		ok = detail::BuildRuntimeLiveModule(isolate, context, &module, error_out); 
 	} else if (canonical_name == "OpenCV") {
 		ok = detail::BuildOpenCvModule(isolate, context, &module, error_out);
 	} else if (canonical_name == "CUDA") {
@@ -158,6 +160,10 @@ bool ImportModule(v8::Isolate* isolate,
 		ok = detail::BuildAngleModule(isolate, context, &module, error_out);
 	} else if (canonical_name == "VTK") {
 		ok = detail::BuildVtkModule(isolate, context, &module, error_out);
+	} else if (canonical_name == "AI") {
+		ok = detail::BuildAiModule(isolate, context, &module, error_out);
+	} else if (canonical_name == "SD") {
+		ok = detail::BuildSdModule(isolate, context, &module, error_out);
 	}
 
 	if (!ok) {

@@ -47,11 +47,7 @@ bool BuildIOAsyncModule(v8::Isolate* isolate,
 bool BuildRuntimeLiveModule(v8::Isolate* isolate,
 			    v8::Local<v8::Context> context,
 			    v8::Local<v8::Object>* module_out,
-			    std::string* error_out);
-bool BuildDoctorModule(v8::Isolate* isolate,
-			   v8::Local<v8::Context> context,
-			   v8::Local<v8::Object>* module_out,
-			   std::string* error_out);
+			    std::string* error_out); 
 bool BuildOpenCvModule(v8::Isolate* isolate,
 			   v8::Local<v8::Context> context,
 			   v8::Local<v8::Object>* module_out,
@@ -77,6 +73,14 @@ bool BuildAngleModule(v8::Isolate* isolate,
 			  v8::Local<v8::Object>* module_out,
 			  std::string* error_out);
 bool BuildVtkModule(v8::Isolate* isolate,
+			v8::Local<v8::Context> context,
+			v8::Local<v8::Object>* module_out,
+			std::string* error_out);
+bool BuildAiModule(v8::Isolate* isolate,
+			v8::Local<v8::Context> context,
+			v8::Local<v8::Object>* module_out,
+			std::string* error_out);
+bool BuildSdModule(v8::Isolate* isolate,
 			v8::Local<v8::Context> context,
 			v8::Local<v8::Object>* module_out,
 			std::string* error_out);

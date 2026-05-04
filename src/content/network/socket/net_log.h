@@ -5,17 +5,18 @@
 #pragma once
 
 #include <string>
-#include "doctor/core/logger.h"
+#include "flux/core/logger.h"
 
 namespace network::socket {
 
-// Thin adapter: routes socket-layer events to EngineDoctor Logger.
+// Thin adapter: routes socket-layer events to flux Logger.
 class NetLog {
 public:
-    static void Debug(const std::string& msg)   { EngineDoctor::Logger::debug("[net] " + msg); }
-    static void Info(const std::string& msg)    { EngineDoctor::Logger::info("[net] " + msg); }
-    static void Warning(const std::string& msg) { EngineDoctor::Logger::warning("[net] " + msg); }
-    static void Error(const std::string& msg)   { EngineDoctor::Logger::error("[net] " + msg); }
+    static void Debug(const std::string& msg)   { flux::core::Logger().Debug("net", msg); }
+    static void Info(const std::string& msg)    { flux::core::Logger().Info("net", msg); }
+    static void Warning(const std::string& msg) { flux::core::Logger().Warning("net", msg); }
+    static void Error(const std::string& msg)   { flux::core::Logger().Error("net", msg); }
 };
 
 }  // namespace network::socket
+

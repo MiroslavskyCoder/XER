@@ -5,7 +5,6 @@
 #include "content/network/core/network_service.h"
 #include "content/network/url/url_request_job.h"
 #include "content/network/core/network_task_runner.h"
-#include "doctor/core/logger.h"
 
 namespace network::core {
 

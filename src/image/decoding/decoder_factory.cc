@@ -12,6 +12,7 @@
 #include "../formats/raw_cr2_decoder.h"
 #include <filesystem>
 #include <algorithm>
+#include <fstream>
 
 namespace image {
 

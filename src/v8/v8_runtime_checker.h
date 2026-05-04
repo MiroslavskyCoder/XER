@@ -11,35 +11,24 @@
 #include <string>
 #include <vector>
 #include <map>
-#include "analysis/dependency_analyzer.h"
-#include "core/engine_doctor_context.h"
 
 namespace EngineDoctor {
 
 class V8RuntimeChecker {
 public:
-    V8RuntimeChecker(Context& context);
+    V8RuntimeChecker() = default;
     ~V8RuntimeChecker() = default;
 
-    /**
-     * @brief Проверяет установленные библиотеки на предмет конфликтов с V8.
-     * @param installed_libs Список установленных библиотек.
-     * @param v8_conflicts Список обнаруженных конфликтов (имена библиотек).
-     */
-    void check_v8_compatibility(
-        const std::vector<LibraryDependencyInfo>& installed_libs,
-        std::vector<std::string>& v8_conflicts
-    );
+    /// Checks installed libraries for V8 conflicts.
+    /// Returns names of conflicting libraries.
+    std::vector<std::string> CheckV8Compatibility(
+        const std::vector<std::string>& installed_libs);
 
 private:
-    Context& context_;
-
-    // Список известных конфликтующих библиотек для V8
     std::vector<std::pair<std::string, std::string>> known_v8_conflicts_;
 
-    void load_known_v8_conflicts();
-    void check_for_specific_conflicts(const std::vector<LibraryDependencyInfo>& installed_libs, std::vector<std::string>& v8_conflicts);
-    // ...
+    void LoadKnownConflicts();
 };
 
 } // namespace EngineDoctor
+
