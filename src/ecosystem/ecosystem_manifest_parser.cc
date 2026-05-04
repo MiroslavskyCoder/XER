@@ -3,10 +3,46 @@
 
 #include <json/json.h>
 #include <memory>
+#include <cstdlib>
+#include <regex>
+#include <string>
 
 #include <range/v3/algorithm/all_of.hpp>
-#include <range/v3/range/conversion.hpp>
-#include <range/v3/view/transform.hpp>
+
+// ---------------------------------------------------------------------------
+// Environment variable substitution: expands ${VAR_NAME} in a string.
+// Unknown variables are left as-is.
+// ---------------------------------------------------------------------------
+namespace {
+
+std::string ExpandEnvVars(const std::string& input) {
+    static const std::regex kVarPattern(R"(\$\{([A-Za-z_][A-Za-z0-9_]*)\})");
+    std::string result;
+    result.reserve(input.size());
+
+    auto it = input.cbegin();
+    std::sregex_iterator match_it(input.cbegin(), input.cend(), kVarPattern);
+    const std::sregex_iterator match_end;
+
+    for (; match_it != match_end; ++match_it) {
+        const std::smatch& match = *match_it;
+        // Append the part before this match.
+        result.append(it, input.cbegin() + match.position());
+        const std::string var_name = match[1].str();
+        const char* value = std::getenv(var_name.c_str());
+        if (value != nullptr) {
+            result.append(value);
+        } else {
+            // Unknown variable — preserve the original token.
+            result.append(match[0].str());
+        }
+        it = input.cbegin() + match.position() + match.length();
+    }
+    result.append(it, input.cend());
+    return result;
+}
+
+}  // namespace
 
 bool EcoSystemManifestParser::Parse(const std::string& json_text,
                                     EcoSystemManifest* out,
@@ -49,7 +85,7 @@ bool EcoSystemManifestParser::Parse(const std::string& json_text,
         }
         return false;
     }
-    out->script_path = script_value.asString();
+    out->script_path = ExpandEnvVars(script_value.asString());
 
     const Json::Value args_value = root["args"];
     if (args_value.isArray()) {
@@ -60,16 +96,19 @@ bool EcoSystemManifestParser::Parse(const std::string& json_text,
             return false;
         }
 
-        out->args = args_value
-            | ranges::views::transform([](const Json::Value& item) {
-                  return item.asString();
-              })
-            | ranges::to<std::vector<std::string>>();
+        out->args.reserve(static_cast<size_t>(args_value.size()));
+        for (const auto& item : args_value) {
+            out->args.push_back(ExpandEnvVars(item.asString()));
+        }
         return true;
     }
 
     if (args_value.isString()) {
-        out->args = EcoSystemManifestArgs::Split(args_value.asString());
+        const auto raw_args = EcoSystemManifestArgs::Split(args_value.asString());
+        out->args.reserve(raw_args.size());
+        for (const auto& arg : raw_args) {
+            out->args.push_back(ExpandEnvVars(arg));
+        }
     } else if (!args_value.isNull()) {
         if (error_message) {
             *error_message = "ecosystem field 'args' must be string or string[]";
@@ -79,3 +118,4 @@ bool EcoSystemManifestParser::Parse(const std::string& json_text,
 
     return true;
 }
+
