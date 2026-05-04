@@ -1,0 +1,106 @@
+name: Linux Build
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            cmake \
+            ninja-build \
+            pkg-config \
+            curl \
+            git \
+            ca-certificates \
+            clang \
+            lld \
+            llvm-dev \
+            libclang-dev \
+            libabsl-dev \
+            libxml2-dev \
+            libcurl4-openssl-dev \
+            libssl-dev \
+            zlib1g-dev \
+            libnode-dev \
+            libeigen3-dev \
+            libpthreadpool-dev \
+            libuv1-dev \
+            libjsoncpp-dev \
+            libre2-dev \
+            librange-v3-dev \
+            libavutil-dev \
+            libavcodec-dev \
+            libavformat-dev \
+            libswscale-dev \
+            libswresample-dev \
+            libavfilter-dev \
+            libavdevice-dev \
+            libopencv-dev \
+            libzstd-dev \
+            libbrotli-dev \
+            libsqlite3-dev \
+            libicu-dev \
+            libffi-dev \
+            libfftw3-dev
+
+      - name: Setup CMake env
+        shell: bash
+        run: |
+          set -e
+          echo "CC=clang" >> "$GITHUB_ENV"
+          echo "CXX=clang++" >> "$GITHUB_ENV"
+
+          LLVM_PREFIX=""
+          for d in /usr/lib/llvm-18 /usr/lib/llvm-17 /usr/lib/llvm-16 /usr/lib/llvm-15 /usr/lib/llvm-14; do
+            if [[ -d "$d" ]]; then
+              LLVM_PREFIX="$d"
+              break
+            fi
+          done
+
+          if [[ -n "$LLVM_PREFIX" ]]; then
+            echo "LLVM_PREFIX=$LLVM_PREFIX" >> "$GITHUB_ENV"
+            echo "CMAKE_PREFIX_PATH=$LLVM_PREFIX;$CMAKE_PREFIX_PATH" >> "$GITHUB_ENV"
+            echo "LLVM_DIR=$LLVM_PREFIX/lib/cmake/llvm" >> "$GITHUB_ENV"
+            echo "Clang_DIR=$LLVM_PREFIX/lib/cmake/clang" >> "$GITHUB_ENV"
+          fi
+
+      - name: Configure
+        run: |
+          cmake --preset default \
+            -DLLVM_DIR="${LLVM_DIR:-}" \
+            -DClang_DIR="${Clang_DIR:-}"
+
+      - name: Build
+        run: |
+          cmake --build --preset default -- -j"$(nproc)"
+
+      - name: Verify binary
+        run: |
+          test -f out/build/default/XER
+          out/build/default/XER --help >/dev/null 2>&1 || true
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: xer-linux-build
+          path: |
+            out/build/default/XER 
+            out/build/default/compile_commands.json
+          if-no-files-found: warn
