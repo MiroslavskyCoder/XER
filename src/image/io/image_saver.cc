@@ -20,9 +20,9 @@ bool ImageSaver::SavePng(const ImageBuffer& img, const std::string& path) {
     if (!img.IsValid()) return false;
     int w = img.Width(), h = img.Height();
     // Build VideoFrameInfo-compatible frame
-    engine::bridge::ffmpeg::EncodeParams p;
+    engine::bridge::ffmpeg::EncodeVideoParams p;
     p.output_path  = path;
-    p.codec        = "png";
+    p.codec_name   = "png";
     p.width        = w;
     p.height       = h;
     p.fps_num      = 1;
@@ -47,15 +47,15 @@ bool ImageSaver::SaveJpeg(const ImageBuffer& img, const std::string& path,
     if (!engine::bridge::ffmpeg::IsAvailable()) return false;
     if (!img.IsValid()) return false;
     int w = img.Width(), h = img.Height();
-    engine::bridge::ffmpeg::EncodeParams p;
+    engine::bridge::ffmpeg::EncodeVideoParams p;
     p.output_path  = path;
-    p.codec        = "mjpeg";
+    p.codec_name   = "mjpeg";
     p.width        = w;
     p.height       = h;
     p.fps_num      = 1;
     p.fps_den      = 1;
     p.pixel_format = "rgba";
-    p.quality      = quality;
+    (void)quality;
 
     engine::bridge::ffmpeg::VideoFrameInfo fr;
     fr.width=w; fr.height=h;

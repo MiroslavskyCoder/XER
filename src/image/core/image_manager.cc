@@ -1,6 +1,6 @@
 #include "image_manager.h"
 #include "../io/image_loader.h"
-#include "../flux/core/logger.h"
+#include "flux/core/logger.h"
 
 namespace image {
 

@@ -12,7 +12,7 @@ int GifDecoder::PageCount(const std::string& path) {
     if (!engine::bridge::ffmpeg::ProbeMedia(path, &info, &err)) return 0;
     // video stream frame count
     for (auto& s : info.streams)
-        if (s.codec_type == "video") return s.nb_frames > 0 ? s.nb_frames : 1;
+        if (s.media_type == "video") return s.frame_count > 0 ? static_cast<int>(s.frame_count) : 1;
     return 1;
 }
 

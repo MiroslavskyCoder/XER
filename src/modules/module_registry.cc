@@ -102,9 +102,7 @@ std::vector<std::string> ListModules() {
 		"CUDA",
 		"CUDNN",
 		"Skia",
-		"FFmpeg",
-		"ANGLE",
-		"VTK",
+		"FFmpeg", 
 		"AI",
 		"SD",
 	};
@@ -155,11 +153,7 @@ bool ImportModule(v8::Isolate* isolate,
 	} else if (canonical_name == "Skia") {
 		ok = detail::BuildSkiaModule(isolate, context, &module, error_out);
 	} else if (canonical_name == "FFmpeg") {
-		ok = detail::BuildFFmpegModule(isolate, context, &module, error_out);
-	} else if (canonical_name == "ANGLE") {
-		ok = detail::BuildAngleModule(isolate, context, &module, error_out);
-	} else if (canonical_name == "VTK") {
-		ok = detail::BuildVtkModule(isolate, context, &module, error_out);
+		ok = detail::BuildFFmpegModule(isolate, context, &module, error_out); 
 	} else if (canonical_name == "AI") {
 		ok = detail::BuildAiModule(isolate, context, &module, error_out);
 	} else if (canonical_name == "SD") {

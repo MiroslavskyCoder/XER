@@ -1,16 +1,67 @@
 ﻿#include "augmentor.h"
 
+#include <random>
+
 namespace Engine::ML::DataAugmentation {
+
+RotationAugmentor::RotationAugmentor(float angle_range)
+    : angle_range_(angle_range), rng_(std::random_device{}()) {}
+
+Engine::MLData::Types::Tensor RotationAugmentor::Augment(const Engine::MLData::Types::Tensor& input) {
+    return input;
+}
+
+FlipAugmentor::FlipAugmentor(FlipMode mode, float probability)
+    : mode_(mode), probability_(probability), rng_(std::random_device{}()) {}
+
+Engine::MLData::Types::Tensor FlipAugmentor::Augment(const Engine::MLData::Types::Tensor& input) {
+    return input;
+}
+
+CropAugmentor::CropAugmentor(float min_crop, float max_crop)
+    : min_crop_(min_crop), max_crop_(max_crop), rng_(std::random_device{}()) {}
+
+Engine::MLData::Types::Tensor CropAugmentor::Augment(const Engine::MLData::Types::Tensor& input) {
+    return input;
+}
+
+ColorJitterAugmentor::ColorJitterAugmentor(float brightness, float contrast, float saturation)
+    : brightness_(brightness), contrast_(contrast), saturation_(saturation), rng_(std::random_device{}()) {}
+
+Engine::MLData::Types::Tensor ColorJitterAugmentor::Augment(const Engine::MLData::Types::Tensor& input) {
+    return input;
+}
+
+NoiseAugmentor::NoiseAugmentor(float std_dev)
+    : std_dev_(std_dev), rng_(std::random_device{}()) {}
+
+Engine::MLData::Types::Tensor NoiseAugmentor::Augment(const Engine::MLData::Types::Tensor& input) {
+    return input;
+}
 
 void AugmentationPipeline::AddAugmentor(std::shared_ptr<Augmentor> augmentor) {
     if (augmentor) {
-        augmentors_.push_back(augmentor);
+        augmentors_.push_back(std::move(augmentor));
     }
 }
 
 Engine::MLData::Types::Tensor AugmentationPipeline::Apply(const Engine::MLData::Types::Tensor& input) {
-    auto result = Engine::MLData::Types::Tensor(input.GetShape(), input.GetDataType());
+    Engine::MLData::Types::Tensor result = input;
+    for (const auto& augmentor : augmentors_) {
+        if (!augmentor || !augmentor->IsEnabled()) {
+            continue;
+        }
+        result = augmentor->Augment(result);
+    }
     return result;
 }
 
-} // namespace Engine::ML::DataAugmentation
+void AugmentationPipeline::SetEnabled(bool enabled) {
+    for (const auto& augmentor : augmentors_) {
+        if (augmentor) {
+            augmentor->SetEnabled(enabled);
+        }
+    }
+}
+
+}  // namespace Engine::ML::DataAugmentation

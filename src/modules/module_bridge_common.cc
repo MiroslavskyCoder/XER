@@ -25,7 +25,11 @@ bool BuildBridgeStatusModule(v8::Isolate* isolate,
 			     const std::string& summary,
 			     v8::Local<v8::Object>* module_out,
 			     std::string* error_out) {
-	v8::Local<v8::Object> module = v8::Object::New(isolate);
+	v8::Local<v8::Object> module = v8::Object::New(isolate); 
+bool BuildAiModule(v8::Isolate* isolate,
+			v8::Local<v8::Context> context,
+			v8::Local<v8::Object>* module_out,
+			std::string* error_out);
 	if (!SetBridgeStatusProperties(isolate, context, module, name, available, summary, error_out)) {
 		return false;
 	}

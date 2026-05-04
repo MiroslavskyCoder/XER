@@ -72,7 +72,6 @@ list(FILTER ENGINE_SRC_CC EXCLUDE REGEX "/src/async_io/")
 list(FILTER ENGINE_SRC_CC EXCLUDE REGEX "/src/javascript/")
 list(FILTER ENGINE_SRC_CC EXCLUDE REGEX "/src/wrapper/")
 list(FILTER ENGINE_SRC_CC EXCLUDE REGEX "/src/doctor/")
-list(FILTER ENGINE_SRC_CC EXCLUDE REGEX "/src/content/ai/ml/data_augmentation/")
 list(FILTER ENGINE_SRC_CC EXCLUDE REGEX "/src/v8/v8_runtime_checker\\.cc")
 list(FILTER ENGINE_SRC_CU EXCLUDE REGEX "/src/wrapper/")
 list(APPEND ENGINE_SRC_CC "${CMAKE_CURRENT_SOURCE_DIR}/src/xer/encode/sxer84321.c")
@@ -83,43 +82,7 @@ list(FILTER ENGINE_SRC_H EXCLUDE REGEX "/src/async_io/")
 list(FILTER ENGINE_SRC_H EXCLUDE REGEX "/src/javascript/")
 list(FILTER ENGINE_SRC_H EXCLUDE REGEX "/src/wrapper/")
 list(FILTER ENGINE_SRC_H EXCLUDE REGEX "/src/doctor/")
-list(FILTER ENGINE_SRC_H EXCLUDE REGEX "/src/content/ai/ml/data_augmentation/")
 list(FILTER ENGINE_SRC_H EXCLUDE REGEX "/src/v8/v8_runtime_checker\\.h$")
 
-set(ENGINE_DOCTOR_RUNTIME_CC
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/core/engine_doctor_config.cc"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/core/event_bus.cc"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/core/logger.cc"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/core/engine_doctor_context.cc"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/core/module_manager.cc"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/core/engine_doctor_core.cc"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/scanner/scanner_module.cc"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/analysis/data_provider.cc"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/analysis/analysis_strategy.cc"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/analysis/analysis_result_handler.cc"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/analysis/metric_calculator.cc"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/analysis/analysis_task_manager.cc"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/analysis/analysis_pipeline.cc"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/analysis/analysis_engine.cc")
-
-set(ENGINE_DOCTOR_RUNTIME_H
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/core/engine_doctor_config.h"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/core/event_bus.h"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/core/exceptions.h"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/core/logger.h"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/core/engine_doctor_context.h"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/core/module_manager.h"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/core/engine_doctor_core.h"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/scanner/scan_parameters.h"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/scanner/scan_result.h"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/scanner/scanner_module.h"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/analysis/data_provider.h"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/analysis/analysis_strategy.h"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/analysis/analysis_result_handler.h"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/analysis/metric_calculator.h"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/analysis/analysis_task_manager.h"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/analysis/analysis_pipeline.h"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/analysis/analysis_engine.h")
-
-set(ENGINE_PROJECT_CC ${ENGINE_SRC_CC} ${ENGINE_DOCTOR_RUNTIME_CC} ${ENGINE_SRC_CU})
-set(ENGINE_PROJECT_H  ${ENGINE_SRC_H} ${ENGINE_DOCTOR_RUNTIME_H})
+set(ENGINE_PROJECT_CC ${ENGINE_SRC_CC} ${ENGINE_SRC_CU})
+set(ENGINE_PROJECT_H  ${ENGINE_SRC_H})

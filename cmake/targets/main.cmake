@@ -7,7 +7,6 @@ target_sources(XER PRIVATE ${ENGINE_PROJECT_H})
 
 target_include_directories(XER PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/doctor
     ${LIBXML2_INCLUDE_DIRS}
     ${LLVM_INCLUDE_DIRS}
     ${NODE_INCLUDE_DIR}
@@ -237,32 +236,6 @@ if(TARGET range-v3::range-v3)
 elseif(TARGET range-v3)
     target_link_libraries(FluxCoreSmoke PRIVATE range-v3)
 endif()
-
-add_executable(EngineDoctorCoreSmoke
-    ${CMAKE_CURRENT_SOURCE_DIR}/demo_app/doctor_core_analysis_smoke.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/core/engine_doctor_config.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/core/event_bus.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/core/logger.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/core/engine_doctor_context.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/core/module_manager.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/core/engine_doctor_core.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/scanner/scanner_module.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/analysis/data_provider.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/analysis/analysis_strategy.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/analysis/analysis_result_handler.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/analysis/metric_calculator.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/analysis/analysis_task_manager.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/analysis/analysis_pipeline.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/doctor/analysis/analysis_engine.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/flux/terminal/terminal_interface.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/flux/terminal/terminal_buffer.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/flux/terminal/terminal_manager.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/flux/terminal/terminal_emulator.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/flux/terminal/terminal_output_renderer.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/flux/terminal/terminal_ansi_parser.cc)
-target_include_directories(EngineDoctorCoreSmoke PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/src
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/doctor)
 
 add_executable(FluxUiSmoke
     ${CMAKE_CURRENT_SOURCE_DIR}/demo_app/flux_ui_smoke.cc

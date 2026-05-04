@@ -67,15 +67,7 @@ bool BuildSkiaModule(v8::Isolate* isolate,
 bool BuildFFmpegModule(v8::Isolate* isolate,
 			   v8::Local<v8::Context> context,
 			   v8::Local<v8::Object>* module_out,
-			   std::string* error_out);
-bool BuildAngleModule(v8::Isolate* isolate,
-			  v8::Local<v8::Context> context,
-			  v8::Local<v8::Object>* module_out,
-			  std::string* error_out);
-bool BuildVtkModule(v8::Isolate* isolate,
-			v8::Local<v8::Context> context,
-			v8::Local<v8::Object>* module_out,
-			std::string* error_out);
+			   std::string* error_out); 
 bool BuildAiModule(v8::Isolate* isolate,
 			v8::Local<v8::Context> context,
 			v8::Local<v8::Object>* module_out,

@@ -1,6 +1,7 @@
 #include "jpeg_decoder.h"
 #include "wrapper/ffmpeg/ffmpeg_engine_bridge.h"
 #include "flux/core/logger.h"
+#include <cstring>
 
 namespace image {
 
