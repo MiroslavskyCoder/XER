@@ -14,6 +14,7 @@
 #include "content/ai/sd_base/xl/sd_xl_prompt_expander.h"
 
 #include <algorithm>
+#include <cmath>
 
 namespace Engine::AI::SDBase {
 
@@ -66,17 +67,31 @@ SdGenerationResult SdPipeline::Generate(const SdGenerationRequest& request) {
     SdDepthConditioner depth;
 
     float* latent_data = static_cast<float*>(latent.GetData());
+    const uint32_t unet_substeps = req.enable_sdxl ? 4U : 2U;
+    const uint32_t refine_substeps = req.enable_vae_decode ? 2U : 1U;
     for (uint32_t t = 0; t < req.steps; ++t) {
         const float sigma = scheduler_.SigmaAt(t);
         const float beta = scheduler_.BetaAt(t);
         const float guidance = std::clamp(req.guidance_scale, 0.0f, 30.0f);
 
         const uint64_t n = latent.GetElementCount();
-        for (uint64_t i = 0; i < n; ++i) {
-            latent_data[i] -= beta * (latent_data[i] + 0.01f * guidance * sigma);
+        for (uint32_t s = 0; s < unet_substeps; ++s) {
+            const float s_bias = 1.0f + 0.07f * static_cast<float>(s + 1);
+            for (uint64_t i = 0; i < n; ++i) {
+                const float v = latent_data[i];
+                const float score = v + 0.01f * guidance * sigma * s_bias;
+                latent_data[i] = v - beta * score;
+            }
         }
 
-        if (req.enable_controlnet && (t % 8) == 0) {
+        for (uint32_t r = 0; r < refine_substeps; ++r) {
+            const float damp = 0.9975f - 0.0002f * static_cast<float>(r);
+            for (uint64_t i = 0; i < n; ++i) {
+                latent_data[i] = std::tanh(latent_data[i]) * damp;
+            }
+        }
+
+        if (req.enable_controlnet) {
             controlnet.ApplyHintScale(latent, req.controlnet_strength);
             depth.ApplyDepthPrior(latent, req.depth_strength);
         }

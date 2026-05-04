@@ -1300,21 +1300,294 @@ bool EncodeVideoFrames(const EncodeVideoParams& params,
         SetError(out_error, "No video frames to encode");
         return false;
     }
-    
-    // Using range-v3 as required: check all frames are valid
-    bool all_valid = ranges::all_of(frames, [](const VideoFrameInfo& f) {
-        return !f.line_sizes.empty() && !f.data.empty();
-    });
-    
-    if (!all_valid) {
-        SetError(out_error, "Some video frames contain invalid data");
+
+    if (params.output_path.empty()) {
+        SetError(out_error, "EncodeVideoFrames requires an output path");
         return false;
     }
 
-    SetError(out_error, absl::StrFormat("EncodeVideoFrames: mock implementation processed %d frames (width: %d, height: %d, codec: %s)",
-                                        frames.size(), params.width, params.height, params.codec_name));
-    return true;
+    const int width = params.width > 0 ? params.width : frames.front().width;
+    const int height = params.height > 0 ? params.height : frames.front().height;
+    if (width <= 0 || height <= 0) {
+        SetError(out_error, "EncodeVideoFrames received invalid width/height");
+        return false;
+    }
+
+    bool all_valid = ranges::all_of(frames, [width, height](const VideoFrameInfo& f) {
+        return f.width == width && f.height == height && !f.line_sizes.empty() && !f.data.empty();
+    });
+    if (!all_valid) {
+        SetError(out_error, "Some video frames contain invalid data or inconsistent dimensions");
+        return false;
+    }
+
+    auto parse_input_pix_fmt = [](std::string text) -> AVPixelFormat {
+        std::transform(text.begin(), text.end(), text.begin(), [](unsigned char ch) {
+            return static_cast<char>(std::tolower(ch));
+        });
+        if (text == "rgba") return AV_PIX_FMT_RGBA;
+        if (text == "bgra") return AV_PIX_FMT_BGRA;
+        if (text == "rgb" || text == "rgb24") return AV_PIX_FMT_RGB24;
+        if (text == "bgr" || text == "bgr24") return AV_PIX_FMT_BGR24;
+        if (text == "gray" || text == "gray8" || text == "y") return AV_PIX_FMT_GRAY8;
+        return AV_PIX_FMT_NONE;
+    };
+
+    AVFormatContext* output_context = nullptr;
+    int result = avformat_alloc_output_context2(&output_context, nullptr, nullptr, params.output_path.c_str());
+    if (result < 0 || output_context == nullptr) {
+        SetError(out_error, "avformat_alloc_output_context2 failed: " + ErrorString(result));
+        return false;
+    }
+
+    const AVCodec* codec = params.codec_name.empty()
+        ? avcodec_find_encoder(output_context->oformat->video_codec)
+        : avcodec_find_encoder_by_name(params.codec_name.c_str());
+    if (codec == nullptr) {
+        avformat_free_context(output_context);
+        SetError(out_error, "video encoder not found: " + params.codec_name);
+        return false;
+    }
+
+    AVStream* stream = avformat_new_stream(output_context, nullptr);
+    AVCodecContext* codec_context = avcodec_alloc_context3(codec);
+    if (stream == nullptr || codec_context == nullptr) {
+        avcodec_free_context(&codec_context);
+        avformat_free_context(output_context);
+        SetError(out_error, "failed to allocate video encoder stream/context");
+        return false;
+    }
+
+    codec_context->codec_type = AVMEDIA_TYPE_VIDEO;
+    codec_context->width = width;
+    codec_context->height = height;
+    codec_context->time_base = AVRational{params.fps_den > 0 ? params.fps_den : 1,
+                                          params.fps_num > 0 ? params.fps_num : 1};
+    codec_context->framerate = AVRational{params.fps_num > 0 ? params.fps_num : 1,
+                                          params.fps_den > 0 ? params.fps_den : 1};
+    codec_context->bit_rate = params.bit_rate > 0 ? params.bit_rate : 4000000;
+
+    AVPixelFormat encoder_pix_fmt = AV_PIX_FMT_YUV420P;
+    if (codec->pix_fmts != nullptr) {
+        encoder_pix_fmt = codec->pix_fmts[0];
+        for (const AVPixelFormat* fmt = codec->pix_fmts; *fmt != AV_PIX_FMT_NONE; ++fmt) {
+            if (*fmt == AV_PIX_FMT_RGBA) {
+                encoder_pix_fmt = *fmt;
+                break;
+            }
+        }
+    }
+    codec_context->pix_fmt = encoder_pix_fmt;
+
+    if ((output_context->oformat->flags & AVFMT_GLOBALHEADER) != 0) {
+        codec_context->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+    }
+
+    result = avcodec_open2(codec_context, codec, nullptr);
+    if (result < 0) {
+        avcodec_free_context(&codec_context);
+        avformat_free_context(output_context);
+        SetError(out_error, "avcodec_open2 failed: " + ErrorString(result));
+        return false;
+    }
+
+    result = avcodec_parameters_from_context(stream->codecpar, codec_context);
+    if (result < 0) {
+        avcodec_free_context(&codec_context);
+        avformat_free_context(output_context);
+        SetError(out_error, "avcodec_parameters_from_context failed: " + ErrorString(result));
+        return false;
+    }
+    stream->time_base = codec_context->time_base;
+
+    if ((output_context->oformat->flags & AVFMT_NOFILE) == 0) {
+        result = avio_open(&output_context->pb, params.output_path.c_str(), AVIO_FLAG_WRITE);
+        if (result < 0) {
+            avcodec_free_context(&codec_context);
+            avformat_free_context(output_context);
+            SetError(out_error, "avio_open failed: " + ErrorString(result));
+            return false;
+        }
+    }
+
+    result = avformat_write_header(output_context, nullptr);
+    if (result < 0) {
+        if ((output_context->oformat->flags & AVFMT_NOFILE) == 0) {
+            avio_closep(&output_context->pb);
+        }
+        avcodec_free_context(&codec_context);
+        avformat_free_context(output_context);
+        SetError(out_error, "avformat_write_header failed: " + ErrorString(result));
+        return false;
+    }
+
+    AVPacket* packet = av_packet_alloc();
+    if (packet == nullptr) {
+        av_write_trailer(output_context);
+        if ((output_context->oformat->flags & AVFMT_NOFILE) == 0) {
+            avio_closep(&output_context->pb);
+        }
+        avcodec_free_context(&codec_context);
+        avformat_free_context(output_context);
+        SetError(out_error, "av_packet_alloc failed");
+        return false;
+    }
+
+    const AVPixelFormat input_pix_fmt = parse_input_pix_fmt(frames.front().pixel_format);
+    if (input_pix_fmt == AV_PIX_FMT_NONE) {
+        av_packet_free(&packet);
+        av_write_trailer(output_context);
+        if ((output_context->oformat->flags & AVFMT_NOFILE) == 0) {
+            avio_closep(&output_context->pb);
+        }
+        avcodec_free_context(&codec_context);
+        avformat_free_context(output_context);
+        SetError(out_error, "unsupported input pixel format: " + frames.front().pixel_format);
+        return false;
+    }
+
+    SwsContext* sws_context = nullptr;
+    if (input_pix_fmt != codec_context->pix_fmt) {
+        sws_context = sws_getContext(width,
+                                     height,
+                                     input_pix_fmt,
+                                     width,
+                                     height,
+                                     codec_context->pix_fmt,
+                                     SWS_BILINEAR,
+                                     nullptr,
+                                     nullptr,
+                                     nullptr);
+        if (sws_context == nullptr) {
+            av_packet_free(&packet);
+            av_write_trailer(output_context);
+            if ((output_context->oformat->flags & AVFMT_NOFILE) == 0) {
+                avio_closep(&output_context->pb);
+            }
+            avcodec_free_context(&codec_context);
+            avformat_free_context(output_context);
+            SetError(out_error, "sws_getContext failed");
+            return false;
+        }
+    }
+
+    bool success = true;
+    int64_t next_pts = 0;
+    for (const auto& input : frames) {
+        AVFrame* frame = av_frame_alloc();
+        if (frame == nullptr) {
+            success = false;
+            SetError(out_error, "av_frame_alloc failed");
+            break;
+        }
+
+        frame->format = codec_context->pix_fmt;
+        frame->width = width;
+        frame->height = height;
+        frame->pts = next_pts++;
+
+        result = av_frame_get_buffer(frame, 0);
+        if (result < 0 || av_frame_make_writable(frame) < 0) {
+            av_frame_free(&frame);
+            success = false;
+            SetError(out_error, "failed to allocate writable video frame");
+            break;
+        }
+
+        uint8_t* src_data[4] = {nullptr, nullptr, nullptr, nullptr};
+        int src_linesize[4] = {0, 0, 0, 0};
+        const int fill_result = av_image_fill_arrays(src_data,
+                                                     src_linesize,
+                                                     input.data.data(),
+                                                     input_pix_fmt,
+                                                     width,
+                                                     height,
+                                                     1);
+        if (fill_result < 0) {
+            av_frame_free(&frame);
+            success = false;
+            SetError(out_error, "av_image_fill_arrays failed: " + ErrorString(fill_result));
+            break;
+        }
+
+        if (!input.line_sizes.empty()) {
+            src_linesize[0] = input.line_sizes[0];
+            for (size_t i = 1; i < input.line_sizes.size() && i < 4; ++i) {
+                src_linesize[i] = input.line_sizes[i];
+            }
+        }
+
+        if (sws_context != nullptr) {
+            const int scaled = sws_scale(sws_context,
+                                         src_data,
+                                         src_linesize,
+                                         0,
+                                         height,
+                                         frame->data,
+                                         frame->linesize);
+            if (scaled <= 0) {
+                av_frame_free(&frame);
+                success = false;
+                SetError(out_error, "sws_scale failed");
+                break;
+            }
+        } else {
+            av_image_copy(frame->data,
+                          frame->linesize,
+                          const_cast<const uint8_t**>(src_data),
+                          src_linesize,
+                          codec_context->pix_fmt,
+                          width,
+                          height);
+        }
+
+        result = avcodec_send_frame(codec_context, frame);
+        av_frame_free(&frame);
+        if (result < 0) {
+            success = false;
+            SetError(out_error, "avcodec_send_frame failed: " + ErrorString(result));
+            break;
+        }
+        if (!PushEncoderPackets(output_context, codec_context, stream, packet, out_error)) {
+            success = false;
+            break;
+        }
+    }
+
+    if (success) {
+        result = avcodec_send_frame(codec_context, nullptr);
+        if (result < 0) {
+            success = false;
+            SetError(out_error, "avcodec_send_frame(nullptr) failed: " + ErrorString(result));
+        } else if (!PushEncoderPackets(output_context, codec_context, stream, packet, out_error)) {
+            success = false;
+        }
+    }
+
+    if (success) {
+        result = av_write_trailer(output_context);
+        if (result < 0) {
+            success = false;
+            SetError(out_error, "av_write_trailer failed: " + ErrorString(result));
+        }
+    } else {
+        av_write_trailer(output_context);
+    }
+
+    if (sws_context != nullptr) {
+        sws_freeContext(sws_context);
+    }
+    av_packet_free(&packet);
+    if ((output_context->oformat->flags & AVFMT_NOFILE) == 0) {
+        avio_closep(&output_context->pb);
+    }
+    avcodec_free_context(&codec_context);
+    avformat_free_context(output_context);
+
+    return success;
 #else
+    (void)params;
+    (void)frames;
     SetError(out_error, "FFmpeg bridge unavailable");
     return false;
 #endif
