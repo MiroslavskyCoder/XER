@@ -1,4 +1,5 @@
 #include "raster_decoder.h"
+#include <cstring>
 
 namespace image {
 
