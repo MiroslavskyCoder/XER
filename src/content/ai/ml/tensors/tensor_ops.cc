@@ -43,14 +43,44 @@ std::vector<size_t> TensorBroadcast::GetOutputShape(const std::vector<size_t>& s
 Tensor TensorBroadcast::Broadcast(const Tensor& tensor,
                                    const std::vector<size_t>& target_shape) {
     const auto& current_shape = tensor.Shape();
-    
+
     if (current_shape == target_shape) {
         return tensor.Clone();
     }
-    
-    // Simple broadcast: replicate along dimensions of size 1
-    // Full implementation would need proper broadcasting logic
-    return tensor.Clone();
+
+    const size_t target_dims = target_shape.size();
+    const size_t src_dims    = current_shape.size();
+
+    // Validate broadcastability
+    if (!IsCompatible(current_shape, target_shape)) {
+        throw std::invalid_argument("Shapes are not broadcastable");
+    }
+
+    // Only supports broadcasting to 2D for now (covers the common ML case)
+    if (target_dims != 2) {
+        throw std::invalid_argument("Broadcast: only 2D target supported");
+    }
+
+    const size_t target_rows = target_shape[0];
+    const size_t target_cols = target_shape[1];
+
+    // Determine source rows/cols (with padding of 1 for missing dims)
+    const size_t src_rows = (src_dims >= 2) ? current_shape[src_dims - 2] : 1;
+    const size_t src_cols = (src_dims >= 1) ? current_shape[src_dims - 1] : 1;
+
+    Tensor result(std::vector<size_t>{target_rows, target_cols}, tensor.GetDevice());
+    const Eigen::MatrixXf& src = tensor.Data();
+
+    for (size_t r = 0; r < target_rows; ++r) {
+        const Eigen::Index sr = static_cast<Eigen::Index>((src_rows == 1) ? 0 : r);
+        for (size_t c = 0; c < target_cols; ++c) {
+            const Eigen::Index sc = static_cast<Eigen::Index>((src_cols == 1) ? 0 : c);
+            result.MutableData()(static_cast<Eigen::Index>(r * target_cols + c), 0) =
+                src(sr * static_cast<Eigen::Index>(src_cols) + sc, 0);
+        }
+    }
+
+    return result;
 }
 
 Tensor TensorSlice::GetRow(const Tensor& tensor, size_t row_idx) {
@@ -103,61 +133,102 @@ Tensor TensorConcat::Concatenate(const std::vector<Tensor>& tensors, int axis) {
     if (tensors.empty()) {
         throw std::invalid_argument("Cannot concatenate empty tensor list");
     }
-    
-    // All tensors must have same number of dimensions and same size in other axes
+
     const auto& first_shape = tensors[0].Shape();
-    
+    const size_t rank = first_shape.size();
+
     for (const auto& t : tensors) {
-        if (t.Shape().size() != first_shape.size()) {
+        if (t.Shape().size() != rank) {
             throw std::invalid_argument("All tensors must have same rank");
         }
     }
-    
-    // For 2D concatenation along axis 0 (rows)
-    if (axis == 0 && first_shape.size() == 2) {
+
+    if (rank != 2) {
+        throw std::invalid_argument("Concatenation currently supports 2D tensors only");
+    }
+
+    const int safe_axis = (axis < 0) ? static_cast<int>(rank) + axis : axis;
+    if (safe_axis < 0 || static_cast<size_t>(safe_axis) >= rank) {
+        throw std::invalid_argument("Axis out of range for tensor rank");
+    }
+
+    // ── axis=0: concatenate rows ─────────────────────────────────────────────
+    if (safe_axis == 0) {
+        const size_t cols = first_shape[1];
         size_t total_rows = 0;
-        size_t cols = first_shape[1];
-        
         for (const auto& t : tensors) {
             if (t.Shape()[1] != cols) {
-                throw std::invalid_argument("Mismatch in non-concatenation axis");
+                throw std::invalid_argument("Mismatch in non-concatenation axis (cols)");
             }
             total_rows += t.Shape()[0];
         }
-        
+
         Tensor result(std::vector<size_t>{total_rows, cols}, tensors[0].GetDevice());
         size_t row_offset = 0;
-        
         for (const auto& t : tensors) {
-            size_t rows = t.Shape()[0];
-            result.MutableData().block(row_offset, 0, rows, cols) = t.Data();
+            const size_t rows = t.Shape()[0];
+            result.MutableData().block(
+                static_cast<Eigen::Index>(row_offset), 0,
+                static_cast<Eigen::Index>(rows),
+                static_cast<Eigen::Index>(cols)) = t.Data();
             row_offset += rows;
         }
-        
         return result;
     }
-    
-    throw std::invalid_argument("Concatenation not implemented for this axis");
+
+    // ── axis=1: concatenate columns ──────────────────────────────────────────
+    {
+        const size_t rows = first_shape[0];
+        size_t total_cols = 0;
+        for (const auto& t : tensors) {
+            if (t.Shape()[0] != rows) {
+                throw std::invalid_argument("Mismatch in non-concatenation axis (rows)");
+            }
+            total_cols += t.Shape()[1];
+        }
+
+        Tensor result(std::vector<size_t>{rows, total_cols}, tensors[0].GetDevice());
+        size_t col_offset = 0;
+        for (const auto& t : tensors) {
+            const size_t tcols = t.Shape()[1];
+            result.MutableData().block(
+                0,
+                static_cast<Eigen::Index>(col_offset),
+                static_cast<Eigen::Index>(rows),
+                static_cast<Eigen::Index>(tcols)) = t.Data();
+            col_offset += tcols;
+        }
+        return result;
+    }
 }
 
-Tensor TensorConcat::Stack(const std::vector<Tensor>& tensors, int axis) {
+Tensor TensorConcat::Stack(const std::vector<Tensor>& tensors, int /*axis*/) {
     if (tensors.empty()) {
         throw std::invalid_argument("Cannot stack empty tensor list");
     }
-    
-    // Stack creates new dimension
-    // For now, simplified: assume stacking 2D tensors to 3D
-    size_t num_tensors = tensors.size();
+
+    // Validate all tensors have the same shape.
     const auto& first_shape = tensors[0].Shape();
-    
-    // Create output shape [num_tensors, rows, cols]
-    std::vector<size_t> output_shape = {num_tensors};
-    for (size_t dim : first_shape) {
-        output_shape.push_back(dim);
+    for (const auto& t : tensors) {
+        if (t.Shape() != first_shape) {
+            throw std::invalid_argument("Stack: all tensors must have the same shape");
+        }
     }
-    
-    // For now, stack as concatenation
-    return Concatenate(tensors, 0);
+
+    // Stack creates a new leading dimension of size |tensors|.
+    // Result shape: [num_tensors, D1, D2, ...]
+    // We flatten each tensor to a row in a 2D result:
+    //   shape = [num_tensors, num_elements_per_tensor]
+    const size_t num_tensors  = tensors.size();
+    const size_t numel        = tensors[0].NumElements();
+
+    Tensor result(std::vector<size_t>{num_tensors, numel}, tensors[0].GetDevice());
+    for (size_t i = 0; i < num_tensors; ++i) {
+        // Each tensor's data is stored flat as a column vector; copy as a row.
+        result.MutableData().row(static_cast<Eigen::Index>(i)) =
+            tensors[i].Data().col(0).transpose();
+    }
+    return result;
 }
 
 } // namespace Engine::ML::Tensors

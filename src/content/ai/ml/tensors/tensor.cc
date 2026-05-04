@@ -68,9 +68,14 @@ Tensor Tensor::To(Device device) const {
     if (device_ == device) {
         return Clone();
     }
-    
-    // For now, CPU-GPU transfer not implemented
-    // In production, would use CUDA async copy
+
+    // CPU → GPU or GPU → CPU:
+    // Real CUDA transfer would use cudaMalloc + cudaMemcpyAsync.
+    // Without a CUDA runtime link the data stays in the Eigen matrix (CPU host
+    // memory) but we update the device tag so callers can track placement.
+    // Mark the copied tensor with the requested device; all compute ops
+    // will continue to use Eigen on CPU — CUDA kernels can be wired in here
+    // once libtorch / a CUDA context is available.
     Tensor result(*this);
     result.device_ = device;
     return result;
