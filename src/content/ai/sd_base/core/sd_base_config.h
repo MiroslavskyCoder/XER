@@ -18,6 +18,20 @@ struct SdBaseConfig {
     bool enable_cpu_fallback = true;
     bool prefer_cuda = true;
 
+    // Backend preferences in descending priority.
+    bool prefer_cudnn = true;
+    bool prefer_cutlass = true;
+    bool prefer_openvino = true;
+    bool prefer_onnx = true;
+    bool prefer_xnnpack = true;
+    bool prefer_eigen = true;
+    bool prefer_tensorflow = false;
+
+    // Pipeline feature toggles.
+    bool enable_sdxl = true;
+    bool enable_controlnet = true;
+    bool enable_vae = true;
+
     bool Validate(std::string* error) const;
 
     static SdBaseConfig FromPreset(SdQualityPreset preset);

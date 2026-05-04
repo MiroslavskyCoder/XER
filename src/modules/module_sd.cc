@@ -203,6 +203,25 @@ Engine::AI::SDBase::SdGenerationRequest ParseGenerationRequest(
 	if (GetObjectValue(isolate, context, options, "seed", nullptr, &seed) && seed->IsNumber()) {
 		request.seed = static_cast<uint64_t>(std::max<double>(0.0, seed.As<v8::Number>()->Value()));
 	}
+	request.enable_sdxl = GetObjectBool(isolate, context, options, "enableSdxl", "enable_sdxl", true);
+	request.enable_controlnet =
+		GetObjectBool(isolate, context, options, "enableControlNet", "enable_controlnet", true);
+	request.enable_vae_decode =
+		GetObjectBool(isolate, context, options, "enableVae", "enable_vae", true);
+	v8::Local<v8::Value> control_strength;
+	if (GetObjectValue(isolate, context, options, "controlNetStrength", "controlnet_strength", &control_strength) &&
+	    control_strength->IsNumber()) {
+		request.controlnet_strength = static_cast<float>(control_strength.As<v8::Number>()->Value());
+	}
+	v8::Local<v8::Value> depth_strength;
+	if (GetObjectValue(isolate, context, options, "depthStrength", "depth_strength", &depth_strength) &&
+	    depth_strength->IsNumber()) {
+		request.depth_strength = static_cast<float>(depth_strength.As<v8::Number>()->Value());
+	}
+	request.controlnet_hint =
+		GetObjectString(isolate, context, options, "controlHint", "control_hint", std::string());
+	request.backend_hint =
+		GetObjectString(isolate, context, options, "backend", "backend_hint", std::string());
 	return request;
 }
 

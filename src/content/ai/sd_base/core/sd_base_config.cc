@@ -23,6 +23,12 @@ bool SdBaseConfig::Validate(std::string* error) const {
         if (error) *error = "initial noise sigma must be > 0";
         return false;
     }
+    if (!enable_cpu_fallback &&
+        !prefer_cuda && !prefer_openvino && !prefer_onnx &&
+        !prefer_xnnpack && !prefer_eigen && !prefer_tensorflow) {
+        if (error) *error = "no SD backend path is enabled";
+        return false;
+    }
     return true;
 }
 
@@ -34,6 +40,8 @@ SdBaseConfig SdBaseConfig::FromPreset(SdQualityPreset preset) {
             cfg.max_steps = 40;
             cfg.text_embedding_dim = 384;
             cfg.eta = 0.2f;
+            cfg.enable_sdxl = false;
+            cfg.enable_controlnet = false;
             break;
         case SdQualityPreset::Balanced:
             cfg.default_steps = 30;
@@ -46,6 +54,9 @@ SdBaseConfig SdBaseConfig::FromPreset(SdQualityPreset preset) {
             cfg.max_steps = 160;
             cfg.text_embedding_dim = 1024;
             cfg.eta = 0.0f;
+            cfg.enable_sdxl = true;
+            cfg.enable_controlnet = true;
+            cfg.enable_vae = true;
             break;
     }
     return cfg;

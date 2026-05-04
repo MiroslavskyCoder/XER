@@ -16,10 +16,16 @@ enum class SdQualityPreset : uint8_t {
 
 struct SdRuntimeCapabilities {
     bool cuda_available = false;
+    bool cudnn_available = false;
+    bool cutlass_available = false;
+    bool openvino_available = false;
+    bool onnx_available = false;
+    bool tensorflow_available = false;
     bool opencv_available = false;
     bool ffmpeg_available = false;
     bool eigen_available = false;
     bool xnnpack_available = false;
+    std::string selected_backend;
 };
 
 struct SdGenerationRequest {
@@ -31,6 +37,17 @@ struct SdGenerationRequest {
     float guidance_scale = 7.5f;
     uint64_t seed = 0;
     SdQualityPreset preset = SdQualityPreset::Balanced;
+
+    // Feature toggles
+    bool enable_sdxl = true;
+    bool enable_controlnet = true;
+    bool enable_vae_decode = true;
+
+    // Conditioning and routing
+    float controlnet_strength = 0.05f;
+    float depth_strength = 0.10f;
+    std::string controlnet_hint;
+    std::string backend_hint;
 };
 
 struct SdGenerationResult {

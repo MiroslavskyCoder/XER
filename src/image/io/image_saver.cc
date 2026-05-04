@@ -4,8 +4,43 @@
 #include <filesystem>
 #include <fstream>
 #include <algorithm>
+#include <cctype>
 
 namespace image {
+
+namespace {
+
+int GuessBytesPerPixel(const std::string& pixel_format) {
+    std::string fmt = pixel_format;
+    std::transform(fmt.begin(), fmt.end(), fmt.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    if (fmt == "rgba" || fmt == "bgra" || fmt == "argb" || fmt == "abgr") return 4;
+    if (fmt == "rgb" || fmt == "bgr") return 3;
+    if (fmt == "gray" || fmt == "gray8" || fmt == "y") return 1;
+    return 0;
+}
+
+void EnsureFrameLineSizes(engine::bridge::ffmpeg::VideoFrameInfo* frame) {
+    if (frame == nullptr || !frame->line_sizes.empty()) return;
+    if (frame->width <= 0 || frame->height <= 0) return;
+
+    const int bpp = GuessBytesPerPixel(frame->pixel_format);
+    if (bpp > 0) {
+        frame->line_sizes = {frame->width * bpp};
+        return;
+    }
+
+    // Fallback for unknown formats: infer one-plane stride from payload size.
+    if (!frame->data.empty()) {
+        const size_t per_row = frame->data.size() / static_cast<size_t>(frame->height);
+        if (per_row > 0) {
+            frame->line_sizes = {static_cast<int>(per_row)};
+        }
+    }
+}
+
+}  // namespace
 
 bool ImageSaver::Save(const ImageBuffer& img, const std::string& path, int quality) {
     std::string ext = std::filesystem::path(path).extension().string();
@@ -32,8 +67,8 @@ bool ImageSaver::SavePng(const ImageBuffer& img, const std::string& path) {
     engine::bridge::ffmpeg::VideoFrameInfo fr;
     fr.width  = w; fr.height = h;
     fr.pixel_format = "rgba";
-    fr.line_sizes = {w * 4};
     fr.data.assign(img.Data(), img.Data() + img.DataSize());
+    EnsureFrameLineSizes(&fr);
 
     std::string err;
     if (!engine::bridge::ffmpeg::EncodeVideoFrames(p, {fr}, &err)) {
@@ -61,8 +96,8 @@ bool ImageSaver::SaveJpeg(const ImageBuffer& img, const std::string& path,
     engine::bridge::ffmpeg::VideoFrameInfo fr;
     fr.width=w; fr.height=h;
     fr.pixel_format="rgba";
-    fr.line_sizes = {w * 4};
     fr.data.assign(img.Data(), img.Data()+img.DataSize());
+    EnsureFrameLineSizes(&fr);
 
     std::string err;
     if (!engine::bridge::ffmpeg::EncodeVideoFrames(p, {fr}, &err)) {
