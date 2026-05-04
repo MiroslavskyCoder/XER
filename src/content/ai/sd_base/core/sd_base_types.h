@@ -14,6 +14,11 @@ enum class SdQualityPreset : uint8_t {
     High = 2,
 };
 
+enum class SdSchedulerType : uint8_t {
+    Euler = 0,
+    DDIM = 1,
+};
+
 struct SdRuntimeCapabilities {
     bool cuda_available = false;
     bool cudnn_available = false;
@@ -37,6 +42,7 @@ struct SdGenerationRequest {
     float guidance_scale = 7.5f;
     uint64_t seed = 0;
     SdQualityPreset preset = SdQualityPreset::Balanced;
+    SdSchedulerType scheduler = SdSchedulerType::Euler;
 
     // Feature toggles
     bool enable_sdxl = true;
@@ -48,6 +54,15 @@ struct SdGenerationRequest {
     float depth_strength = 0.10f;
     std::string controlnet_hint;
     std::string backend_hint;
+
+    // Optional per-request weight overrides.
+    std::string text_encoder_path;
+    std::string unet_path;
+    std::string vae_decoder_path;
+    std::string controlnet_path;
+    std::string sdxl_text_encoder_2_path;
+    std::string sdxl_refiner_unet_path;
+    bool strict_model_loading = false;
 };
 
 struct SdGenerationResult {

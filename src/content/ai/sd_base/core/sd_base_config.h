@@ -32,6 +32,17 @@ struct SdBaseConfig {
     bool enable_controlnet = true;
     bool enable_vae = true;
 
+    // Model weight locations.
+    std::string model_root = "models/sd_base";
+    std::string text_encoder_path = "models/sd_base/text_encoder.onnx";
+    std::string unet_path = "models/sd_base/unet.onnx";
+    std::string vae_decoder_path = "models/sd_base/vae_decoder.onnx";
+    std::string controlnet_path = "models/sd_base/controlnet.onnx";
+    std::string sdxl_text_encoder_2_path = "models/sd_base/sdxl_text_encoder_2.onnx";
+    std::string sdxl_refiner_unet_path = "models/sd_base/sdxl_refiner_unet.onnx";
+    bool strict_model_loading = false;
+    bool allow_stub_inference = true;
+
     bool Validate(std::string* error) const;
 
     static SdBaseConfig FromPreset(SdQualityPreset preset);

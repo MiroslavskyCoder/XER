@@ -203,11 +203,17 @@ Engine::AI::SDBase::SdGenerationRequest ParseGenerationRequest(
 	if (GetObjectValue(isolate, context, options, "seed", nullptr, &seed) && seed->IsNumber()) {
 		request.seed = static_cast<uint64_t>(std::max<double>(0.0, seed.As<v8::Number>()->Value()));
 	}
+	const std::string scheduler = GetObjectString(isolate, context, options, "scheduler", nullptr, "euler");
+	request.scheduler = (ToLowerCopy(scheduler) == "ddim")
+		? Engine::AI::SDBase::SdSchedulerType::DDIM
+		: Engine::AI::SDBase::SdSchedulerType::Euler;
 	request.enable_sdxl = GetObjectBool(isolate, context, options, "enableSdxl", "enable_sdxl", true);
 	request.enable_controlnet =
 		GetObjectBool(isolate, context, options, "enableControlNet", "enable_controlnet", true);
 	request.enable_vae_decode =
 		GetObjectBool(isolate, context, options, "enableVae", "enable_vae", true);
+	request.strict_model_loading =
+		GetObjectBool(isolate, context, options, "strictModelLoading", "strict_model_loading", false);
 	v8::Local<v8::Value> control_strength;
 	if (GetObjectValue(isolate, context, options, "controlNetStrength", "controlnet_strength", &control_strength) &&
 	    control_strength->IsNumber()) {
@@ -222,6 +228,24 @@ Engine::AI::SDBase::SdGenerationRequest ParseGenerationRequest(
 		GetObjectString(isolate, context, options, "controlHint", "control_hint", std::string());
 	request.backend_hint =
 		GetObjectString(isolate, context, options, "backend", "backend_hint", std::string());
+
+	v8::Local<v8::Value> model_weights_value;
+	if (GetObjectValue(isolate, context, options, "modelWeights", "model_weights", &model_weights_value) &&
+	    model_weights_value->IsObject()) {
+		v8::Local<v8::Object> mw = model_weights_value.As<v8::Object>();
+		request.text_encoder_path =
+			GetObjectString(isolate, context, mw, "textEncoder", "text_encoder", std::string());
+		request.unet_path =
+			GetObjectString(isolate, context, mw, "unet", nullptr, std::string());
+		request.vae_decoder_path =
+			GetObjectString(isolate, context, mw, "vaeDecoder", "vae_decoder", std::string());
+		request.controlnet_path =
+			GetObjectString(isolate, context, mw, "controlNet", "controlnet", std::string());
+		request.sdxl_text_encoder_2_path =
+			GetObjectString(isolate, context, mw, "sdxlTextEncoder2", "sdxl_text_encoder_2", std::string());
+		request.sdxl_refiner_unet_path =
+			GetObjectString(isolate, context, mw, "sdxlRefinerUnet", "sdxl_refiner_unet", std::string());
+	}
 	return request;
 }
 

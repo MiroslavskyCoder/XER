@@ -1,20 +1,20 @@
 #include "content/ai/sd_base/generate/sd_pipeline.h"
 
+#include "content/ai/sd_base/backend/sd_model_runtime.h"
 #include "content/ai/models_builder/utility/mb_logger.h"
 #include "content/ai/ml/utils/ml_random_generator.h"
-#include "content/ai/sd_base/controlnet/sd_controlnet_router.h"
-#include "content/ai/sd_base/depth/sd_depth_conditioner.h"
+#include "content/ai/sd_base/controlnet/sd_controlnet_branch.h"
 #include "content/ai/sd_base/fast/sd_fast_path.h"
 #include "content/ai/sd_base/flow/sd_flow_context.h"
 #include "content/ai/sd_base/gpu/sd_gpu_dispatch.h"
-#include "content/ai/sd_base/layer/sd_text_encoder_stub.h"
 #include "content/ai/sd_base/seed/sd_seed_generator.h"
 #include "content/ai/sd_base/tensor/sd_latent_tensor.h"
 #include "content/ai/sd_base/vae/sd_vae_decoder.h"
-#include "content/ai/sd_base/xl/sd_xl_prompt_expander.h"
+#include "content/ai/sd_base/xl/sd_xl_branch.h"
 
 #include <algorithm>
 #include <cmath>
+#include <vector>
 
 namespace Engine::AI::SDBase {
 
@@ -48,64 +48,77 @@ SdGenerationResult SdPipeline::Generate(const SdGenerationRequest& request) {
     req.enable_controlnet = req.enable_controlnet && config_.enable_controlnet;
     req.enable_vae_decode = req.enable_vae_decode && config_.enable_vae;
 
-    SdXlPromptExpander prompt_expander;
-    const std::string expanded_prompt = req.enable_sdxl ? prompt_expander.Expand(req.prompt) : req.prompt;
+    SdModelRuntime runtime;
+    std::string load_error;
+    if (!runtime.Load(config_, req, caps, backend, &load_error)) {
+        result.error = load_error;
+        return result;
+    }
+
+    SdXlBranch sdxl_branch;
+    const std::string expanded_prompt =
+        sdxl_branch.BuildPrompt(req, backend, runtime.loaded().sdxl_branch_loaded);
 
     const uint64_t seed = SdSeedGenerator::FromPrompt(expanded_prompt, req.negative_prompt, req.seed);
     Engine::ML::Utils::MlRandomGenerator rng(seed);
 
-    scheduler_.BuildLinearSchedule(req.steps);
+    scheduler_.BuildSchedule(req.scheduler, req.steps);
 
-    SdTextEncoderStub text_encoder;
-    auto text_embedding = text_encoder.Encode(expanded_prompt, 77, config_.text_embedding_dim);
-    (void)text_embedding;
+    auto text_embedding = runtime.EncodeText(expanded_prompt, config_.text_embedding_dim);
 
     auto latent = SdLatentTensor::Make(req.width, req.height);
     SdLatentTensor::FillGaussian(latent, rng, config_.init_noise_sigma);
 
-    SdControlNetRouter controlnet;
-    SdDepthConditioner depth;
+    SdControlNetBranch controlnet_branch;
 
     float* latent_data = static_cast<float*>(latent.GetData());
-    const uint32_t unet_substeps = req.enable_sdxl ? 4U : 2U;
-    const uint32_t refine_substeps = req.enable_vae_decode ? 2U : 1U;
+    std::vector<float> predicted_noise(latent.GetElementCount(), 0.0f);
     for (uint32_t t = 0; t < req.steps; ++t) {
         const float sigma = scheduler_.SigmaAt(t);
-        const float beta = scheduler_.BetaAt(t);
         const float guidance = std::clamp(req.guidance_scale, 0.0f, 30.0f);
 
         const uint64_t n = latent.GetElementCount();
-        for (uint32_t s = 0; s < unet_substeps; ++s) {
-            const float s_bias = 1.0f + 0.07f * static_cast<float>(s + 1);
-            for (uint64_t i = 0; i < n; ++i) {
-                const float v = latent_data[i];
-                const float score = v + 0.01f * guidance * sigma * s_bias;
-                latent_data[i] = v - beta * score;
-            }
-        }
+        std::copy(latent_data, latent_data + n, predicted_noise.begin());
 
-        for (uint32_t r = 0; r < refine_substeps; ++r) {
-            const float damp = 0.9975f - 0.0002f * static_cast<float>(r);
-            for (uint64_t i = 0; i < n; ++i) {
-                latent_data[i] = std::tanh(latent_data[i]) * damp;
-            }
-        }
+        runtime.PredictNoise(text_embedding,
+                             predicted_noise.data(),
+                             n,
+                             t,
+                             sigma,
+                             guidance * sdxl_branch.RefinerGain(backend, runtime.loaded().sdxl_branch_loaded));
+
+        scheduler_.ApplyStep(latent_data,
+                             predicted_noise.data(),
+                             n,
+                             t,
+                             config_.eta);
 
         if (req.enable_controlnet) {
-            controlnet.ApplyHintScale(latent, req.controlnet_strength);
-            depth.ApplyDepthPrior(latent, req.depth_strength);
+            controlnet_branch.Apply(latent,
+                                    req,
+                                    backend,
+                                    runtime.loaded().controlnet_loaded);
         }
     }
 
     SdVaeDecoder vae_decoder;
-    auto image = vae_decoder.Decode(latent, req.width, req.height, req.enable_vae_decode);
+    auto image = vae_decoder.Decode(latent,
+                                    req.width,
+                                    req.height,
+                                    req.enable_vae_decode && runtime.loaded().vae_loaded);
 
     result.ok = true;
     result.latent = std::move(latent);
     result.image = std::move(image);
     result.metadata["seed"] = std::to_string(seed);
     result.metadata["steps"] = std::to_string(req.steps);
+    result.metadata["scheduler"] = req.scheduler == SdSchedulerType::DDIM ? "ddim" : "euler";
     result.metadata["backend"] = caps.selected_backend;
+    result.metadata["weights_loaded_text"] = runtime.loaded().text_encoder_loaded ? "true" : "false";
+    result.metadata["weights_loaded_unet"] = runtime.loaded().unet_loaded ? "true" : "false";
+    result.metadata["weights_loaded_vae"] = runtime.loaded().vae_loaded ? "true" : "false";
+    result.metadata["weights_loaded_controlnet"] = runtime.loaded().controlnet_loaded ? "true" : "false";
+    result.metadata["weights_loaded_sdxl"] = runtime.loaded().sdxl_branch_loaded ? "true" : "false";
     result.metadata["sdxl"] = req.enable_sdxl ? "true" : "false";
     result.metadata["controlnet"] = req.enable_controlnet ? "true" : "false";
     result.metadata["vae"] = req.enable_vae_decode ? "true" : "false";

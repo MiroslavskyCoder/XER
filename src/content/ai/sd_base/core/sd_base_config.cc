@@ -1,5 +1,7 @@
 #include "sd_base_config.h"
 
+#include <filesystem>
+
 namespace Engine::AI::SDBase {
 
 bool SdBaseConfig::Validate(std::string* error) const {
@@ -29,6 +31,19 @@ bool SdBaseConfig::Validate(std::string* error) const {
         if (error) *error = "no SD backend path is enabled";
         return false;
     }
+    if (strict_model_loading) {
+        const auto exists = [](const std::string& p) {
+            return !p.empty() && std::filesystem::exists(std::filesystem::path(p));
+        };
+        if (!exists(text_encoder_path) || !exists(unet_path) || !exists(vae_decoder_path)) {
+            if (error) *error = "strict_model_loading requires existing text_encoder/unet/vae paths";
+            return false;
+        }
+    }
+    if (!allow_stub_inference && !strict_model_loading) {
+        if (error) *error = "allow_stub_inference=false requires strict_model_loading=true";
+        return false;
+    }
     return true;
 }
 
@@ -42,6 +57,7 @@ SdBaseConfig SdBaseConfig::FromPreset(SdQualityPreset preset) {
             cfg.eta = 0.2f;
             cfg.enable_sdxl = false;
             cfg.enable_controlnet = false;
+            cfg.allow_stub_inference = true;
             break;
         case SdQualityPreset::Balanced:
             cfg.default_steps = 30;
@@ -57,6 +73,7 @@ SdBaseConfig SdBaseConfig::FromPreset(SdQualityPreset preset) {
             cfg.enable_sdxl = true;
             cfg.enable_controlnet = true;
             cfg.enable_vae = true;
+                cfg.allow_stub_inference = false;
             break;
     }
     return cfg;
