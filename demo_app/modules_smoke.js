@@ -13,6 +13,7 @@ ImportModule("ANGLE");
 ImportModule("VTK");
 ImportModule("Skia");
 ImportModule("FFmpeg");
+ImportModule("Image");
 
 console.log(JSON.stringify({
 	containerOk: typeof Container === "object" && Container !== null,
@@ -30,6 +31,7 @@ console.log(JSON.stringify({
 	vtkOk: typeof VTK === "object" && VTK !== null,
 	skiaOk: typeof Skia === "object" && Skia !== null,
 	ffmpegOk: typeof FFmpeg === "object" && FFmpeg !== null,
+	imageOk: typeof Image === "object" && Image !== null,
 	hasAudioInspect: Audio && typeof Audio.inspect === "function",
 	hasAudioEffects: Audio && typeof Audio.applyEffect === "function" && typeof Audio.availableEffects === "function",
 	hasAudioBatch: Audio && typeof Audio.applyBatch === "function",
@@ -42,5 +44,6 @@ console.log(JSON.stringify({
 	hasIOAsyncCopy: IOAsync && typeof IOAsync.copyBinary === "function",
 	hasCompileAndRun: RuntimeLive && typeof RuntimeLive.compileAndRun === "function",
 	hasFfmpegProbe: FFmpeg && typeof FFmpeg.probeMedia === "function",
-	hasSkiaExports: Skia && typeof Skia.exportedFunctions === "object"
+	hasSkiaExports: Skia && typeof Skia.exportedFunctions === "object",
+	hasImageSave: Image && typeof Image.save === "function" && typeof Image.saveRgba === "function"
 }));

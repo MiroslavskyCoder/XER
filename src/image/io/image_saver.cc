@@ -32,6 +32,7 @@ bool ImageSaver::SavePng(const ImageBuffer& img, const std::string& path) {
     engine::bridge::ffmpeg::VideoFrameInfo fr;
     fr.width  = w; fr.height = h;
     fr.pixel_format = "rgba";
+    fr.line_sizes = {w * 4};
     fr.data.assign(img.Data(), img.Data() + img.DataSize());
 
     std::string err;
@@ -60,6 +61,7 @@ bool ImageSaver::SaveJpeg(const ImageBuffer& img, const std::string& path,
     engine::bridge::ffmpeg::VideoFrameInfo fr;
     fr.width=w; fr.height=h;
     fr.pixel_format="rgba";
+    fr.line_sizes = {w * 4};
     fr.data.assign(img.Data(), img.Data()+img.DataSize());
 
     std::string err;

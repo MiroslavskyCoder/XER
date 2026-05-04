@@ -76,5 +76,9 @@ bool BuildSdModule(v8::Isolate* isolate,
 			v8::Local<v8::Context> context,
 			v8::Local<v8::Object>* module_out,
 			std::string* error_out);
+bool BuildImageModule(v8::Isolate* isolate,
+			v8::Local<v8::Context> context,
+			v8::Local<v8::Object>* module_out,
+			std::string* error_out);
 
 }  // namespace modules::detail

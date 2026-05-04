@@ -82,6 +82,9 @@ std::string ResolveCanonicalModuleName(const std::string& module_name) {
 	if (normalized == "sd" || normalized == "stablediffusion") {
 		return "SD";
 	}
+	if (normalized == "image" || normalized == "img") {
+		return "Image";
+	}
 	return std::string();
 }
 
@@ -105,6 +108,7 @@ std::vector<std::string> ListModules() {
 		"FFmpeg", 
 		"AI",
 		"SD",
+		"Image",
 	};
 }
 
@@ -158,6 +162,8 @@ bool ImportModule(v8::Isolate* isolate,
 		ok = detail::BuildAiModule(isolate, context, &module, error_out);
 	} else if (canonical_name == "SD") {
 		ok = detail::BuildSdModule(isolate, context, &module, error_out);
+	} else if (canonical_name == "Image") {
+		ok = detail::BuildImageModule(isolate, context, &module, error_out);
 	}
 
 	if (!ok) {
