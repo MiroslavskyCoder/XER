@@ -99,7 +99,8 @@ jobs:
           cmake --preset default \
             -DLLVM_DIR="${LLVM_DIR:-}" \
             -DClang_DIR="${Clang_DIR:-}" \
-            -DCUDAToolkit_ROOT="${CUDAToolkit_ROOT}"
+            -DCUDAToolkit_ROOT="${CUDAToolkit_ROOT}" \
+            -DCMAKE_CUDA_ARCHITECTURES="75;86"
 
       - name: Build
         run: |
