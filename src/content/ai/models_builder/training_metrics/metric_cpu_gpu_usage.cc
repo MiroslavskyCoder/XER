@@ -98,8 +98,6 @@ double MemorySelector(const ResourceUsageSample& sample) {
 	return sample.memory_mb;
 }
 
-}  // namespace
-
 void CpuGpuUsageMetric::Reset() {
 	samples_.clear();
 }

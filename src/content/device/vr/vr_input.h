@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 #include "content/device/vr/vr_device.h"
+#include "content/device/vr/vr_session.h"
 #include <functional>
 
 namespace device::vr {
