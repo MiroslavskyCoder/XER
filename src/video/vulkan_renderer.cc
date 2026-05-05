@@ -2,6 +2,7 @@
 #include "wrapper/skia/skia_engine_bridge.h"
 #include "flux/core/logger.h"
 #include <cstring>
+#include <dlfcn.h>
 
 namespace video {
 
@@ -13,14 +14,32 @@ static flux::core::Logger& Log() {
 VulkanRenderer::~VulkanRenderer() { Shutdown(); }
 
 bool VulkanRenderer::Initialize(const std::string& /*device_hint*/) {
-    // Check Skia availability (Skia uses Vulkan backend internally when available)
+    // Probe libvulkan at runtime without a hard link dependency.
+    void* lib = dlopen("libvulkan.so.1", RTLD_LAZY | RTLD_LOCAL);
+    bool vulkan_available = false;
+    if (lib) {
+        using PfnVkEnumerateInstanceVersion = uint32_t (*)(uint32_t*);
+        auto pfn = reinterpret_cast<PfnVkEnumerateInstanceVersion>(
+            dlsym(lib, "vkEnumerateInstanceVersion"));
+        if (pfn) {
+            uint32_t ver = 0;
+            pfn(&ver);  // success means Vulkan 1.1+ is available
+            vulkan_available = (ver > 0);
+        } else {
+            // vkEnumerateInstanceVersion missing → Vulkan 1.0 only, still usable
+            vulkan_available = true;
+        }
+        dlclose(lib);
+    }
+
     bool skia_ok = engine::bridge::skia::IsAvailable();
     Log().Info("VulkanRenderer",
-               std::string("Initializing Vulkan renderer. Skia: ") +
-               (skia_ok ? "available" : "not available") +
+               std::string("Initializing Vulkan renderer. Vulkan runtime: ") +
+               (vulkan_available ? "available" : "not available") +
+               " | Skia: " + (skia_ok ? "available" : "not available") +
                " | " + engine::bridge::skia::Summary());
-    ready_ = true;  // VkInstance / VkDevice would be created here
-    return true;
+    ready_ = vulkan_available;
+    return ready_;
 }
 
 void VulkanRenderer::Shutdown() {

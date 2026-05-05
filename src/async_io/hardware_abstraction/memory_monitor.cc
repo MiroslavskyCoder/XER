@@ -4,6 +4,7 @@
     #include <windows.h>
 #elif defined(__linux__)
     #include <unistd.h>
+    #include <dlfcn.h>
 #endif
 
 namespace AsyncIO::IO::Hardware {
@@ -34,7 +35,52 @@ MemoryStats MemoryMonitor::GetMemoryStats() const {
 
 MemoryStats MemoryMonitor::GetGPUMemoryStats(int device_id) const {
     MemoryStats stats = {0, 0, 0, 0.0, 0};
-    // GPU specific implementation would go here
+
+    // dlopen NVML at runtime to avoid a hard dependency on libnvidia-ml.
+    void* lib = dlopen("libnvidia-ml.so.1", RTLD_LAZY | RTLD_LOCAL);
+    if (!lib) return stats;
+
+    using nvmlReturn_t = int;
+    using nvmlDevice_t = void*;
+    constexpr nvmlReturn_t kNvmlSuccess = 0;
+
+    struct NvmlMemInfo { unsigned long long total, free, used; };
+    using PfnNvmlInit        = nvmlReturn_t (*)();
+    using PfnNvmlHandle      = nvmlReturn_t (*)(unsigned int, nvmlDevice_t*);
+    using PfnNvmlMemInfo     = nvmlReturn_t (*)(nvmlDevice_t, NvmlMemInfo*);
+    using PfnNvmlShutdown    = nvmlReturn_t (*)();
+
+    auto pfnInit     = reinterpret_cast<PfnNvmlInit>    (dlsym(lib, "nvmlInit_v2"));
+    auto pfnHandle   = reinterpret_cast<PfnNvmlHandle>  (dlsym(lib, "nvmlDeviceGetHandleByIndex_v2"));
+    auto pfnMemInfo  = reinterpret_cast<PfnNvmlMemInfo> (dlsym(lib, "nvmlDeviceGetMemoryInfo"));
+    auto pfnShutdown = reinterpret_cast<PfnNvmlShutdown>(dlsym(lib, "nvmlShutdown"));
+
+    if (!pfnInit || !pfnHandle || !pfnMemInfo) {
+        dlclose(lib);
+        return stats;
+    }
+
+    if (pfnInit() != kNvmlSuccess) {
+        dlclose(lib);
+        return stats;
+    }
+
+    nvmlDevice_t dev = nullptr;
+    if (pfnHandle(static_cast<unsigned int>(device_id), &dev) == kNvmlSuccess && dev) {
+        NvmlMemInfo info{};
+        if (pfnMemInfo(dev, &info) == kNvmlSuccess) {
+            stats.total_mb = info.total / (1024ULL * 1024ULL);
+            stats.free_mb  = info.free  / (1024ULL * 1024ULL);
+            stats.used_mb  = info.used  / (1024ULL * 1024ULL);
+            stats.usage_percent = (info.total > 0)
+                ? static_cast<double>(info.used) / static_cast<double>(info.total)
+                : 0.0;
+            stats.peak_usage_mb = stats.used_mb;
+        }
+    }
+
+    if (pfnShutdown) pfnShutdown();
+    dlclose(lib);
     return stats;
 }
 

@@ -2,6 +2,8 @@
 #include "wrapper/ffmpeg/ffmpeg_engine_bridge.h"
 #include "flux/core/logger.h"
 #include <cstring>
+#include <cstdio>
+#include <unistd.h>
 
 namespace image {
 
@@ -39,10 +41,29 @@ std::shared_ptr<ImageBuffer> RawDecoder::Decode(const std::string& path,
     return Rgb24ToBuffer(fr.data.data(), fr.width, fr.height);
 }
 
-std::shared_ptr<ImageBuffer> RawDecoder::DecodeMemory(const uint8_t*, std::size_t,
-                                                        ImageDescriptor&) {
-    // LibRaw memory decode would go here; not bridged yet
-    return nullptr;
+std::shared_ptr<ImageBuffer> RawDecoder::DecodeMemory(const uint8_t* data, std::size_t len,
+                                                        ImageDescriptor& desc) {
+    // Write to a temp file so the FFmpeg-backed Decode() path can handle it.
+    char tmpl[] = "/tmp/xer_raw_XXXXXX.raw";
+    const int fd = mkstemps(tmpl, 4);   // suffix length = 4 (".raw")
+    if (fd < 0) return nullptr;
+
+    bool ok = true;
+    std::size_t written = 0;
+    while (written < len) {
+        const ssize_t w = write(fd, data + written,
+                                static_cast<size_t>(len - written));
+        if (w <= 0) { ok = false; break; }
+        written += static_cast<std::size_t>(w);
+    }
+    close(fd);
+
+    std::shared_ptr<ImageBuffer> buf;
+    if (ok) {
+        buf = Decode(std::string(tmpl), desc);
+    }
+    unlink(tmpl);
+    return buf;
 }
 
 }  // namespace image
