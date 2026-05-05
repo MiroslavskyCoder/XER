@@ -1,7 +1,7 @@
 #include "io_gpu_usage_logger.h"
-  
-#include <cuda_runtime.h> 
 
+#include <dlfcn.h>
+  
 namespace AsyncIO::IO::LogDebug {
 
 GPUUsageLogger::GPUUsageLogger()
@@ -12,11 +12,22 @@ GPUUsageLogger::~GPUUsageLogger() {
 }
 
 bool GPUUsageLogger::Initialize() { 
-    int device_count = 0;
-    if (cudaGetDeviceCount(&device_count) == cudaSuccess && device_count > 0) {
-        initialized_ = true;
-        return true;
-    } 
+    // Try to load NVML dynamically; if not present, mark as uninitialized.
+    void* lib = dlopen("libnvidia-ml.so.1", RTLD_LAZY | RTLD_LOCAL);
+    if (!lib) {
+        initialized_ = false;
+        return false;
+    }
+    using PfnInit = int (*)();
+    auto pfnInit = reinterpret_cast<PfnInit>(dlsym(lib, "nvmlInit_v2"));
+    initialized_ = (pfnInit && pfnInit() == 0);
+    if (initialized_) {
+        using PfnShutdown = int (*)();
+        if (auto pfnShutdown = reinterpret_cast<PfnShutdown>(dlsym(lib, "nvmlShutdown")))
+            pfnShutdown();
+    }
+    dlclose(lib);
+    return initialized_;
 }
 
 bool GPUUsageLogger::IsInitialized() const {
@@ -116,17 +127,76 @@ void GPUUsageLogger::ClearSnapshots() {
     snapshots_.clear();
 }
 
-bool GPUUsageLogger::QueryGPUUsage(int device_id, GPUUsageSnapshot& snapshot) { 
+bool GPUUsageLogger::QueryGPUUsage(int device_id, GPUUsageSnapshot& snapshot) {
     snapshot.device_id = device_id;
-    snapshot.utilization_percent = 0.0;  // Would use NVML in production
+    snapshot.timestamp_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count();
+
+    // Default zero values in case NVML is unavailable.
+    snapshot.utilization_percent = 0.0;
     snapshot.memory_used_mb = 0.0;
     snapshot.memory_free_mb = 0.0;
     snapshot.temperature_celsius = 0.0;
     snapshot.power_draw_watts = 0.0;
-    snapshot.timestamp_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::steady_clock::now().time_since_epoch()).count();
-    
-    return true; 
+
+    void* lib = dlopen("libnvidia-ml.so.1", RTLD_LAZY | RTLD_LOCAL);
+    if (!lib) return true;  // return true with zeros (non-NVIDIA machine)
+
+    using nvmlReturn_t = int;
+    using nvmlDevice_t = void*;
+    constexpr nvmlReturn_t kOk = 0;
+
+    struct NvmlUtilization { unsigned int gpu, memory; };
+    struct NvmlMemInfo     { unsigned long long total, free, used; };
+
+    using PfnInit     = nvmlReturn_t (*)();
+    using PfnHandle   = nvmlReturn_t (*)(unsigned int, nvmlDevice_t*);
+    using PfnUtil     = nvmlReturn_t (*)(nvmlDevice_t, NvmlUtilization*);
+    using PfnMem      = nvmlReturn_t (*)(nvmlDevice_t, NvmlMemInfo*);
+    using PfnTemp     = nvmlReturn_t (*)(nvmlDevice_t, unsigned int, unsigned int*);
+    using PfnPower    = nvmlReturn_t (*)(nvmlDevice_t, unsigned int*);
+    using PfnShutdown = nvmlReturn_t (*)();
+
+    auto pfnInit     = reinterpret_cast<PfnInit>    (dlsym(lib, "nvmlInit_v2"));
+    auto pfnHandle   = reinterpret_cast<PfnHandle>  (dlsym(lib, "nvmlDeviceGetHandleByIndex_v2"));
+    auto pfnUtil     = reinterpret_cast<PfnUtil>    (dlsym(lib, "nvmlDeviceGetUtilizationRates"));
+    auto pfnMem      = reinterpret_cast<PfnMem>     (dlsym(lib, "nvmlDeviceGetMemoryInfo"));
+    auto pfnTemp     = reinterpret_cast<PfnTemp>    (dlsym(lib, "nvmlDeviceGetTemperature"));
+    auto pfnPower    = reinterpret_cast<PfnPower>   (dlsym(lib, "nvmlDeviceGetPowerUsage"));
+    auto pfnShutdown = reinterpret_cast<PfnShutdown>(dlsym(lib, "nvmlShutdown"));
+
+    bool ok = false;
+    if (pfnInit && pfnInit() == kOk) {
+        nvmlDevice_t dev = nullptr;
+        if (pfnHandle && pfnHandle(static_cast<unsigned int>(device_id), &dev) == kOk && dev) {
+            ok = true;
+            if (pfnUtil) {
+                NvmlUtilization u{};
+                if (pfnUtil(dev, &u) == kOk)
+                    snapshot.utilization_percent = static_cast<double>(u.gpu);
+            }
+            if (pfnMem) {
+                NvmlMemInfo m{};
+                if (pfnMem(dev, &m) == kOk) {
+                    snapshot.memory_used_mb = static_cast<double>(m.used) / (1024.0 * 1024.0);
+                    snapshot.memory_free_mb = static_cast<double>(m.free) / (1024.0 * 1024.0);
+                }
+            }
+            if (pfnTemp) {
+                unsigned int temp = 0;
+                if (pfnTemp(dev, 0 /* NVML_TEMPERATURE_GPU */, &temp) == kOk)
+                    snapshot.temperature_celsius = static_cast<double>(temp);
+            }
+            if (pfnPower) {
+                unsigned int mw = 0;
+                if (pfnPower(dev, &mw) == kOk)
+                    snapshot.power_draw_watts = static_cast<double>(mw) / 1000.0;
+            }
+        }
+        if (pfnShutdown) pfnShutdown();
+    }
+    dlclose(lib);
+    return ok || true;  // always succeed; caller can use zeros for missing data
 }
 
 }  // namespace AsyncIO::IO::LogDebug

@@ -85,6 +85,9 @@ std::string ResolveCanonicalModuleName(const std::string& module_name) {
 	if (normalized == "image" || normalized == "img") {
 		return "Image";
 	}
+	if (normalized == "device") {
+		return "Device";
+	}
 	return std::string();
 }
 
@@ -109,6 +112,7 @@ std::vector<std::string> ListModules() {
 		"AI",
 		"SD",
 		"Image",
+		"Device",
 	};
 }
 
@@ -164,6 +168,8 @@ bool ImportModule(v8::Isolate* isolate,
 		ok = detail::BuildSdModule(isolate, context, &module, error_out);
 	} else if (canonical_name == "Image") {
 		ok = detail::BuildImageModule(isolate, context, &module, error_out);
+	} else if (canonical_name == "Device") {
+		ok = detail::BuildDeviceModule(isolate, context, &module, error_out);
 	}
 
 	if (!ok) {

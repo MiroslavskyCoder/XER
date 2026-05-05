@@ -48,6 +48,10 @@ bool BuildRuntimeLiveModule(v8::Isolate* isolate,
 			    v8::Local<v8::Context> context,
 			    v8::Local<v8::Object>* module_out,
 			    std::string* error_out); 
+bool BuildDeviceModule(v8::Isolate* isolate,
+		       v8::Local<v8::Context> context,
+		       v8::Local<v8::Object>* module_out,
+		       std::string* error_out);
 bool BuildOpenCvModule(v8::Isolate* isolate,
 			   v8::Local<v8::Context> context,
 			   v8::Local<v8::Object>* module_out,
