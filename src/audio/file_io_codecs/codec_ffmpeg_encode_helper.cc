@@ -80,7 +80,27 @@ bool EncodeMonoAudioBufferWithFfmpeg(
 	const std::string& codec_name,
 	std::vector<uint8_t>* encoded_bytes,
 	std::string* error_out) {
-	if (input == nullptr || frames == 0 || sample_rate <= 0 || encoded_bytes == nullptr) {
+	return EncodeInterleavedAudioBufferWithFfmpeg(
+		input,
+		frames,
+		sample_rate,
+		1,
+		extension,
+		codec_name,
+		encoded_bytes,
+		error_out);
+}
+
+bool EncodeInterleavedAudioBufferWithFfmpeg(
+	const float* input,
+	size_t frames,
+	int sample_rate,
+	int channels,
+	const std::string& extension,
+	const std::string& codec_name,
+	std::vector<uint8_t>* encoded_bytes,
+	std::string* error_out) {
+	if (input == nullptr || frames == 0 || sample_rate <= 0 || channels <= 0 || encoded_bytes == nullptr) {
 		if (error_out != nullptr) {
 			*error_out = "invalid FFmpeg encode helper request";
 		}
@@ -96,11 +116,11 @@ bool EncodeMonoAudioBufferWithFfmpeg(
 	engine::bridge::ffmpeg::AudioFrameInfo frame;
 	frame.stream_index = 0;
 	frame.sample_rate = sample_rate;
-	frame.channels = 1;
+	frame.channels = channels;
 	frame.sample_count = static_cast<int>(frames);
 	frame.planar = false;
 	frame.sample_format = "flt";
-	frame.data.resize(frames * sizeof(float));
+	frame.data.resize(frames * static_cast<size_t>(channels) * sizeof(float));
 	std::memcpy(frame.data.data(), input, frame.data.size());
 
 	const TempFileGuard temp_path(CreateTempPath(extension));
@@ -108,9 +128,9 @@ bool EncodeMonoAudioBufferWithFfmpeg(
 	params.output_path = temp_path.path().string();
 	params.codec_name = codec_name;
 	params.sample_rate = sample_rate;
-	params.channels = 1;
+	params.channels = channels;
 	params.sample_format = "fltp";
-	params.bit_rate = codec_name == "aac" ? 192000 : 160000;
+	params.bit_rate = codec_name == "aac" ? 192000 : 192000;
 
 	std::string encode_error;
 	if (!engine::bridge::ffmpeg::EncodeAudioFrames(params, std::vector<engine::bridge::ffmpeg::AudioFrameInfo>{std::move(frame)}, &encode_error)) {

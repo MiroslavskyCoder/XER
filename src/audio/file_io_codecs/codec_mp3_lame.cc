@@ -1,6 +1,7 @@
 #include "codec_mp3_lame.h"
 
 #include "codec_ffmpeg_decode_helper.h"
+#include "codec_ffmpeg_encode_helper.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -76,10 +77,13 @@ bool Mp3LameCodec::EncodeInterleaved(const float* input, size_t frames, int samp
     out.resize(static_cast<std::size_t>(encoded + flushed));
     return !out.empty();
 #else
-    (void)input;
-    (void)frames;
-	(void)sample_rate;
-	(void)channels;
+    std::string error;
+    if (detail::EncodeInterleavedAudioBufferWithFfmpeg(input, frames, sample_rate, channels, ".mp3", "libmp3lame", &out, &error)) {
+        return true;
+    }
+    if (detail::EncodeInterleavedAudioBufferWithFfmpeg(input, frames, sample_rate, channels, ".mp3", "mp3", &out, &error)) {
+        return true;
+    }
     out.clear();
     return false;
 #endif

@@ -535,7 +535,7 @@ bool EncodeMp3Bytes(
 	const size_t frame_count = samples.size() / static_cast<size_t>(channels);
 	if (!codec.EncodeInterleaved(samples.data(), frame_count, sample_rate, channels, *encoded_out)) {
 		if (error_out != nullptr) {
-			*error_out = "failed to encode processed audio as MP3; build XER with LAME headers enabled";
+			*error_out = "failed to encode processed audio as MP3; enable LAME or FFmpeg MP3 encoding";
 		}
 		return false;
 	}

@@ -104,7 +104,7 @@ bool ReadFilePrefix(
 		}
 		return false;
 	}
-	bytes_out->assign(prefix.begin(), prefix.begin() + bytes_read);
+	bytes_out->assign(prefix.begin(), prefix.begin() + static_cast<std::ptrdiff_t>(bytes_read));
 	return true;
 }
 
