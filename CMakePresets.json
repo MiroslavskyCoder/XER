@@ -15,7 +15,8 @@
         "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
         "ENABLE_CUDA": "OFF",
-        "ENABLE_CUDNN": "OFF"
+        "ENABLE_CUDNN": "OFF",
+        "ENABLE_AI": "OFF"
       }
     },
     {
@@ -25,7 +26,8 @@
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "cacheVariables": {
         "ENABLE_CUDA": "ON",
-        "ENABLE_CUDNN": "ON"
+        "ENABLE_CUDNN": "ON",
+        "ENABLE_AI": "ON"
       }
     }
   ],

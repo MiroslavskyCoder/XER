@@ -1,5 +1,8 @@
 #include "cuda_renderer.h"
+
+#if ENGINE_HAS_CUDA_BRIDGE
 #include "wrapper/cuda/cuda_engine_bridge.h"
+#endif
 #include "wrapper/skia/skia_engine_bridge.h"
 #include "flux/core/logger.h"
 #include <cstring>
@@ -14,6 +17,7 @@ static flux::core::Logger& Log() {
 CudaRenderer::~CudaRenderer() { Shutdown(); }
 
 bool CudaRenderer::Initialize(const std::string& device_hint) {
+#if ENGINE_HAS_CUDA_BRIDGE
     if (!engine::bridge::cuda::IsAvailable()) {
         Log().Warning("CudaRenderer", "CUDA not available: " +
                       engine::bridge::cuda::Summary());
@@ -23,6 +27,10 @@ bool CudaRenderer::Initialize(const std::string& device_hint) {
     ready_ = true;
     Log().Info("CudaRenderer", "Initialized. " + engine::bridge::cuda::Summary());
     return true;
+#else
+    Log().Warning("CudaRenderer", "CUDA bridge disabled by ENABLE_CUDA=OFF");
+    return false;
+#endif
 }
 
 void CudaRenderer::Shutdown() {

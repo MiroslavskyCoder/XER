@@ -105,6 +105,14 @@ bool WriteWaveFile(
 	int channels,
 	std::string* error_out);
 
+bool WriteMp3File(
+	const std::filesystem::path& path,
+	const std::vector<float>& samples,
+	int sample_rate,
+	int channels,
+	std::vector<std::uint8_t>* encoded_out,
+	std::string* error_out);
+
 struct EffectArtifact {
 	std::string effect_name;
 	std::string effect_slug;

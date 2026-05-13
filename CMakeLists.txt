@@ -17,6 +17,7 @@ endfunction()
 
 xer_option_from_env(ENABLE_CUDA OFF "Enable CUDA language, CUDA sources, and CUDA bridge targets")
 xer_option_from_env(ENABLE_CUDNN OFF "Enable cuDNN sources and bridge targets")
+xer_option_from_env(ENABLE_AI OFF "Enable AI and model-builder sources")
 
 if(ENABLE_CUDNN AND NOT ENABLE_CUDA)
     message(FATAL_ERROR "ENABLE_CUDNN=ON requires ENABLE_CUDA=ON")

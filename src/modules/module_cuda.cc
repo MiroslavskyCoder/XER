@@ -1,7 +1,9 @@
 #include "modules/module_bridge_common.h"
 #include "modules/module_builders.h"
 
+#if ENGINE_HAS_CUDA_BRIDGE
 #include "wrapper/cuda/cuda_engine_bridge.h"
+#endif
 
 namespace modules::detail {
 
@@ -13,8 +15,13 @@ bool BuildCudaModule(v8::Isolate* isolate,
 		isolate,
 		context,
 		"CUDA",
+#if ENGINE_HAS_CUDA_BRIDGE
 		engine::bridge::cuda::IsAvailable(),
 		engine::bridge::cuda::Summary(),
+#else
+		false,
+		"CUDA bridge disabled by ENABLE_CUDA=OFF",
+#endif
 		module_out,
 		error_out);
 }

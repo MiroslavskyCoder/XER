@@ -57,14 +57,16 @@ COPY . .
 
 ARG ENABLE_CUDA=OFF
 ARG ENABLE_CUDNN=OFF
+ARG ENABLE_AI=OFF
 ARG CMAKE_CUDA_ARCHITECTURES=75;86
 RUN cmake --preset default \
       -DLLVM_DIR="${LLVM_DIR}" \
       -DClang_DIR="${Clang_DIR}" \
       -DENABLE_CUDA="${ENABLE_CUDA}" \
       -DENABLE_CUDNN="${ENABLE_CUDNN}" \
+      -DENABLE_AI="${ENABLE_AI}" \
       -DCMAKE_CUDA_ARCHITECTURES="${CMAKE_CUDA_ARCHITECTURES}" \
-    && cmake --build --preset default -- -j"$(nproc)" \
+    && cmake --build --preset default --target XER -- -j"$(nproc)" \
     && install -m 0755 out/build/default/XER /usr/local/bin/XER
 
 ENTRYPOINT ["/usr/local/bin/XER"]

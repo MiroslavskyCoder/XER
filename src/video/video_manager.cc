@@ -5,7 +5,9 @@
 #include "angle_renderer.h"
 #include "wrapper/ffmpeg/ffmpeg_engine_bridge.h"
 #include "wrapper/skia/skia_engine_bridge.h"
+#if ENGINE_HAS_CUDA_BRIDGE
 #include "wrapper/cuda/cuda_engine_bridge.h"
+#endif
 #include "flux/core/logger.h"
 
 namespace video {
@@ -24,7 +26,13 @@ VideoManager::~VideoManager() { Shutdown(); }
 
 bool VideoManager::InitRenderer(RendererType type, const std::string& device_hint) {
     // Auto-select best available renderer if not forced
-    if (type == RendererType::CUDA && !engine::bridge::cuda::IsAvailable()) {
+    if (type == RendererType::CUDA
+#if ENGINE_HAS_CUDA_BRIDGE
+        && !engine::bridge::cuda::IsAvailable()
+#else
+        && true
+#endif
+    ) {
         Log().Warning("VideoManager",
                       "CUDA requested but not available; falling back to Vulkan");
         type = RendererType::Vulkan;
