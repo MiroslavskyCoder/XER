@@ -83,7 +83,7 @@ Full per-module description and API list:
 	- `Audio.encodeWav(audio[, options])`
 	- `Audio.decodeWav(bytes)`
 	- load/inspect options: `rawSampleRate`, `targetSampleRate`, `targetChannels`, `resampleQuality`
-	- effect options: `clapPluginReference`, `batchMode`, `outputDir` for `applyBatch`, plus `clapPluginReference` for `applyEffect/applyChain`
+	- effect options: `clapPluginReference`, ordered `clapPluginReferences`, `batchMode`, `outputDir` for `applyBatch`, plus `clapPluginReference`/`clapPluginReferences` for `applyEffect/applyChain`
 - `ImportModule("Git")`
 	- `Git.describe([repoPath])`
 	- `Git.init(repoPath)`
