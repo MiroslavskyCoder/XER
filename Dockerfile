@@ -3,13 +3,11 @@ FROM ${XER_BASE_IMAGE} AS build
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-RUN apt-get update \
-    && apt-get install -y software-properties-common ca-certificates \
-    && add-apt-repository -y universe \
-    && add-apt-repository -y multiverse \
+RUN sed -i 's/Components: main/Components: main universe multiverse/g' /etc/apt/sources.list.d/ubuntu.sources \
     && apt-get update \
     && apt-get install -y --no-install-recommends \
       build-essential \
+      ca-certificates \
       cmake \
       ninja-build \
       pkg-config \
@@ -37,9 +35,6 @@ RUN apt-get update \
       libavformat-dev \
       libswscale-dev \
       libswresample-dev \
-      libavfilter-dev \
-      libavdevice-dev \
-      libopencv-dev \
       libzstd-dev \
       libbrotli-dev \
       libsqlite3-dev \
@@ -51,7 +46,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 ENV CC=clang-18 \
-  CXX=clang++-18 \
+    CXX=clang++-18 \
     LLVM_PREFIX=/usr/lib/llvm-18 \
     LLVM_DIR=/usr/lib/llvm-18/lib/cmake/llvm \
     Clang_DIR=/usr/lib/llvm-18/lib/cmake/clang \
@@ -60,8 +55,8 @@ ENV CC=clang-18 \
 WORKDIR /xer
 COPY . .
 
-    ARG ENABLE_CUDA=OFF
-    ARG ENABLE_CUDNN=OFF
+ARG ENABLE_CUDA=OFF
+ARG ENABLE_CUDNN=OFF
 ARG CMAKE_CUDA_ARCHITECTURES=75;86
 RUN cmake --preset default \
       -DLLVM_DIR="${LLVM_DIR}" \

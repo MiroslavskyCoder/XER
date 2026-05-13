@@ -13,7 +13,19 @@
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
-        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "ENABLE_CUDA": "OFF",
+        "ENABLE_CUDNN": "OFF"
+      }
+    },
+    {
+      "name": "cuda",
+      "displayName": "CUDA + cuDNN",
+      "inherits": "default",
+      "binaryDir": "${sourceDir}/out/build/${presetName}",
+      "cacheVariables": {
+        "ENABLE_CUDA": "ON",
+        "ENABLE_CUDNN": "ON"
       }
     }
   ],
@@ -21,6 +33,10 @@
     {
       "name": "default",
       "configurePreset": "default"
+    },
+    {
+      "name": "cuda",
+      "configurePreset": "cuda"
     }
   ]
 }
