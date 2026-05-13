@@ -2,6 +2,7 @@
 
 #include "audio/audio_core/audio_source_loader.h"
 #include "audio/effects_rack/custom_effect_struct.h"
+#include "audio/file_io_codecs/codec_mp3_lame.h"
 #include "audio/file_io_codecs/codec_wav_pcm.h"
 #include "audio/fx_customs/fx_customs_presets.h"
 
@@ -9,6 +10,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
@@ -111,6 +113,7 @@ struct EffectArtifact {
 	std::string render_mode;
 	std::filesystem::path stage_input_wav_path;
 	std::filesystem::path processed_wav_path;
+	std::filesystem::path processed_mp3_path;
 	std::filesystem::path report_path;
 	Engine::Audio::FX::CustomEffectReport report;
 	std::string report_text;
@@ -172,6 +175,7 @@ bool LoadInputAudio(
 	load_options.target_channels = options.target_channels > 0
 		? options.target_channels
 		: (ContainsStereoPreferredEffect(effect_names) ? 2 : 0);
+	load_options.strict_mp3_input = options.strict_mp3_input;
 	return Engine::Audio::Core::AudioSourceLoader::Load(load_options, input_audio_out, error_out);
 }
 
@@ -218,6 +222,7 @@ std::string BuildEffectArtifactText(
 	const Engine::Audio::Core::AudioSourceBuffer& input_audio,
 	const std::filesystem::path& input_wav_path,
 	const std::filesystem::path& output_wav_path,
+	const std::filesystem::path& output_mp3_path,
 	const Engine::Audio::FX::CustomEffectReport& report) {
 	std::ostringstream output;
 	output << "Audio FX Custom CLI\n";
@@ -236,6 +241,9 @@ std::string BuildEffectArtifactText(
 	output << "frame_count=" << input_audio.frame_count << "\n";
 	output << "normalized_input_wav=" << input_wav_path.string() << "\n";
 	output << "processed_wav=" << output_wav_path.string() << "\n";
+	if (!output_mp3_path.empty()) {
+		output << "processed_mp3=" << output_mp3_path.string() << "\n";
+	}
 	output << Engine::Audio::FX::BuildCustomEffectReportText(report);
 	return output.str();
 }
@@ -249,7 +257,10 @@ bool RenderEffectArtifact(
 	const std::string& effect_name,
 	size_t stage_index,
 	const std::string& render_mode,
+	bool write_processed_wav,
+	bool write_processed_mp3,
 	std::vector<float>* processed_audio_out,
+	std::vector<std::uint8_t>* mp3_output_out,
 	EffectArtifact* artifact_out,
 	std::string* error_out) {
 	if (artifact_out == nullptr) {
@@ -267,7 +278,12 @@ bool RenderEffectArtifact(
 	artifact_out->stage_index = stage_index;
 	artifact_out->render_mode = render_mode;
 	artifact_out->stage_input_wav_path = stage_input_wav_path;
-	artifact_out->processed_wav_path = options.output_dir / (artifact_out->effect_slug + ".wav");
+	if (write_processed_wav) {
+		artifact_out->processed_wav_path = options.output_dir / (artifact_out->effect_slug + ".wav");
+	}
+	if (write_processed_mp3) {
+		artifact_out->processed_mp3_path = options.output_dir / (artifact_out->effect_slug + ".mp3");
+	}
 	artifact_out->report_path = options.output_dir / (artifact_out->effect_slug + "_report.txt");
 	if (!Engine::Audio::FX::Customs::RenderFxCustomPresetInterleaved(
 			effect_name,
@@ -283,7 +299,17 @@ bool RenderEffectArtifact(
 	artifact_out->frame_count = input_audio.channels > 0
 		? processed_audio.size() / static_cast<size_t>(input_audio.channels)
 		: 0u;
-	if (!WriteWaveFile(artifact_out->processed_wav_path, processed_audio, input_audio.sample_rate, input_audio.channels, error_out)) {
+	if (write_processed_wav && !WriteWaveFile(artifact_out->processed_wav_path, processed_audio, input_audio.sample_rate, input_audio.channels, error_out)) {
+		return false;
+	}
+	if ((write_processed_mp3 || mp3_output_out != nullptr)
+		&& !WriteMp3File(
+			write_processed_mp3 ? artifact_out->processed_mp3_path : std::filesystem::path(),
+			processed_audio,
+			input_audio.sample_rate,
+			input_audio.channels,
+			mp3_output_out,
+			error_out)) {
 		return false;
 	}
 	artifact_out->report_text = BuildEffectArtifactText(
@@ -295,6 +321,7 @@ bool RenderEffectArtifact(
 		input_audio,
 		input_wav_path,
 		artifact_out->processed_wav_path,
+		artifact_out->processed_mp3_path,
 		artifact_out->report);
 	if (!WriteTextFile(artifact_out->report_path, artifact_out->report_text, error_out)) {
 		return false;
@@ -313,6 +340,9 @@ Json::Value BuildEffectArtifactJson(const EffectArtifact& artifact) {
 	value["stage_index"] = static_cast<Json::UInt64>(artifact.stage_index);
 	value["stage_input_wav"] = artifact.stage_input_wav_path.string();
 	value["processed_wav"] = artifact.processed_wav_path.string();
+	if (!artifact.processed_mp3_path.empty()) {
+		value["processed_mp3"] = artifact.processed_mp3_path.string();
+	}
 	value["report_path"] = artifact.report_path.string();
 	value["frame_count"] = static_cast<Json::UInt64>(artifact.frame_count);
 	value["report"] = BuildCustomEffectReportJson(artifact.report);
@@ -340,7 +370,12 @@ std::string BuildBatchSummaryText(
 	output << "effect_count=" << artifacts.size() << "\n";
 	output << "normalized_input_wav=" << input_wav_path.string() << "\n";
 	if (!artifacts.empty()) {
-		output << "final_output_wav=" << artifacts.back().processed_wav_path.string() << "\n";
+		if (!artifacts.back().processed_wav_path.empty()) {
+			output << "final_output_wav=" << artifacts.back().processed_wav_path.string() << "\n";
+		}
+		if (!artifacts.back().processed_mp3_path.empty()) {
+			output << "final_output_mp3=" << artifacts.back().processed_mp3_path.string() << "\n";
+		}
 	}
 	output << "summary_path=" << summary_path.string() << "\n";
 	for (size_t index = 0; index < artifacts.size(); ++index) {
@@ -350,6 +385,9 @@ std::string BuildBatchSummaryText(
 		output << "effect_" << index << "_stage_index=" << artifact.stage_index << "\n";
 		output << "effect_" << index << "_stage_input_wav=" << artifact.stage_input_wav_path.string() << "\n";
 		output << "effect_" << index << "_wav=" << artifact.processed_wav_path.string() << "\n";
+		if (!artifact.processed_mp3_path.empty()) {
+			output << "effect_" << index << "_mp3=" << artifact.processed_mp3_path.string() << "\n";
+		}
 		output << "effect_" << index << "_report=" << artifact.report_path.string() << "\n";
 		output << "effect_" << index << "_frames=" << artifact.frame_count << "\n";
 		output << "effect_" << index << "_peak=" << artifact.report.peak << "\n";
@@ -381,7 +419,12 @@ Json::Value BuildBatchSummaryJson(
 	root["normalized_input_wav"] = input_wav_path.string();
 	root["summary_path"] = summary_path.string();
 	if (!artifacts.empty()) {
-		root["final_output_wav"] = artifacts.back().processed_wav_path.string();
+		if (!artifacts.back().processed_wav_path.empty()) {
+			root["final_output_wav"] = artifacts.back().processed_wav_path.string();
+		}
+		if (!artifacts.back().processed_mp3_path.empty()) {
+			root["final_output_mp3"] = artifacts.back().processed_mp3_path.string();
+		}
 	}
 	Json::Value effects(Json::arrayValue);
 	for (const auto& artifact : artifacts) {
@@ -463,12 +506,69 @@ bool WriteWaveFile(
 	return WriteBinaryFile(path, encoded, error_out);
 }
 
+bool EncodeMp3Bytes(
+	const std::vector<float>& samples,
+	int sample_rate,
+	int channels,
+	std::vector<std::uint8_t>* encoded_out,
+	std::string* error_out) {
+	if (encoded_out == nullptr || samples.empty() || sample_rate <= 0 || channels <= 0) {
+		if (error_out != nullptr) {
+			*error_out = "invalid MP3 encode request";
+		}
+		return false;
+	}
+	if (channels > 2) {
+		if (error_out != nullptr) {
+			*error_out = "MP3 pipe output supports mono or stereo render channels";
+		}
+		return false;
+	}
+	if ((samples.size() % static_cast<size_t>(channels)) != 0u) {
+		if (error_out != nullptr) {
+			*error_out = "MP3 encode input frame alignment is invalid";
+		}
+		return false;
+	}
+
+	Engine::Audio::CodecIO::Mp3LameCodec codec;
+	const size_t frame_count = samples.size() / static_cast<size_t>(channels);
+	if (!codec.EncodeInterleaved(samples.data(), frame_count, sample_rate, channels, *encoded_out)) {
+		if (error_out != nullptr) {
+			*error_out = "failed to encode processed audio as MP3; build XER with LAME headers enabled";
+		}
+		return false;
+	}
+	return !encoded_out->empty();
+}
+
+bool WriteMp3File(
+	const std::filesystem::path& path,
+	const std::vector<float>& samples,
+	int sample_rate,
+	int channels,
+	std::vector<std::uint8_t>* encoded_out,
+	std::string* error_out) {
+	std::vector<std::uint8_t> encoded;
+	if (!EncodeMp3Bytes(samples, sample_rate, channels, &encoded, error_out)) {
+		return false;
+	}
+	if (!path.empty() && !WriteBinaryFile(path, encoded, error_out)) {
+		return false;
+	}
+	if (encoded_out != nullptr) {
+		*encoded_out = std::move(encoded);
+	}
+	return true;
+}
+
 }  // namespace
 
 bool RunAudioFxCustom(
 	const AudioFxCustomOptions& options,
 	std::string* report_out,
-	std::string* error_out) {
+	std::string* error_out,
+	std::vector<std::uint8_t>* mp3_output_out) {
 	if (report_out == nullptr) {
 		if (error_out != nullptr) {
 			*error_out = "audio fx custom report target is null";
@@ -506,8 +606,9 @@ bool RunAudioFxCustom(
 		return false;
 	}
 
-	const std::filesystem::path input_wav_path = options.output_dir / "normalized_input.wav";
-	if (!WriteWaveFile(input_wav_path, input_audio.samples, input_audio.sample_rate, input_audio.channels, error_out)) {
+	const bool write_debug_wavs = options.write_intermediate_wavs && !options.pipe_mp3_output;
+	const std::filesystem::path input_wav_path = write_debug_wavs ? options.output_dir / "normalized_input.wav" : std::filesystem::path();
+	if (write_debug_wavs && !WriteWaveFile(input_wav_path, input_audio.samples, input_audio.sample_rate, input_audio.channels, error_out)) {
 		return false;
 	}
 	EffectArtifact artifact;
@@ -520,7 +621,10 @@ bool RunAudioFxCustom(
 			effect_names.front(),
 			0u,
 			"single",
+			!options.pipe_mp3_output,
+			options.pipe_mp3_output && mp3_output_out == nullptr,
 			nullptr,
+			options.pipe_mp3_output ? mp3_output_out : nullptr,
 			&artifact,
 			error_out)) {
 		return false;
@@ -532,7 +636,8 @@ bool RunAudioFxCustom(
 bool RunAudioFxBatch(
 	const AudioFxCustomOptions& options,
 	std::string* report_out,
-	std::string* error_out) {
+	std::string* error_out,
+	std::vector<std::uint8_t>* mp3_output_out) {
 	if (report_out == nullptr) {
 		if (error_out != nullptr) {
 			*error_out = "audio fx batch report target is null";
@@ -575,8 +680,9 @@ bool RunAudioFxBatch(
 		return false;
 	}
 
-	const std::filesystem::path input_wav_path = options.output_dir / "normalized_input.wav";
-	if (!WriteWaveFile(input_wav_path, input_audio.samples, input_audio.sample_rate, input_audio.channels, error_out)) {
+	const bool write_debug_wavs = options.write_intermediate_wavs && !options.pipe_mp3_output;
+	const std::filesystem::path input_wav_path = write_debug_wavs ? options.output_dir / "normalized_input.wav" : std::filesystem::path();
+	if (write_debug_wavs && !WriteWaveFile(input_wav_path, input_audio.samples, input_audio.sample_rate, input_audio.channels, error_out)) {
 		return false;
 	}
 
@@ -586,10 +692,14 @@ bool RunAudioFxBatch(
 	std::filesystem::path chain_input_wav_path = input_wav_path;
 	for (size_t index = 0; index < effect_names.size(); ++index) {
 		const auto& effect_name = effect_names[index];
+		const bool is_final_stage = index + 1u == effect_names.size();
 		EffectArtifact artifact;
 		std::vector<float> stage_output;
 		const std::vector<float>& render_input = batch_mode == AudioFxBatchMode::kChain ? chain_input : input_audio.samples;
 		const std::filesystem::path& stage_input_wav_path = batch_mode == AudioFxBatchMode::kChain ? chain_input_wav_path : input_wav_path;
+		const bool write_processed_wav = !options.pipe_mp3_output
+			&& (batch_mode == AudioFxBatchMode::kParallel || options.write_intermediate_wavs || is_final_stage);
+		const bool write_processed_mp3 = options.pipe_mp3_output && is_final_stage && mp3_output_out == nullptr;
 		if (!RenderEffectArtifact(
 				options,
 				input_audio,
@@ -599,7 +709,10 @@ bool RunAudioFxBatch(
 				effect_name,
 				index,
 				AudioFxBatchModeToString(batch_mode),
+				write_processed_wav,
+				write_processed_mp3,
 				batch_mode == AudioFxBatchMode::kChain ? &stage_output : nullptr,
+				options.pipe_mp3_output && is_final_stage ? mp3_output_out : nullptr,
 				&artifact,
 				error_out)) {
 			return false;

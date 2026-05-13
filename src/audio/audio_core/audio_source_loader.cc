@@ -5,6 +5,7 @@
 #include "wrapper/ffmpeg/ffmpeg_engine_bridge.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -69,6 +70,83 @@ bool ReadBinaryFile(
 	if (!input) {
 		if (error_out != nullptr) {
 			*error_out = "failed to read audio source: " + path.string();
+		}
+		return false;
+	}
+	return true;
+}
+
+bool ReadFilePrefix(
+	const std::filesystem::path& path,
+	std::vector<std::uint8_t>* bytes_out,
+	std::string* error_out) {
+	if (bytes_out == nullptr) {
+		if (error_out != nullptr) {
+			*error_out = "audio header target is null";
+		}
+		return false;
+	}
+
+	std::ifstream input(path, std::ios::binary);
+	if (!input.is_open()) {
+		if (error_out != nullptr) {
+			*error_out = "failed to open audio source: " + path.string();
+		}
+		return false;
+	}
+
+	std::array<std::uint8_t, 4096> prefix{};
+	input.read(reinterpret_cast<char*>(prefix.data()), static_cast<std::streamsize>(prefix.size()));
+	const std::streamsize bytes_read = input.gcount();
+	if (bytes_read <= 0) {
+		if (error_out != nullptr) {
+			*error_out = "audio source is empty: " + path.string();
+		}
+		return false;
+	}
+	bytes_out->assign(prefix.begin(), prefix.begin() + bytes_read);
+	return true;
+}
+
+bool LooksLikeMp3FrameHeader(const std::uint8_t* data, size_t bytes) {
+	if (data == nullptr || bytes < 4u) {
+		return false;
+	}
+	for (size_t index = 0; index + 3u < bytes; ++index) {
+		const std::uint8_t b0 = data[index];
+		const std::uint8_t b1 = data[index + 1u];
+		const std::uint8_t b2 = data[index + 2u];
+		if (b0 != 0xFFu || (b1 & 0xE0u) != 0xE0u) {
+			continue;
+		}
+		const std::uint8_t version = (b1 >> 3u) & 0x03u;
+		const std::uint8_t layer = (b1 >> 1u) & 0x03u;
+		const std::uint8_t bitrate = (b2 >> 4u) & 0x0Fu;
+		const std::uint8_t sample_rate = (b2 >> 2u) & 0x03u;
+		if (version == 0x01u || layer == 0x00u || bitrate == 0x00u || bitrate == 0x0Fu || sample_rate == 0x03u) {
+			continue;
+		}
+		return true;
+	}
+	return false;
+}
+
+bool IsStrictMp3Input(const std::filesystem::path& path, std::string* error_out) {
+	if (ToLowerCopy(path.extension().string()) != ".mp3") {
+		if (error_out != nullptr) {
+			*error_out = "audio fx processing accepts only strict .mp3 input: " + path.string();
+		}
+		return false;
+	}
+
+	std::vector<std::uint8_t> prefix;
+	if (!ReadFilePrefix(path, &prefix, error_out)) {
+		return false;
+	}
+	const bool has_id3 = prefix.size() >= 3u && prefix[0] == 'I' && prefix[1] == 'D' && prefix[2] == '3';
+	if (!has_id3 && !LooksLikeMp3FrameHeader(prefix.data(), prefix.size())) {
+		if (error_out != nullptr) {
+			*error_out = "audio fx processing accepts only valid MP3 frame streams: " + path.string();
 		}
 		return false;
 	}
@@ -623,6 +701,9 @@ bool AudioSourceLoader::Load(
 		if (error_out != nullptr) {
 			*error_out = "audio input not found: " + options.input_path.string();
 		}
+		return false;
+	}
+	if (options.strict_mp3_input && !IsStrictMp3Input(options.input_path, error_out)) {
 		return false;
 	}
 	if (options.target_sample_rate <= 0 || options.raw_sample_rate <= 0) {

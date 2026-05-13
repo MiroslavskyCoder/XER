@@ -44,6 +44,7 @@ public:
         int audio_target_channels = -1;
         std::string audio_batch_mode = "parallel";
         bool json_output = false;
+        bool audio_pipe_mp3 = false;
         std::string xer_key;
         std::string xer_key_file;
         std::string xer_key_env;

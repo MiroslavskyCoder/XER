@@ -15,6 +15,7 @@ struct AudioSourceLoadOptions {
 	int target_sample_rate = 44100;
 	int target_channels = 1;
 	ResampleQuality resample_quality = ResampleQuality::HIGH;
+	bool strict_mp3_input = false;
 };
 
 struct AudioSourceBuffer {

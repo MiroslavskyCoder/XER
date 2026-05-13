@@ -1,16 +1,21 @@
 
 #include <algorithm>
+#include <chrono>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <cmath>
 #include <iomanip>
+#include <iostream>
 #include <json/json.h>
 #include <absl/strings/str_cat.h>
+#include <iterator>
 #include <range/v3/range/conversion.hpp>
 #include <range/v3/view/transform.hpp>
 #include <sstream>
 #include <string>
 #include <cstdlib>
+#include <system_error>
 #include <vector>
 
 #include "app_command.h"
@@ -57,6 +62,94 @@ void WriteStdoutLine(const std::string& text) {
 
 void WriteStderrLine(const std::string& text) {
 	WriteOutputLine(flux::terminal::OutputStream::kStderr, text);
+}
+
+void WriteStderr(const std::string& text) {
+	WriteOutput(flux::terminal::OutputStream::kStderr, text);
+}
+
+bool WriteStdoutBytes(const std::vector<std::uint8_t>& bytes) {
+	if (bytes.empty()) {
+		return false;
+	}
+	std::cout.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+	std::cout.flush();
+	return static_cast<bool>(std::cout);
+}
+
+std::filesystem::path MakeTempMp3Path() {
+	const auto now = std::chrono::high_resolution_clock::now().time_since_epoch().count();
+	return std::filesystem::temp_directory_path() / ("xer_pipe_" + std::to_string(now) + ".mp3");
+}
+
+class TempPathGuard {
+public:
+	TempPathGuard() = default;
+	explicit TempPathGuard(std::filesystem::path path) : path_(std::move(path)) {}
+	~TempPathGuard() {
+		if (path_.empty()) {
+			return;
+		}
+		std::error_code error;
+		std::filesystem::remove(path_, error);
+	}
+	const std::filesystem::path& path() const { return path_; }
+	void Reset(std::filesystem::path path) { path_ = std::move(path); }
+
+private:
+	std::filesystem::path path_;
+};
+
+bool ReadStdinMp3ToTempFile(TempPathGuard* guard, std::string* path_out, std::string* error_out) {
+	if (guard == nullptr || path_out == nullptr) {
+		if (error_out != nullptr) {
+			*error_out = "stdin MP3 target is invalid";
+		}
+		return false;
+	}
+	std::vector<char> bytes((std::istreambuf_iterator<char>(std::cin)), std::istreambuf_iterator<char>());
+	if (bytes.empty()) {
+		if (error_out != nullptr) {
+			*error_out = "stdin MP3 stream is empty";
+		}
+		return false;
+	}
+
+	guard->Reset(MakeTempMp3Path());
+	std::ofstream output(guard->path(), std::ios::binary);
+	if (!output.is_open()) {
+		if (error_out != nullptr) {
+			*error_out = "failed to create temporary MP3 pipe input";
+		}
+		return false;
+	}
+	output.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+	if (!output) {
+		if (error_out != nullptr) {
+			*error_out = "failed to write temporary MP3 pipe input";
+		}
+		return false;
+	}
+	*path_out = guard->path().string();
+	return true;
+}
+
+bool PrepareAudioFxInputPath(
+	const AppCommand::Parsed& parsed,
+	TempPathGuard* stdin_guard,
+	std::string* input_path_out,
+	std::string* error_out) {
+	if (input_path_out == nullptr) {
+		if (error_out != nullptr) {
+			*error_out = "audio FX input path target is invalid";
+		}
+		return false;
+	}
+	if (parsed.audio_input_path == "-" || (parsed.audio_pipe_mp3 && parsed.audio_input_path.empty())) {
+		return ReadStdinMp3ToTempFile(stdin_guard, input_path_out, error_out);
+	}
+	*input_path_out = parsed.audio_input_path;
+	return true;
 }
 
 void SetEnvValue(const char* key, const std::string& value) {
@@ -515,48 +608,78 @@ int main(int argc, char** argv) {
 	}
 
 	if (parsed.type == AppCommand::Type::kAudioFxCustom) {
+		TempPathGuard stdin_guard;
+		std::string input_path;
+		std::string input_error;
+		if (!PrepareAudioFxInputPath(parsed, &stdin_guard, &input_path, &input_error)) {
+			WriteStderrLine(absl::StrCat("Audio custom fx failed: ", input_error));
+			return 1;
+		}
 		Engine::Audio::Demo::AudioFxCustomOptions fx_options;
 		fx_options.output_dir = parsed.output_dir.empty()
 			? std::filesystem::path("out/audio_fx_custom")
 			: std::filesystem::path(parsed.output_dir);
-		fx_options.input_path = parsed.audio_input_path.empty()
+		fx_options.input_path = input_path.empty()
 			? std::filesystem::path()
-			: std::filesystem::path(parsed.audio_input_path);
+			: std::filesystem::path(input_path);
 		fx_options.effect_name = parsed.audio_effect_name;
 		fx_options.raw_sample_rate = parsed.audio_raw_sample_rate;
 		fx_options.target_sample_rate = parsed.target_sample_rate;
 		fx_options.target_channels = parsed.audio_target_channels;
 		fx_options.batch_mode = parsed.audio_batch_mode;
 		fx_options.json_summary = parsed.json_output;
+		fx_options.strict_mp3_input = true;
+		fx_options.pipe_mp3_output = parsed.audio_pipe_mp3;
+		fx_options.write_intermediate_wavs = !parsed.audio_pipe_mp3;
 		std::string report;
 		std::string fx_error;
-		if (!Engine::Audio::Demo::RunAudioFxCustom(fx_options, &report, &fx_error)) {
+		std::vector<std::uint8_t> mp3_output;
+		if (!Engine::Audio::Demo::RunAudioFxCustom(fx_options, &report, &fx_error, parsed.audio_pipe_mp3 ? &mp3_output : nullptr)) {
 			WriteStderrLine(absl::StrCat("Audio custom fx failed: ", fx_error));
 			return 1;
+		}
+		if (parsed.audio_pipe_mp3) {
+			WriteStderr(report);
+			return WriteStdoutBytes(mp3_output) ? 0 : 1;
 		}
 		WriteStdout(report);
 		return 0;
 	}
 
 	if (parsed.type == AppCommand::Type::kAudioFxBatch) {
+		TempPathGuard stdin_guard;
+		std::string input_path;
+		std::string input_error;
+		if (!PrepareAudioFxInputPath(parsed, &stdin_guard, &input_path, &input_error)) {
+			WriteStderrLine(absl::StrCat("Audio custom fx batch failed: ", input_error));
+			return 1;
+		}
 		Engine::Audio::Demo::AudioFxCustomOptions fx_options;
 		fx_options.output_dir = parsed.output_dir.empty()
 			? std::filesystem::path("out/audio_fx_batch")
 			: std::filesystem::path(parsed.output_dir);
-		fx_options.input_path = parsed.audio_input_path.empty()
+		fx_options.input_path = input_path.empty()
 			? std::filesystem::path()
-			: std::filesystem::path(parsed.audio_input_path);
+			: std::filesystem::path(input_path);
 		fx_options.effect_names = parsed.audio_effect_names;
 		fx_options.raw_sample_rate = parsed.audio_raw_sample_rate;
 		fx_options.target_sample_rate = parsed.target_sample_rate;
 		fx_options.target_channels = parsed.audio_target_channels;
 		fx_options.batch_mode = parsed.audio_batch_mode;
 		fx_options.json_summary = parsed.json_output;
+		fx_options.strict_mp3_input = true;
+		fx_options.pipe_mp3_output = parsed.audio_pipe_mp3;
+		fx_options.write_intermediate_wavs = !parsed.audio_pipe_mp3;
 		std::string report;
 		std::string fx_error;
-		if (!Engine::Audio::Demo::RunAudioFxBatch(fx_options, &report, &fx_error)) {
+		std::vector<std::uint8_t> mp3_output;
+		if (!Engine::Audio::Demo::RunAudioFxBatch(fx_options, &report, &fx_error, parsed.audio_pipe_mp3 ? &mp3_output : nullptr)) {
 			WriteStderrLine(absl::StrCat("Audio custom fx batch failed: ", fx_error));
 			return 1;
+		}
+		if (parsed.audio_pipe_mp3) {
+			WriteStderr(report);
+			return WriteStdoutBytes(mp3_output) ? 0 : 1;
 		}
 		WriteStdout(report);
 		return 0;

@@ -20,6 +20,7 @@ namespace Engine::Audio::CodecIO {
 class Mp3LameCodec {
 public:
     bool Encode(const float* input, size_t frames, std::vector<uint8_t>& out) const;
+    bool EncodeInterleaved(const float* input, size_t frames, int sample_rate, int channels, std::vector<uint8_t>& out) const;
     bool Decode(const uint8_t* data, size_t bytes, std::vector<float>& out) const;
 };
 

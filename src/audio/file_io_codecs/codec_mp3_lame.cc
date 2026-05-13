@@ -15,38 +15,53 @@ constexpr std::uint8_t kFallbackMagic[4] = {'M', 'P', 'F', '0'};
 } // namespace
 
 bool Mp3LameCodec::Encode(const float* input, size_t frames, std::vector<uint8_t>& out) const {
+	return EncodeInterleaved(input, frames, 44100, 1, out);
+}
+
+bool Mp3LameCodec::EncodeInterleaved(const float* input, size_t frames, int sample_rate, int channels, std::vector<uint8_t>& out) const {
     if (input == nullptr || frames == 0) {
         return false;
     }
+	if (sample_rate <= 0 || (channels != 1 && channels != 2)) {
+		out.clear();
+		return false;
+	}
 
 #if ENGINE_CODEC_HAS_LAME_HEADERS
     lame_t lame = lame_init();
     if (lame == nullptr) {
         return false;
     }
-    lame_set_in_samplerate(lame, 44100);
-    lame_set_num_channels(lame, 1);
+	lame_set_in_samplerate(lame, sample_rate);
+	lame_set_num_channels(lame, channels);
     lame_set_quality(lame, 2);
     if (lame_init_params(lame) < 0) {
         lame_close(lame);
         return false;
     }
 
-    std::vector<short> pcm(frames);
-    for (size_t i = 0; i < frames; ++i) {
+	std::vector<short> pcm(frames * static_cast<size_t>(channels));
+	for (size_t i = 0; i < pcm.size(); ++i) {
         const float clamped = std::clamp(input[i], -1.0f, 1.0f);
         pcm[i] = static_cast<short>(clamped * 32767.0f);
     }
 
     const int mp3_capacity = static_cast<int>(1.25 * frames + 7200);
     out.assign(static_cast<std::size_t>(mp3_capacity), 0);
-    const int encoded = lame_encode_buffer(
-        lame,
-        pcm.data(),
-        pcm.data(),
-        static_cast<int>(frames),
-        out.data(),
-        mp3_capacity);
+	const int encoded = channels == 1
+		? lame_encode_buffer(
+			lame,
+			pcm.data(),
+			pcm.data(),
+			static_cast<int>(frames),
+			out.data(),
+			mp3_capacity)
+		: lame_encode_buffer_interleaved(
+			lame,
+			pcm.data(),
+			static_cast<int>(frames),
+			out.data(),
+			mp3_capacity);
     if (encoded < 0) {
         lame_close(lame);
         out.clear();
@@ -63,6 +78,8 @@ bool Mp3LameCodec::Encode(const float* input, size_t frames, std::vector<uint8_t
 #else
     (void)input;
     (void)frames;
+	(void)sample_rate;
+	(void)channels;
     out.clear();
     return false;
 #endif

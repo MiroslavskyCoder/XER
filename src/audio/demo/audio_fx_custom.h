@@ -1,6 +1,7 @@
 #pragma once
 
 #include <filesystem>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -16,16 +17,21 @@ struct AudioFxCustomOptions {
 	int target_channels = -1;
 	std::string batch_mode = "parallel";
 	bool json_summary = false;
+	bool strict_mp3_input = true;
+	bool pipe_mp3_output = false;
+	bool write_intermediate_wavs = true;
 };
 
 bool RunAudioFxCustom(
 	const AudioFxCustomOptions& options,
 	std::string* report_out,
-	std::string* error_out = nullptr);
+	std::string* error_out = nullptr,
+	std::vector<std::uint8_t>* mp3_output_out = nullptr);
 
 bool RunAudioFxBatch(
 	const AudioFxCustomOptions& options,
 	std::string* report_out,
-	std::string* error_out = nullptr);
+	std::string* error_out = nullptr,
+	std::vector<std::uint8_t>* mp3_output_out = nullptr);
 
 }  // namespace Engine::Audio::Demo

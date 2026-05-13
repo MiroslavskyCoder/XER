@@ -120,15 +120,11 @@ bool BiquadProcessor::Configure(BiquadType type, float sample_rate, float freque
 }
 
 float BiquadProcessor::ProcessSample(float sample) {
-	perf_counter_.StartCounter("biquad_process_sample");
-
 	const float y0 = b0_ * sample + b1_ * x1_ + b2_ * x2_ - a1_ * y1_ - a2_ * y2_;
 	x2_ = x1_;
 	x1_ = sample;
 	y2_ = y1_;
 	y1_ = y0;
-
-	perf_counter_.StopCounter("biquad_process_sample");
 	return y0;
 }
 
