@@ -10,6 +10,7 @@ public:
         kCompile,
         kInspect,
         kAudioInspect,
+        kAudioFxConfig,
         kAudioFxCustom,
         kAudioFxBatch,
         kAudioModulesSmoke,
@@ -34,6 +35,7 @@ public:
         bool emit_source_map  = false;
         std::string output_dir;
         std::string audio_input_path;
+        std::string audio_config_file;
         std::string audio_effect_name;
         std::vector<std::string> audio_effect_names;
         std::string audio_processor;

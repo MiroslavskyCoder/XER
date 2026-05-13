@@ -271,6 +271,16 @@ AppCommand::Parsed AppCommand::Parse(int argc, char** argv) {
                 parsed.audio_input_path = value; continue;
             }
         }
+        {
+            std::string value; bool inline_v = false;
+            if (ParseValueFlag(arg, "--file-audio-config", &value, &inline_v)
+                || ParseValueFlag(arg, "--file_audio_config", &value, &inline_v)
+                || ParseValueFlag(arg, "--audio_config", &value, &inline_v)) {
+                if (!inline_v && !ConsumeStringValue("--file-audio-config", argc, argv, &i, &value, &parsed))
+                    return parsed;
+                parsed.audio_config_file = value; continue;
+            }
+        }
 		{
 			std::string value; bool inline_v = false;
 			if (ParseValueFlag(arg, "--audio_effect", &value, &inline_v)) {
@@ -779,7 +789,11 @@ AppCommand::Parsed AppCommand::Parse(int argc, char** argv) {
         parsed.script_path = arg;
     }
 
-    if (parsed.json_output && parsed.type != Type::kAudioInspect && parsed.type != Type::kAudioFxBatch) {
+    if (!parsed.audio_config_file.empty() && parsed.type == Type::kRun && parsed.script_path == "example/project.js") {
+        parsed.type = Type::kAudioFxConfig;
+    }
+
+    if (parsed.json_output && parsed.type != Type::kAudioInspect && parsed.type != Type::kAudioFxBatch && parsed.audio_config_file.empty()) {
         parsed.valid = false;
         parsed.error_message = "--json is currently supported only for audio_inspect and audio_fx_batch";
         return parsed;
@@ -794,6 +808,7 @@ std::string AppCommand::BuildHelpText(const std::string& binary_name) {
     out << "  " << binary_name << " run [script.js] [options]\n";
     out << "  " << binary_name << " compile [script.xer] [options]\n";
     out << "  " << binary_name << " inspect [artifact.bin|artifact.bak]\n";
+    out << "  " << binary_name << " --file-audio-config ./temp_audio.json\n";
     out << "  " << binary_name << " audio_inspect <input_audio> [--output_dir dir] [--target_sample_rate hz] [--json]\n";
     out << "  " << binary_name << " audio_fx_custom <effect_name> <input.mp3|-> [--output_dir dir] [--target_sample_rate hz] [--target_channels n] [--clap_plugin path|ref] [--pipe_mp3]\n";
 	out << "  " << binary_name << " audio_fx_batch <input.mp3|-> --audio_effect <name> [--audio_effect <name> ...] [--output_dir dir] [--target_sample_rate hz] [--target_channels n] [--audio_batch_mode parallel|chain] [--clap_plugin path|ref] [--json] [--pipe_mp3]\n";
@@ -812,6 +827,7 @@ std::string AppCommand::BuildHelpText(const std::string& binary_name) {
     out << "  --emit_source_map            Write source-maps alongside compiled output\n";
     out << "  --output_dir <path>          Write generated compile artifacts into directory\n";
     out << "  --audio_input <path>         Audio file for audio_inspect/audio_fx_custom/audio_fx_batch/audio_modules_smoke/audio_analysis_smoke/audio_demo/spectrogram/onset\n";
+    out << "  --file-audio-config <path>   Load audio FX input/effects/output/pipe options from a JSON file\n";
     out << "  --audio_effect <name>        Custom preset name for audio_fx_custom or one batch item for audio_fx_batch\n";
     out << "  --audio_effects <a,b,c>      Comma-separated effect list for audio_fx_batch\n";
     out << "  --clap_plugin <path|ref>     CLAP plugin reference for CLAPPlugin/custom effect nodes\n";
