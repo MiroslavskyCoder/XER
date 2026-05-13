@@ -311,6 +311,14 @@ AppCommand::Parsed AppCommand::Parse(int argc, char** argv) {
         }
         {
             std::string value; bool inline_v = false;
+            if (ParseValueFlag(arg, "--clap_plugin", &value, &inline_v) || ParseValueFlag(arg, "--clap_plugin_reference", &value, &inline_v)) {
+                if (!inline_v && !ConsumeStringValue("--clap_plugin", argc, argv, &i, &value, &parsed))
+                    return parsed;
+                parsed.audio_clap_plugin_reference = value; continue;
+            }
+        }
+        {
+            std::string value; bool inline_v = false;
             if (ParseValueFlag(arg, "--audio_shaper_profile", &value, &inline_v)) {
                 if (!inline_v && !ConsumeStringValue("--audio_shaper_profile", argc, argv, &i, &value, &parsed))
                     return parsed;
@@ -787,8 +795,8 @@ std::string AppCommand::BuildHelpText(const std::string& binary_name) {
     out << "  " << binary_name << " compile [script.xer] [options]\n";
     out << "  " << binary_name << " inspect [artifact.bin|artifact.bak]\n";
     out << "  " << binary_name << " audio_inspect <input_audio> [--output_dir dir] [--target_sample_rate hz] [--json]\n";
-    out << "  " << binary_name << " audio_fx_custom <effect_name> <input.mp3|-> [--output_dir dir] [--target_sample_rate hz] [--target_channels n] [--pipe_mp3]\n";
-	out << "  " << binary_name << " audio_fx_batch <input.mp3|-> --audio_effect <name> [--audio_effect <name> ...] [--output_dir dir] [--target_sample_rate hz] [--target_channels n] [--audio_batch_mode parallel|chain] [--json] [--pipe_mp3]\n";
+    out << "  " << binary_name << " audio_fx_custom <effect_name> <input.mp3|-> [--output_dir dir] [--target_sample_rate hz] [--target_channels n] [--clap_plugin path|ref] [--pipe_mp3]\n";
+	out << "  " << binary_name << " audio_fx_batch <input.mp3|-> --audio_effect <name> [--audio_effect <name> ...] [--output_dir dir] [--target_sample_rate hz] [--target_channels n] [--audio_batch_mode parallel|chain] [--clap_plugin path|ref] [--json] [--pipe_mp3]\n";
     out << "  " << binary_name << " audio_modules_smoke <input_audio> [--output_dir dir]\n";
     out << "  " << binary_name << " audio_analysis_smoke <input_audio> [--output_dir dir] [--target_sample_rate hz]\n";
     out << "  " << binary_name << " audio_demo [input_audio] [--output_dir dir] [--audio_processor name]\n";
@@ -806,6 +814,7 @@ std::string AppCommand::BuildHelpText(const std::string& binary_name) {
     out << "  --audio_input <path>         Audio file for audio_inspect/audio_fx_custom/audio_fx_batch/audio_modules_smoke/audio_analysis_smoke/audio_demo/spectrogram/onset\n";
     out << "  --audio_effect <name>        Custom preset name for audio_fx_custom or one batch item for audio_fx_batch\n";
     out << "  --audio_effects <a,b,c>      Comma-separated effect list for audio_fx_batch\n";
+    out << "  --clap_plugin <path|ref>     CLAP plugin reference for CLAPPlugin/custom effect nodes\n";
     out << "  --audio_processor <name>     spectral_shaper|phase_vocoder\n";
     out << "  --audio_shaper_profile <n>   unity|tilt|bright\n";
     out << "  --audio_stretch_ratio <x>    Phase vocoder time-stretch ratio (> 0)\n";

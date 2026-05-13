@@ -218,6 +218,12 @@ CustomEffectPackage BuildNamedCustomEffectPackage(const std::string& effect_name
 		SetParam(&delay, "feedback", 0.35f);
 		return MakePresetPackage("Delay", {delay});
 	}
+	if (normalized == "clapplugin" || normalized == "clap" || normalized == "plugin") {
+		CustomEffectNode plugin = MakeNode("clap_plugin", "clap_plugin", 0u, 1.0f);
+		plugin.plugin_reference = clap_plugin_reference.empty() ? std::string("builtin://gain") : clap_plugin_reference;
+		SetParam(&plugin, "gain_db", 0.0f);
+		return MakePresetPackage("CLAPPlugin", {plugin});
+	}
 	if (normalized == "airvoice") {
 		CustomEffectNode gate = MakeNode("gate", "airvoice_gate", 0u, 1.0f);
 		SetParam(&gate, "threshold_db", -48.0f);

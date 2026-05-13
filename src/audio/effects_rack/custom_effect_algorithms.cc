@@ -134,6 +134,7 @@ std::vector<std::string> ListCustomEffectPresets() {
 		"EQReverb",
 		"DelayReverb",
 		"Delay",
+		"CLAPPlugin",
 		"AIrVoice",
 	};
 }

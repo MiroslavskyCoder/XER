@@ -300,7 +300,7 @@ bool RenderEffectArtifact(
 			input_audio.channels,
 			&processed_audio,
 			&artifact_out->report,
-			"builtin://gain",
+			options.clap_plugin_reference.empty() ? std::string("builtin://gain") : options.clap_plugin_reference,
 			error_out)) {
 		return false;
 	}

@@ -38,6 +38,7 @@ public:
         std::vector<std::string> audio_effect_names;
         std::string audio_processor;
         std::string audio_shaper_profile = "tilt";
+        std::string audio_clap_plugin_reference = "builtin://gain";
         float audio_stretch_ratio = 1.0f;
         int audio_raw_sample_rate = 44100;
         int target_sample_rate = 44100;

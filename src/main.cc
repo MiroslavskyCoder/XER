@@ -624,6 +624,7 @@ int main(int argc, char** argv) {
 			? std::filesystem::path()
 			: std::filesystem::path(input_path);
 		fx_options.effect_name = parsed.audio_effect_name;
+		fx_options.clap_plugin_reference = parsed.audio_clap_plugin_reference;
 		fx_options.raw_sample_rate = parsed.audio_raw_sample_rate;
 		fx_options.target_sample_rate = parsed.target_sample_rate;
 		fx_options.target_channels = parsed.audio_target_channels;
@@ -663,6 +664,7 @@ int main(int argc, char** argv) {
 			? std::filesystem::path()
 			: std::filesystem::path(input_path);
 		fx_options.effect_names = parsed.audio_effect_names;
+		fx_options.clap_plugin_reference = parsed.audio_clap_plugin_reference;
 		fx_options.raw_sample_rate = parsed.audio_raw_sample_rate;
 		fx_options.target_sample_rate = parsed.target_sample_rate;
 		fx_options.target_channels = parsed.audio_target_channels;
