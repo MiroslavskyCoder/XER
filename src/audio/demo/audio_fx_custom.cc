@@ -91,6 +91,35 @@ bool ParseAudioFxBatchMode(const std::string& text, AudioFxBatchMode* batch_mode
 	return false;
 }
 
+bool IsClapPluginEffectName(const std::string& effect_name) {
+	const std::string normalized = NormalizeName(effect_name);
+	return normalized == "clapplugin" || normalized == "clap" || normalized == "plugin";
+}
+
+std::string ResolveClapPluginReferenceForStage(
+	const AudioFxCustomOptions& options,
+	const std::string& effect_name,
+	size_t stage_index) {
+	if (!IsClapPluginEffectName(effect_name)) {
+		return options.clap_plugin_reference.empty() ? std::string("builtin://gain") : options.clap_plugin_reference;
+	}
+
+	size_t clap_stage_index = 0;
+	for (size_t index = 0; index < stage_index && index < options.effect_names.size(); ++index) {
+		if (IsClapPluginEffectName(options.effect_names[index])) {
+			++clap_stage_index;
+		}
+	}
+
+	if (clap_stage_index < options.clap_plugin_references.size() && !options.clap_plugin_references[clap_stage_index].empty()) {
+		return options.clap_plugin_references[clap_stage_index];
+	}
+	if (!options.clap_plugin_reference.empty()) {
+		return options.clap_plugin_reference;
+	}
+	return "builtin://gain";
+}
+
 bool WantsStereoByDefault(const std::string& effect_name);
 
 bool WriteTextFile(
@@ -300,7 +329,7 @@ bool RenderEffectArtifact(
 			input_audio.channels,
 			&processed_audio,
 			&artifact_out->report,
-			options.clap_plugin_reference.empty() ? std::string("builtin://gain") : options.clap_plugin_reference,
+			ResolveClapPluginReferenceForStage(options, effect_name, stage_index),
 			error_out)) {
 		return false;
 	}

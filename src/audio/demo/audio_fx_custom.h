@@ -13,6 +13,7 @@ struct AudioFxCustomOptions {
 	std::string effect_name;
 	std::vector<std::string> effect_names;
 	std::string clap_plugin_reference = "builtin://gain";
+	std::vector<std::string> clap_plugin_references;
 	int raw_sample_rate = 44100;
 	int target_sample_rate = 44100;
 	int target_channels = -1;

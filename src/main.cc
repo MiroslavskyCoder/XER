@@ -646,6 +646,29 @@ std::vector<std::string> GetJsonConfigEffects(const Json::Value& root) {
 	return effects;
 }
 
+std::vector<std::string> GetJsonConfigStringList(const Json::Value& root, const std::vector<std::string>& names) {
+	std::vector<std::string> values;
+	const Json::Value* value = FindJsonConfigValue(root, names);
+	if (value == nullptr || value->isNull()) {
+		return values;
+	}
+	if (value->isArray()) {
+		for (const Json::Value& item : *value) {
+			if (item.isString()) {
+				const std::string text = TrimCopy(item.asString());
+				if (!text.empty()) {
+					values.push_back(text);
+				}
+			}
+		}
+		return values;
+	}
+	if (value->isString()) {
+		AppendCsvStrings(value->asString(), &values);
+	}
+	return values;
+}
+
 bool ReadJsonConfigFile(const std::filesystem::path& path, Json::Value* root_out, std::string* error_out) {
 	if (root_out == nullptr) {
 		if (error_out != nullptr) {
@@ -690,6 +713,11 @@ bool ApplyAudioConfigFile(AppCommand::Parsed* parsed, std::string* error_out) {
 	parsed->audio_input_path = GetJsonConfigString(root, {"input", "inputPath", "input_path", "audioInput", "audio_input"}, parsed->audio_input_path);
 	parsed->output_dir = GetJsonConfigString(root, {"outputDir", "output_dir", "output"}, parsed->output_dir);
 	parsed->audio_clap_plugin_reference = GetJsonConfigString(root, {"clapPluginReference", "clap_plugin_reference", "clapPlugin", "clap_plugin"}, parsed->audio_clap_plugin_reference);
+	std::vector<std::string> clap_plugin_references = GetJsonConfigStringList(root, {"clapPluginReferences", "clap_plugin_references", "clapPlugins", "clap_plugins"});
+	if (!clap_plugin_references.empty()) {
+		parsed->audio_clap_plugin_references = std::move(clap_plugin_references);
+		parsed->audio_clap_plugin_reference = parsed->audio_clap_plugin_references.front();
+	}
 	parsed->target_sample_rate = GetJsonConfigInt(root, {"targetSampleRate", "target_sample_rate"}, parsed->target_sample_rate);
 	parsed->audio_target_channels = GetJsonConfigInt(root, {"targetChannels", "target_channels"}, parsed->audio_target_channels);
 	parsed->audio_raw_sample_rate = GetJsonConfigInt(root, {"rawSampleRate", "raw_sample_rate", "audioRawSampleRate", "audio_raw_sample_rate"}, parsed->audio_raw_sample_rate);
@@ -853,6 +881,7 @@ int main(int argc, char** argv) {
 			: std::filesystem::path(input_path);
 		fx_options.effect_name = parsed.audio_effect_name;
 		fx_options.clap_plugin_reference = parsed.audio_clap_plugin_reference;
+		fx_options.clap_plugin_references = parsed.audio_clap_plugin_references;
 		fx_options.raw_sample_rate = parsed.audio_raw_sample_rate;
 		fx_options.target_sample_rate = parsed.target_sample_rate;
 		fx_options.target_channels = parsed.audio_target_channels;
@@ -893,6 +922,7 @@ int main(int argc, char** argv) {
 			: std::filesystem::path(input_path);
 		fx_options.effect_names = parsed.audio_effect_names;
 		fx_options.clap_plugin_reference = parsed.audio_clap_plugin_reference;
+		fx_options.clap_plugin_references = parsed.audio_clap_plugin_references;
 		fx_options.raw_sample_rate = parsed.audio_raw_sample_rate;
 		fx_options.target_sample_rate = parsed.target_sample_rate;
 		fx_options.target_channels = parsed.audio_target_channels;

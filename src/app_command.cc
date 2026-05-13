@@ -329,6 +329,18 @@ AppCommand::Parsed AppCommand::Parse(int argc, char** argv) {
         }
         {
             std::string value; bool inline_v = false;
+            if (ParseValueFlag(arg, "--clap_plugins", &value, &inline_v) || ParseValueFlag(arg, "--clap_plugin_references", &value, &inline_v)) {
+                if (!inline_v && !ConsumeStringValue("--clap_plugins", argc, argv, &i, &value, &parsed))
+                    return parsed;
+                AppendTrimmedCsvValues(value, &parsed.audio_clap_plugin_references);
+                if (!parsed.audio_clap_plugin_references.empty()) {
+                    parsed.audio_clap_plugin_reference = parsed.audio_clap_plugin_references.front();
+                }
+                continue;
+            }
+        }
+        {
+            std::string value; bool inline_v = false;
             if (ParseValueFlag(arg, "--audio_shaper_profile", &value, &inline_v)) {
                 if (!inline_v && !ConsumeStringValue("--audio_shaper_profile", argc, argv, &i, &value, &parsed))
                     return parsed;
@@ -831,6 +843,7 @@ std::string AppCommand::BuildHelpText(const std::string& binary_name) {
     out << "  --audio_effect <name>        Custom preset name for audio_fx_custom or one batch item for audio_fx_batch\n";
     out << "  --audio_effects <a,b,c>      Comma-separated effect list for audio_fx_batch\n";
     out << "  --clap_plugin <path|ref>     CLAP plugin reference for CLAPPlugin/custom effect nodes\n";
+    out << "  --clap_plugins <a,b,c>       Ordered CLAP plugin references for repeated CLAPPlugin stages\n";
     out << "  --audio_processor <name>     spectral_shaper|phase_vocoder\n";
     out << "  --audio_shaper_profile <n>   unity|tilt|bright\n";
     out << "  --audio_stretch_ratio <x>    Phase vocoder time-stretch ratio (> 0)\n";
