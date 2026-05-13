@@ -1,0 +1,7 @@
+.git
+.github
+out
+build
+.flowcache
+*.flowcache.diff
+*.flowcache.xml
