@@ -1,4 +1,5 @@
-FROM ubuntu:22.04 AS build
+ARG XER_BASE_IMAGE=ubuntu:24.04
+FROM ${XER_BASE_IMAGE} AS build
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -14,10 +15,10 @@ RUN apt-get update \
       pkg-config \
       curl \
       git \
-      clang-14 \
-      lld-14 \
-      llvm-14-dev \
-      libclang-14-dev \
+      clang-18 \
+      lld-18 \
+      llvm-18-dev \
+      libclang-18-dev \
       libabsl-dev \
       libxml2-dev \
       libcurl4-openssl-dev \
@@ -45,30 +46,28 @@ RUN apt-get update \
       libicu-dev \
       libffi-dev \
       libfftw3-dev \
-      nvidia-cuda-toolkit \
-    && ln -sf /usr/bin/clang-14 /usr/local/bin/clang \
-    && ln -sf /usr/bin/clang++-14 /usr/local/bin/clang++ \
-    && if [ ! -e /usr/local/cuda ]; then ln -s /usr /usr/local/cuda; fi \
+    && ln -sf /usr/bin/clang-18 /usr/local/bin/clang \
+    && ln -sf /usr/bin/clang++-18 /usr/local/bin/clang++ \
     && rm -rf /var/lib/apt/lists/*
 
-ENV CC=clang-14 \
-    CXX=clang++-14 \
-    CUDAToolkit_ROOT=/usr/local/cuda \
-    CUDA_HOME=/usr/local/cuda \
-    CUDA_PATH=/usr/local/cuda \
-    LLVM_PREFIX=/usr/lib/llvm-14 \
-    LLVM_DIR=/usr/lib/llvm-14/lib/cmake/llvm \
-    Clang_DIR=/usr/lib/llvm-14/lib/cmake/clang \
-    CMAKE_PREFIX_PATH=/usr/lib/llvm-14
+ENV CC=clang-18 \
+  CXX=clang++-18 \
+    LLVM_PREFIX=/usr/lib/llvm-18 \
+    LLVM_DIR=/usr/lib/llvm-18/lib/cmake/llvm \
+    Clang_DIR=/usr/lib/llvm-18/lib/cmake/clang \
+    CMAKE_PREFIX_PATH=/usr/lib/llvm-18
 
 WORKDIR /xer
 COPY . .
 
+    ARG ENABLE_CUDA=OFF
+    ARG ENABLE_CUDNN=OFF
 ARG CMAKE_CUDA_ARCHITECTURES=75;86
 RUN cmake --preset default \
       -DLLVM_DIR="${LLVM_DIR}" \
       -DClang_DIR="${Clang_DIR}" \
-      -DCUDAToolkit_ROOT="${CUDAToolkit_ROOT}" \
+      -DENABLE_CUDA="${ENABLE_CUDA}" \
+      -DENABLE_CUDNN="${ENABLE_CUDNN}" \
       -DCMAKE_CUDA_ARCHITECTURES="${CMAKE_CUDA_ARCHITECTURES}" \
     && cmake --build --preset default -- -j"$(nproc)" \
     && install -m 0755 out/build/default/XER /usr/local/bin/XER

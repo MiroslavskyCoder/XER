@@ -25,7 +25,7 @@
 #define XER_AI_HAS_CUTLASS_HEADER 0
 #endif
 
-#if __has_include(<cuda_runtime.h>) && __has_include(<cudnn.h>)
+#if ENGINE_HAS_CUDA_BRIDGE && ENGINE_HAS_CUDNN_BRIDGE && __has_include(<cuda_runtime.h>) && __has_include(<cudnn.h>)
 #include "../../ml/cuda_ops/cuda_tensor_kernel.h"
 #define XER_AI_HAS_CUDA_CUDNN_HEADERS 1
 #else

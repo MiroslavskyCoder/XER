@@ -41,13 +41,13 @@
 #define XER_AI_HAS_ICU_HEADER 0
 #endif
 
-#if __has_include(<cuda_runtime_api.h>)
+#if ENGINE_HAS_CUDA_BRIDGE && __has_include(<cuda_runtime_api.h>)
 #define XER_AI_HAS_CUDA_HEADER 1
 #else
 #define XER_AI_HAS_CUDA_HEADER 0
 #endif
 
-#if __has_include(<cudnn.h>)
+#if ENGINE_HAS_CUDNN_BRIDGE && __has_include(<cudnn.h>)
 #define XER_AI_HAS_CUDNN_HEADER 1
 #else
 #define XER_AI_HAS_CUDNN_HEADER 0

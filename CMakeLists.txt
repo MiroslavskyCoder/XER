@@ -1,37 +1,40 @@
 cmake_minimum_required(VERSION 3.16)
 
 set(CMAKE_CXX_COMPILER clang++)
-set(CMAKE_CUDA_COMPILER clang++) 
-set(CMAKE_CUDA_HOST_COMPILER clang++)
- 
-set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --cuda-path=/usr/local/cuda --offload-arch=sm_86")
 
-set(CMAKE_CXX_STANDARD 20)
-set(CMAKE_CUDA_STANDARD 17)
- 
-if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES OR CMAKE_CUDA_ARCHITECTURES STREQUAL "")
-    set(CMAKE_CUDA_ARCHITECTURES "75;86;90")
+function(xer_option_from_env option_name default_value description)
+    set(option_default "${default_value}")
+    if(DEFINED ENV{${option_name}})
+        string(TOUPPER "$ENV{${option_name}}" option_env_value)
+        if(option_env_value MATCHES "^(1|ON|TRUE|YES|Y)$")
+            set(option_default ON)
+        elseif(option_env_value MATCHES "^(0|OFF|FALSE|NO|N)$")
+            set(option_default OFF)
+        endif()
+    endif()
+    option(${option_name} "${description}" ${option_default})
+endfunction()
+
+xer_option_from_env(ENABLE_CUDA OFF "Enable CUDA language, CUDA sources, and CUDA bridge targets")
+xer_option_from_env(ENABLE_CUDNN OFF "Enable cuDNN sources and bridge targets")
+
+if(ENABLE_CUDNN AND NOT ENABLE_CUDA)
+    message(FATAL_ERROR "ENABLE_CUDNN=ON requires ENABLE_CUDA=ON")
 endif()
 
-project(XER LANGUAGES C CXX CUDA)
+if(ENABLE_CUDA)
+    set(CMAKE_CUDA_COMPILER clang++)
+    set(CMAKE_CUDA_HOST_COMPILER clang++)
+    set(CMAKE_CUDA_STANDARD 17)
+    set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --cuda-path=/usr/local/cuda --offload-arch=sm_86")
+    if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES OR CMAKE_CUDA_ARCHITECTURES STREQUAL "")
+        set(CMAKE_CUDA_ARCHITECTURES "75;86;90")
+    endif()
+    project(XER LANGUAGES C CXX CUDA)
+else()
+    project(XER LANGUAGES C CXX)
+endif()
 
-include(GNUInstallDirs)
-  
-set(CMAKE_CXX_STANDARD 23)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
-find_package(absl REQUIRED)
-find_package(LibXml2 REQUIRED)
-find_package(LLVM REQUIRED CONFIG)
-find_package(Clang REQUIRED CONFIG)
-find_package(CURL REQUIRED)
-find_package(OpenSSL REQUIRED)
-find_package(ZLIB REQUIRED)
-find_package(ICU COMPONENTS uc i18n QUIET)
-find_package(SQLite3 QUIET)
-find_package(V8 QUIET)  
-
-project(XER LANGUAGES C CXX)
 
 include(GNUInstallDirs)
 

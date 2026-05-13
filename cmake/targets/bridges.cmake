@@ -18,7 +18,7 @@ if(ENGINE_WRAPPER_OPENCV_CC)
 endif()
 
 # ── CUDA ─────────────────────────────────────────────────────
-if(ENGINE_WRAPPER_CUDA_CC)
+if(ENABLE_CUDA AND ENGINE_WRAPPER_CUDA_CC)
     add_library(XERBridgeCuda STATIC ${ENGINE_WRAPPER_CUDA_CC})
     target_sources(XERBridgeCuda PRIVATE ${ENGINE_WRAPPER_CUDA_H})
     target_include_directories(XERBridgeCuda PUBLIC
@@ -35,7 +35,7 @@ if(ENGINE_WRAPPER_CUDA_CC)
 endif()
 
 # ── cuDNN ────────────────────────────────────────────────────
-if(ENGINE_WRAPPER_CUDNN_CC)
+if(ENABLE_CUDNN AND ENGINE_WRAPPER_CUDNN_CC)
     add_library(XERBridgeCudnn STATIC ${ENGINE_WRAPPER_CUDNN_CC})
     target_sources(XERBridgeCudnn PRIVATE ${ENGINE_WRAPPER_CUDNN_H})
     target_include_directories(XERBridgeCudnn PUBLIC
