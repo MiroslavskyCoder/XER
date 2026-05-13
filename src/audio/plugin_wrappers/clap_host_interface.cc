@@ -2,6 +2,25 @@
 
 namespace Engine::Audio::Plugin {
 
+namespace {
+
+ClapPluginMetadata MakeBuiltinClapMetadata(const std::string& loaded_identifier, const std::vector<PluginParameterInfo>& parameters) {
+    ClapPluginMetadata metadata;
+    metadata.id = loaded_identifier;
+    metadata.title = loaded_identifier.empty() ? std::string("builtin://unknown") : loaded_identifier;
+    metadata.vendor = "XER";
+    metadata.version = "builtin";
+    metadata.description = "XER built-in processor exposed through the CLAP host interface.";
+    metadata.plugin_path = loaded_identifier;
+    metadata.loaded_identifier = loaded_identifier;
+    metadata.input_channels = 1u;
+    metadata.output_channels = 1u;
+    metadata.parameters = parameters;
+    return metadata;
+}
+
+}  // namespace
+
 ClapHostInterface::~ClapHostInterface() = default;
 
 bool ClapHostInterface::Initialize(double sample_rate, uint32_t max_block_size) {
@@ -86,6 +105,19 @@ std::vector<PluginParameterInfo> ClapHostInterface::GetParameters() const {
         return builtin_host_.GetParameters();
     case Backend::kExternal:
         return external_host_ != nullptr ? external_host_->GetParameters() : std::vector<PluginParameterInfo>{};
+    case Backend::kNone:
+        return {};
+    }
+    return {};
+}
+
+ClapPluginMetadata ClapHostInterface::GetMetadataPluginClap() const {
+	AsyncIO::IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
+    switch (backend_) {
+    case Backend::kBuiltin:
+        return MakeBuiltinClapMetadata(plugin_path_, builtin_host_.GetParameters());
+    case Backend::kExternal:
+        return external_host_ != nullptr ? external_host_->GetMetadataPluginClap() : ClapPluginMetadata{};
     case Backend::kNone:
         return {};
     }

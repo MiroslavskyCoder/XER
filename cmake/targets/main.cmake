@@ -2,6 +2,7 @@
 # EngineBuilder main executable
 # ============================================================
 
+if(ENABLE_V8)
 add_executable(XER ${ENGINE_PROJECT_CC})
 target_sources(XER PRIVATE ${ENGINE_PROJECT_H})
 
@@ -39,6 +40,8 @@ target_compile_definitions(XER PRIVATE
     ENABLE_CUDA=$<BOOL:${ENABLE_CUDA}>
     ENABLE_CUDNN=$<BOOL:${ENABLE_CUDNN}>
     ENABLE_AI=$<BOOL:${ENABLE_AI}>
+    ENABLE_V8=$<BOOL:${ENABLE_V8}>
+    ENGINE_HAS_V8=$<BOOL:${ENABLE_V8}>
     ENGINE_HAS_CUDA_BRIDGE=${ENGINE_HAS_CUDA_BRIDGE}
     ENGINE_HAS_CUDNN_BRIDGE=${ENGINE_HAS_CUDNN_BRIDGE}
     ENGINE_HAS_ZSTD=${ENGINE_HAS_ZSTD}
@@ -174,19 +177,33 @@ if(Qt6Core_FOUND)
     target_link_libraries(XER PRIVATE Qt6::Core)
 endif()
 
+else()
+    message(STATUS "ENABLE_V8=OFF: XER executable and JavaScript runtime target are disabled")
+endif()
+
 # ── Interface alias for all Qt6 targets ──────────────────────
 if(ENGINE_QT6_FOUND_TARGETS)
     add_library(EngineQt6All INTERFACE)
     target_link_libraries(EngineQt6All INTERFACE ${ENGINE_QT6_FOUND_TARGETS})
 endif()
 
-add_library(EngineClapSmokePlugin MODULE
+function(add_engine_clap_plugin target_name source_file)
+    add_library(${target_name} MODULE ${source_file})
+    target_include_directories(${target_name} PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    set_target_properties(${target_name} PROPERTIES
+        PREFIX ""
+        SUFFIX ".clap")
+endfunction()
+
+add_engine_clap_plugin(EngineClapSmokePlugin
     ${CMAKE_CURRENT_SOURCE_DIR}/demo_app/clap_smoke_plugin.cc)
-target_include_directories(EngineClapSmokePlugin PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/src)
-set_target_properties(EngineClapSmokePlugin PROPERTIES
-    PREFIX ""
-    SUFFIX ".clap")
+add_engine_clap_plugin(EngineClapEqPlugin
+    ${CMAKE_CURRENT_SOURCE_DIR}/demo_app/clap_eq_plugin.cc)
+add_engine_clap_plugin(EngineClapBassBoostPlugin
+    ${CMAKE_CURRENT_SOURCE_DIR}/demo_app/clap_bass_boost_plugin.cc)
+add_engine_clap_plugin(EngineClapPitchShifterPlugin
+    ${CMAKE_CURRENT_SOURCE_DIR}/demo_app/clap_pitch_shifter_plugin.cc)
 
 add_executable(FluxTerminalManagerSmoke
     ${CMAKE_CURRENT_SOURCE_DIR}/demo_app/terminal_manager_smoke.cc

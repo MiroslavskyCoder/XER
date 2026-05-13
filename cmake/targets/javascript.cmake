@@ -2,6 +2,10 @@
 # EngineJavaScript static library  (V8 / libuv / ICU)
 # ============================================================
 
+if(NOT ENABLE_V8)
+    return()
+endif()
+
 if(NOT ENGINE_JAVASCRIPT_CC)
     return()
 endif()

@@ -11,15 +11,21 @@ find_package(OpenSSL REQUIRED)
 find_package(ZLIB REQUIRED)
 
 # ── libnode / V8 ────────────────────────────────────────────
-find_path(NODE_INCLUDE_DIR
-    NAMES v8.h
-    PATH_SUFFIXES node
-)
-find_library(NODE_LIBRARY NAMES node)
+set(NODE_INCLUDE_DIR)
+set(NODE_LIBRARY)
+if(ENABLE_V8)
+    find_path(NODE_INCLUDE_DIR
+        NAMES v8.h
+        PATH_SUFFIXES node
+    )
+    find_library(NODE_LIBRARY NAMES node)
 
-if(NOT NODE_INCLUDE_DIR OR NOT NODE_LIBRARY)
-    message(FATAL_ERROR
-        "libnode-dev not found: install package libnode-dev (v8.h + libnode)")
+    if(NOT NODE_INCLUDE_DIR OR NOT NODE_LIBRARY)
+        message(FATAL_ERROR
+            "libnode-dev not found: install package libnode-dev (v8.h + libnode), or configure with ENABLE_V8=OFF")
+    endif()
+else()
+    message(STATUS "ENABLE_V8=OFF: skipping libnode/V8 dependency discovery")
 endif()
 
 # ── LLVM component lib list ──────────────────────────────────

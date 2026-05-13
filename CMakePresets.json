@@ -16,7 +16,8 @@
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
         "ENABLE_CUDA": "OFF",
         "ENABLE_CUDNN": "OFF",
-        "ENABLE_AI": "OFF"
+        "ENABLE_AI": "OFF",
+        "ENABLE_V8": "OFF"
       }
     },
     {
@@ -27,7 +28,8 @@
       "cacheVariables": {
         "ENABLE_CUDA": "ON",
         "ENABLE_CUDNN": "ON",
-        "ENABLE_AI": "ON"
+        "ENABLE_AI": "ON",
+        "ENABLE_V8": "OFF"
       }
     }
   ],

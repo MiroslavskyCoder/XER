@@ -20,6 +20,7 @@ public:
     bool SetParameter(uint32_t id, float value);
     bool GetParameter(uint32_t id, float* value) const;
     std::vector<PluginParameterInfo> GetParameters() const;
+    ClapPluginMetadata GetMetadataPluginClap() const;
     std::string GetLoadedPluginId() const;
 
 private:

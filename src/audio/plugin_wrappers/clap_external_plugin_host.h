@@ -9,6 +9,20 @@
 
 namespace Engine::Audio::Plugin {
 
+struct ClapPluginMetadata {
+	std::string id;
+	std::string title;
+	std::string vendor;
+	std::string version;
+	std::string description;
+	std::string plugin_path;
+	std::string loaded_identifier;
+	std::vector<std::string> features;
+	uint32_t input_channels = 0;
+	uint32_t output_channels = 0;
+	std::vector<PluginParameterInfo> parameters;
+};
+
 class ClapExternalPluginHost {
 public:
 	ClapExternalPluginHost();
@@ -20,6 +34,7 @@ public:
 	bool SetParameter(uint32_t id, float value);
 	bool GetParameter(uint32_t id, float* value) const;
 	std::vector<PluginParameterInfo> GetParameters() const;
+	ClapPluginMetadata GetMetadataPluginClap() const;
 	std::string GetLoadedIdentifier() const;
 
 private:
@@ -38,6 +53,7 @@ private:
 	void Reset();
 	bool SyncParameterSnapshot();
 	bool ConfigureAudioPorts();
+	void CaptureLoadedMetadata(const ClapAbi::clap_plugin_descriptor* descriptor, const std::string& plugin_path);
 	bool SplitPluginReference(const std::string& reference, std::string* path_out, std::string* plugin_id_out) const;
 
 	void* library_handle_ = nullptr;
@@ -45,6 +61,7 @@ private:
 	const ClapAbi::clap_plugin_factory* factory_ = nullptr;
 	const ClapAbi::clap_plugin* plugin_ = nullptr;
 	const ClapAbi::clap_plugin_params* params_extension_ = nullptr;
+	const ClapAbi::clap_plugin_param_metadata* param_metadata_extension_ = nullptr;
 	const ClapAbi::clap_plugin_audio_ports* audio_ports_extension_ = nullptr;
 	ClapAbi::clap_host host_{};
 	PluginParameterBridge parameter_bridge_;
@@ -53,6 +70,7 @@ private:
 	uint32_t input_channels_ = 1;
 	uint32_t output_channels_ = 1;
 	std::string loaded_identifier_;
+	ClapPluginMetadata loaded_metadata_;
 };
 
 }  // namespace Engine::Audio::Plugin

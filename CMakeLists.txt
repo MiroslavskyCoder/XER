@@ -18,6 +18,7 @@ endfunction()
 xer_option_from_env(ENABLE_CUDA OFF "Enable CUDA language, CUDA sources, and CUDA bridge targets")
 xer_option_from_env(ENABLE_CUDNN OFF "Enable cuDNN sources and bridge targets")
 xer_option_from_env(ENABLE_AI OFF "Enable AI and model-builder sources")
+xer_option_from_env(ENABLE_V8 OFF "Enable V8/libnode JavaScript runtime and XER executable")
 
 if(ENABLE_CUDNN AND NOT ENABLE_CUDA)
     message(FATAL_ERROR "ENABLE_CUDNN=ON requires ENABLE_CUDA=ON")
@@ -56,5 +57,7 @@ include(cmake/targets/javascript.cmake)
 include(cmake/targets/qt6_bridge.cmake)
 include(cmake/targets/main.cmake)
 
-install(TARGETS XER
-    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+if(TARGET XER)
+    install(TARGETS XER
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+endif()

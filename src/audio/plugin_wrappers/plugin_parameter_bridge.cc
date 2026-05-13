@@ -15,12 +15,32 @@ void PluginParameterBridge::RegisterParameter(
     float default_value,
     float min_value,
     float max_value) {
+    PluginParameterInfo info;
+    info.id = id;
+    info.name = name;
+    info.default_value = default_value;
+    info.current_value = default_value;
+    info.min_value = min_value;
+    info.max_value = max_value;
+    RegisterParameter(info);
+}
+
+void PluginParameterBridge::RegisterParameter(const PluginParameterInfo& info) {
     AsyncIO::IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
+    PluginParameterInfo normalized = info;
+    float min_value = normalized.min_value;
+    float max_value = normalized.max_value;
     if (min_value > max_value) {
         std::swap(min_value, max_value);
     }
-    const float clamped_default = std::clamp(default_value, min_value, max_value);
-    values_[id] = PluginParameterInfo{id, name, min_value, max_value, clamped_default, clamped_default};
+    normalized.min_value = min_value;
+    normalized.max_value = max_value;
+    normalized.default_value = std::clamp(normalized.default_value, min_value, max_value);
+    normalized.current_value = std::clamp(normalized.current_value, min_value, max_value);
+    if (normalized.ui_hint.empty()) {
+        normalized.ui_hint = min_value < max_value ? "slider" : "input";
+    }
+    values_[normalized.id] = normalized;
 }
 
 bool PluginParameterBridge::SetValue(uint32_t id, float value) {

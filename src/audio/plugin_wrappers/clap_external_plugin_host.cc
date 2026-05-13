@@ -23,6 +23,10 @@ float DbToLinear(float db_value) {
 	return std::pow(10.0f, db_value / 20.0f);
 }
 
+std::string SafeClapString(const char* value) {
+	return value != nullptr ? std::string(value) : std::string();
+}
+
 }  // namespace
 
 ClapExternalPluginHost::ClapExternalPluginHost() {
@@ -80,9 +84,11 @@ void ClapExternalPluginHost::Reset() {
 	}
 	plugin_ = nullptr;
 	params_extension_ = nullptr;
+	param_metadata_extension_ = nullptr;
 	audio_ports_extension_ = nullptr;
 	factory_ = nullptr;
 	loaded_identifier_.clear();
+	loaded_metadata_ = {};
 	parameter_bridge_.Clear();
 	input_channels_ = 1;
 	output_channels_ = 1;
@@ -150,6 +156,7 @@ bool ClapExternalPluginHost::Load(const std::string& plugin_reference) {
 		return false;
 	}
 	params_extension_ = static_cast<const ClapAbi::clap_plugin_params*>(plugin_->get_extension != nullptr ? plugin_->get_extension(plugin_, ClapAbi::CLAP_EXT_PARAMS) : nullptr);
+	param_metadata_extension_ = static_cast<const ClapAbi::clap_plugin_param_metadata*>(plugin_->get_extension != nullptr ? plugin_->get_extension(plugin_, ClapAbi::ENGINE_CLAP_EXT_PARAM_METADATA) : nullptr);
 	audio_ports_extension_ = static_cast<const ClapAbi::clap_plugin_audio_ports*>(plugin_->get_extension != nullptr ? plugin_->get_extension(plugin_, ClapAbi::CLAP_EXT_AUDIO_PORTS) : nullptr);
 	if (!ConfigureAudioPorts()) {
 		Reset();
@@ -164,7 +171,34 @@ bool ClapExternalPluginHost::Load(const std::string& plugin_reference) {
 		return false;
 	}
 	loaded_identifier_ = MakeLoadedIdentifier(plugin_path, selected_descriptor->id);
-	return SyncParameterSnapshot();
+	if (!SyncParameterSnapshot()) {
+		Reset();
+		return false;
+	}
+	CaptureLoadedMetadata(selected_descriptor, plugin_path);
+	return true;
+}
+
+void ClapExternalPluginHost::CaptureLoadedMetadata(const ClapAbi::clap_plugin_descriptor* descriptor, const std::string& plugin_path) {
+	loaded_metadata_ = {};
+	if (descriptor == nullptr) {
+		return;
+	}
+	loaded_metadata_.id = SafeClapString(descriptor->id);
+	loaded_metadata_.title = SafeClapString(descriptor->name);
+	loaded_metadata_.vendor = SafeClapString(descriptor->vendor);
+	loaded_metadata_.version = SafeClapString(descriptor->version);
+	loaded_metadata_.description = SafeClapString(descriptor->description);
+	loaded_metadata_.plugin_path = plugin_path;
+	loaded_metadata_.loaded_identifier = loaded_identifier_;
+	if (descriptor->features != nullptr) {
+		for (const char* const* feature = descriptor->features; *feature != nullptr; ++feature) {
+			loaded_metadata_.features.emplace_back(*feature);
+		}
+	}
+	loaded_metadata_.input_channels = input_channels_;
+	loaded_metadata_.output_channels = output_channels_;
+	loaded_metadata_.parameters = parameter_bridge_.Snapshot();
 }
 
 bool ClapExternalPluginHost::ConfigureAudioPorts() {
@@ -198,11 +232,29 @@ bool ClapExternalPluginHost::SyncParameterSnapshot() {
 		if (params_extension_->get_value != nullptr) {
 			params_extension_->get_value(plugin_, info.id, &current_value);
 		}
-		parameter_bridge_.RegisterParameter(info.id,
-			info.name,
-			static_cast<float>(current_value),
-			static_cast<float>(info.min_value),
-			static_cast<float>(info.max_value));
+		PluginParameterInfo parameter_info;
+		parameter_info.id = info.id;
+		parameter_info.name = info.name;
+		parameter_info.module = info.module;
+		parameter_info.flags = info.flags;
+		parameter_info.is_stepped = (info.flags & ClapAbi::CLAP_PARAM_IS_STEPPED) != 0u;
+		parameter_info.is_automatable = (info.flags & ClapAbi::CLAP_PARAM_IS_AUTOMATABLE) != 0u;
+		parameter_info.min_value = static_cast<float>(info.min_value);
+		parameter_info.max_value = static_cast<float>(info.max_value);
+		parameter_info.default_value = static_cast<float>(info.default_value);
+		parameter_info.current_value = static_cast<float>(current_value);
+		if (param_metadata_extension_ != nullptr && param_metadata_extension_->get != nullptr) {
+			ClapAbi::clap_param_metadata_info metadata_info{};
+			if (param_metadata_extension_->get(plugin_, info.id, &metadata_info)) {
+				parameter_info.unit = metadata_info.unit;
+				parameter_info.ui_hint = metadata_info.ui_hint;
+				parameter_info.description = metadata_info.description;
+				if (parameter_info.module.empty()) {
+					parameter_info.module = metadata_info.group;
+				}
+			}
+		}
+		parameter_bridge_.RegisterParameter(parameter_info);
 		parameter_bridge_.SetValue(info.id, static_cast<float>(current_value));
 	}
 	return true;
@@ -305,6 +357,12 @@ bool ClapExternalPluginHost::GetParameter(uint32_t id, float* value) const {
 
 std::vector<PluginParameterInfo> ClapExternalPluginHost::GetParameters() const {
 	return parameter_bridge_.Snapshot();
+}
+
+ClapPluginMetadata ClapExternalPluginHost::GetMetadataPluginClap() const {
+	ClapPluginMetadata metadata = loaded_metadata_;
+	metadata.parameters = parameter_bridge_.Snapshot();
+	return metadata;
 }
 
 std::string ClapExternalPluginHost::GetLoadedIdentifier() const {

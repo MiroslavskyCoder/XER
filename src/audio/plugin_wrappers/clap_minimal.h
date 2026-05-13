@@ -1,5 +1,8 @@
 #pragma once
 
+#include <algorithm>
+#include <cstdio>
+#include <cstring>
 #include <cstdint>
 
 #if defined(_WIN32)
@@ -212,5 +215,91 @@ struct clap_plugin_audio_ports {
 inline constexpr char CLAP_PLUGIN_FEATURE_AUDIO_EFFECT[] = "audio-effect";
 inline constexpr char CLAP_PLUGIN_FEATURE_UTILITY[] = "utility";
 inline constexpr char CLAP_PLUGIN_FEATURE_MONO[] = "mono";
+inline constexpr char CLAP_PLUGIN_FEATURE_STEREO[] = "stereo";
+inline constexpr char CLAP_PLUGIN_FEATURE_EQUALIZER[] = "equalizer";
+inline constexpr char CLAP_PLUGIN_FEATURE_FILTER[] = "filter";
+inline constexpr char CLAP_PLUGIN_FEATURE_PITCH_SHIFTER[] = "pitch-shifter";
+
+struct clap_minimal_param_descriptor {
+	clap_id id;
+	const char* name;
+	const char* module;
+	double min_value;
+	double max_value;
+	double default_value;
+	clap_param_info_flags flags;
+	const char* unit;
+	const char* ui_hint;
+	const char* description;
+};
+
+inline constexpr char ENGINE_CLAP_EXT_PARAM_METADATA[] = "engine.xer.clap.param-metadata/1";
+inline constexpr char ENGINE_CLAP_PARAM_UI_INPUT[] = "input";
+inline constexpr char ENGINE_CLAP_PARAM_UI_SLIDER[] = "slider";
+inline constexpr char ENGINE_CLAP_PARAM_UI_TOGGLE[] = "toggle";
+inline constexpr char ENGINE_CLAP_PARAM_UI_MENU[] = "menu";
+
+struct clap_param_metadata_info {
+	clap_id id;
+	char unit[CLAP_NAME_SIZE];
+	char ui_hint[CLAP_NAME_SIZE];
+	char group[CLAP_PATH_SIZE];
+	char description[CLAP_PATH_SIZE];
+};
+
+struct clap_plugin_param_metadata {
+	bool(ENGINE_CLAP_ABI* get)(const clap_plugin* plugin, clap_id param_id, clap_param_metadata_info* metadata_info);
+};
+
+inline void clap_copy_fixed_string(char* target, uint32_t capacity, const char* source) {
+	if (target == nullptr || capacity == 0) {
+		return;
+	}
+	std::snprintf(target, capacity, "%s", source != nullptr ? source : "");
+}
+
+inline bool clap_fill_param_info(const clap_minimal_param_descriptor& descriptor, clap_param_info* param_info) {
+	if (param_info == nullptr) {
+		return false;
+	}
+	*param_info = {};
+	param_info->id = descriptor.id;
+	param_info->flags = descriptor.flags;
+	clap_copy_fixed_string(param_info->name, CLAP_NAME_SIZE, descriptor.name);
+	clap_copy_fixed_string(param_info->module, CLAP_PATH_SIZE, descriptor.module);
+	param_info->min_value = descriptor.min_value;
+	param_info->max_value = descriptor.max_value;
+	param_info->default_value = descriptor.default_value;
+	return true;
+}
+
+inline bool clap_fill_param_metadata(const clap_minimal_param_descriptor& descriptor, clap_param_metadata_info* metadata_info) {
+	if (metadata_info == nullptr) {
+		return false;
+	}
+	*metadata_info = {};
+	metadata_info->id = descriptor.id;
+	clap_copy_fixed_string(metadata_info->unit, CLAP_NAME_SIZE, descriptor.unit);
+	clap_copy_fixed_string(metadata_info->ui_hint, CLAP_NAME_SIZE, descriptor.ui_hint != nullptr ? descriptor.ui_hint : ENGINE_CLAP_PARAM_UI_SLIDER);
+	clap_copy_fixed_string(metadata_info->group, CLAP_PATH_SIZE, descriptor.module);
+	clap_copy_fixed_string(metadata_info->description, CLAP_PATH_SIZE, descriptor.description);
+	return true;
+}
+
+inline int clap_find_param_index(const clap_minimal_param_descriptor* descriptors, uint32_t descriptor_count, clap_id id) {
+	if (descriptors == nullptr) {
+		return -1;
+	}
+	for (uint32_t index = 0; index < descriptor_count; ++index) {
+		if (descriptors[index].id == id) {
+			return static_cast<int>(index);
+		}
+	}
+	return -1;
+}
+
+inline double clap_clamp_param_value(const clap_minimal_param_descriptor& descriptor, double value) {
+	return std::clamp(value, descriptor.min_value, descriptor.max_value);
+}
 
 }  // namespace Engine::Audio::Plugin::ClapAbi

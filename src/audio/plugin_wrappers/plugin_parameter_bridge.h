@@ -12,6 +12,13 @@ namespace Engine::Audio::Plugin {
 struct PluginParameterInfo {
 	uint32_t id = 0;
 	std::string name;
+    std::string module;
+    std::string unit;
+    std::string ui_hint;
+    std::string description;
+    uint32_t flags = 0;
+    bool is_stepped = false;
+    bool is_automatable = false;
 	float min_value = 0.0f;
 	float max_value = 1.0f;
 	float default_value = 0.0f;
@@ -22,6 +29,7 @@ class PluginParameterBridge {
 public:
     void Clear();
     void RegisterParameter(uint32_t id, const std::string& name, float default_value, float min_value, float max_value);
+    void RegisterParameter(const PluginParameterInfo& info);
     bool SetValue(uint32_t id, float value);
     bool SetNormalizedValue(uint32_t id, float normalized_value);
     bool GetValue(uint32_t id, float& value) const;
