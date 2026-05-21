@@ -2,8 +2,16 @@
 
 #include <algorithm>
 #include <cmath>
+#include <future>
 
 namespace Engine::Audio::FX {
+
+std::string ParametricEQ::GetMemoryStats() const {
+	std::string stats;
+	stats += "Bands: " + std::to_string(bands_.size() * sizeof(ParametricBand)) + " bytes\n";
+	stats += "Filters: " + std::to_string(filters_.size() * sizeof(Engine::Audio::DSP::BiquadProcessor)) + " bytes\n";
+	return stats;
+}
 
 namespace {
 float DbToLinear(float db_value) {
@@ -56,13 +64,38 @@ bool ParametricEQ::ProcessBlock(const float* input, size_t frame_count, float* o
 	}
 
 	AsyncIO::IO::Sync::MutexWrapper::ScopedLock lock(mutex_);
-	for (size_t n = 0; n < frame_count; ++n) {
+	size_t n = 0;
+#if defined(__AVX2__)
+	for (; n + 7 < frame_count; n += 8) {
+		__m256 in = _mm256_loadu_ps(&input[n]);
+		__m256 sum = in;
+		for (size_t band = 0; band < bands_.size(); ++band) {
+			if (!bands_[band].enabled) continue;
+			// SIMD-обработка: если фильтр поддерживает SIMD, иначе fallback
+			__m256 filtered = filters_[band].ProcessBlockSIMD(in);
+			__m256 gain = _mm256_set1_ps(DbToLinear(bands_[band].gain_db) - 1.0f);
+			sum = _mm256_add_ps(sum, _mm256_mul_ps(filtered, gain));
+		}
+		_mm256_storeu_ps(&output[n], sum);
+	}
+#endif
+#if defined(__SSE2__)
+	for (; n + 3 < frame_count; n += 4) {
+		__m128 in = _mm_loadu_ps(&input[n]);
+		__m128 sum = in;
+		for (size_t band = 0; band < bands_.size(); ++band) {
+			if (!bands_[band].enabled) continue;
+			__m128 filtered = filters_[band].ProcessBlockSIMD(in);
+			__m128 gain = _mm_set1_ps(DbToLinear(bands_[band].gain_db) - 1.0f);
+			sum = _mm_add_ps(sum, _mm_mul_ps(filtered, gain));
+		}
+		_mm_storeu_ps(&output[n], sum);
+	}
+#endif
+	for (; n < frame_count; ++n) {
 		float sum = input[n];
 		for (size_t band = 0; band < bands_.size(); ++band) {
-			if (!bands_[band].enabled) {
-				continue;
-			}
-
+			if (!bands_[band].enabled) continue;
 			const float filtered = filters_[band].ProcessSample(input[n]);
 			sum += filtered * (DbToLinear(bands_[band].gain_db) - 1.0f);
 		}
@@ -74,6 +107,13 @@ bool ParametricEQ::ProcessBlock(const float* input, size_t frame_count, float* o
 std::string ParametricEQ::GetReport() const {
 	return "ParametricEQ: bands=" + std::to_string(bands_.size()) +
 		", sr=" + std::to_string(sample_rate_);
+}
+
+
+std::future<bool> ParametricEQ::ProcessBlockAsync(const float* input, size_t frame_count, float* output) {
+	return std::async(std::launch::async, [this, input, frame_count, output]() {
+		return this->ProcessBlock(input, frame_count, output);
+	});
 }
 
 }  // namespace Engine::Audio::FX

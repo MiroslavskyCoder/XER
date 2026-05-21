@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <string>
 #include <vector>
+#include <future>
 
 #include "async_io/sync_primitives/mutex_wrapper.h"
 
@@ -10,6 +11,7 @@ namespace Engine::Audio::FX {
 
 class ModPhaser {
 public:
+	std::string GetMemoryStats() const;
 	ModPhaser();
 	~ModPhaser();
 
@@ -19,6 +21,7 @@ public:
 	void SetFeedback(float feedback);
 	void SetMix(float mix);
 	bool ProcessBlock(const float* input, size_t frame_count, float* output);
+	std::future<bool> ProcessBlockAsync(const float* input, size_t frame_count, float* output);
 
 	std::string GetReport() const;
 

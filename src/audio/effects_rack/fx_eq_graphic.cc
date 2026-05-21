@@ -45,7 +45,6 @@ bool GraphicEQ::ProcessBlock(const float* input, size_t frame_count, float* outp
 	if (input == nullptr || output == nullptr) {
 		return false;
 	}
-
 	perf_counter_.StartCounter("fx_graphic_eq");
 	for (size_t n = 0; n < frame_count; ++n) {
 		float sum = input[n];

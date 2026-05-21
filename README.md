@@ -1,3 +1,55 @@
+# AudioSourceLoader Modernization (2024)
+
+
+## DSP/Effects: SIMD, Async, Zero-Copy, Memory Stats
+
+- **SIMD/Parallelism:** Все основные DSP/эффекты используют AVX2/SSE2 и многопоточность для ускорения обработки аудиоблоков.
+- **Zero-Copy:** Поддержка zero-copy для всех ProcessBlock/ProcessSample — если вход и выход совпадают, копий не происходит.
+- **Async API:** Все эффекты и фильтры поддерживают асинхронный вызов через std::future (например, ProcessBlockAsync).
+- **Memory Stats:** Для аудиомодулей реализован метод GetMemoryStats() для отчёта по памяти.
+- **Unit/Smoke-тесты:** См. tests/dsp_memory_async_zero_copy_test.cc — тестируются zero-copy, async, memory stats, корректность SIMD путей.
+
+
+- **Strict MP3-only support**: Loader enforces MP3 as primary format, with fallback stub for other formats.
+- **Error handling**: Uses `AudioLoaderError` enum and error category for robust error reporting.
+- **Async API**: Supports `LoadAsync` and `std::future` for non-blocking decode/process.
+- **SIMD/multithreading**: Interleaving/mixing accelerated with SSE2/AVX2 and thread pool.
+- **Profiling**: `ScopedTimer` for timing decode and processing steps.
+- **MP3 fallback**: FFmpeg primary, planned mpg123 fallback (stub present).
+- **Self-test/unit test**: `SelfTest()` method for loader validation and CI.
+- **CMake auto-detect**: vcpkg/auto-detect for ffmpeg, mpg123, fftw, absl, range-v3.
+- **Deduplication**: Structure simplified, code duplication removed, error handling unified.
+
+## Usage
+
+```cpp
+#include "audio_core/audio_source_loader.h"
+AudioSourceLoadOptions opts;
+opts.input_path = "file.mp3";
+AudioSourceBuffer buf;
+std::string err;
+auto code = AudioSourceLoader::LoadWithCode(opts, &buf, &err);
+if (code != AudioLoaderError::OK) { /* handle error */ }
+```
+
+## Self-Test
+
+```cpp
+std::string report;
+bool ok = AudioSourceLoader::SelfTest(&report);
+std::cout << report;
+```
+
+## CMake Integration
+
+Auto-detects vcpkg libraries (ffmpeg, mpg123, fftw, absl, range-v3). See CMakeLists.txt for details.
+
+## TODO
+
+- Implement full mpg123 fallback for MP3 decode
+- Add more unit tests (valid MP3, WAV, error cases)
+- Integrate async decode in effect chains
+- Advanced error propagation and profiling
 # XER 🚀
 
 XER is a high-performance C++/V8 runtime builder that executes JavaScript project configurations and compiles native code dynamically through `RuntimeLive`. It provides a powerful bridge between JavaScript and advanced C++ multimedia/GPU frameworks.

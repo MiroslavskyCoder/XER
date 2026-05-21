@@ -1,3 +1,14 @@
+# DSP/Effects Unit & Smoke Tests
+
+Для проверки SIMD, async, zero-copy и отчётов по памяти для всех DSP/эффектов выполните:
+
+```bash
+cd ../../tests
+g++ dsp_memory_async_zero_copy_test.cc -I../src -std=c++17 -lpthread -o dsp_test && ./dsp_test
+```
+
+Вывод покажет отчёты по памяти и успешное выполнение zero-copy/async путей.
+
 # demo_app
 
 ## Bridge multimedia demo

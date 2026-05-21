@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 
 namespace {
 
@@ -44,6 +45,14 @@ bool AudioSampleRateConverter::Convert(const float* input, size_t input_frames, 
         return true;
     }
 
+    if (input_rate_ == output_rate_) {
+        output_frames = input_frames;
+        if (input != output) {
+            std::memmove(output, input, input_frames * sizeof(float));
+        }
+        return true;
+    }
+
     output_frames = std::max<size_t>(1u, static_cast<size_t>(std::floor((static_cast<double>(input_frames - 1u) * ratio_))) + 1u);
 
     for (size_t i = 0; i < output_frames; ++i) {
@@ -73,10 +82,16 @@ bool AudioSampleRateConverter::ConvertMultiChannel(
 
     if (!initialized_ || !input || !output || channels <= 0) return false;
 
-    output_frames = static_cast<size_t>(input_frames * ratio_);
+    output_frames = 0;
 
     for (int ch = 0; ch < channels; ++ch) {
-        if (!Convert(input[ch], input_frames, output[ch], output_frames)) {
+        size_t channel_output_frames = 0;
+        if (!Convert(input[ch], input_frames, output[ch], channel_output_frames)) {
+            return false;
+        }
+        if (ch == 0) {
+            output_frames = channel_output_frames;
+        } else if (channel_output_frames != output_frames) {
             return false;
         }
     }

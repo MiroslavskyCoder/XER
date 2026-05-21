@@ -7,8 +7,7 @@ namespace Engine::Audio::DSP {
 CircularDelayLine::CircularDelayLine()
 	: max_delay_samples_(0),
 	  delay_samples_(0),
-	  write_index_(0),
-	  buffer_pool_(16384, 2) {}
+	  write_index_(0) {}
 
 CircularDelayLine::~CircularDelayLine() = default;
 
@@ -48,12 +47,6 @@ float CircularDelayLine::Process(float sample) {
 	const float delayed = buffer_[read_index];
 	buffer_[write_index_] = sample;
 	write_index_ = (write_index_ + 1) % buffer_.size();
-
-	auto temp_block = buffer_pool_.AcquireBuffer();
-	if (temp_block != nullptr) {
-		temp_block->used_bytes = 0;
-		buffer_pool_.ReleaseBuffer(temp_block);
-	}
 
 	return delayed;
 }

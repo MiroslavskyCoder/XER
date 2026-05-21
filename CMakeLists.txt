@@ -1,6 +1,37 @@
 cmake_minimum_required(VERSION 3.16)
 
-set(CMAKE_CXX_COMPILER clang++)
+set(_XER_VCPKG_ROOT_CANDIDATES
+    "$ENV{XER_VCPKG_ROOT}"
+    "$ENV{VCPKG_ROOT}"
+    "${CMAKE_CURRENT_LIST_DIR}/vcpkg"
+    "${CMAKE_CURRENT_LIST_DIR}/../vcpkg"
+    "${CMAKE_CURRENT_LIST_DIR}/../../vcpkg"
+    "${CMAKE_CURRENT_LIST_DIR}/../../../vcpkg")
+
+foreach(_xer_vcpkg_root IN LISTS _XER_VCPKG_ROOT_CANDIDATES)
+    if(_xer_vcpkg_root AND EXISTS "${_xer_vcpkg_root}/scripts/buildsystems/vcpkg.cmake")
+        if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
+            set(CMAKE_TOOLCHAIN_FILE "${_xer_vcpkg_root}/scripts/buildsystems/vcpkg.cmake" CACHE FILEPATH "vcpkg toolchain file")
+        endif()
+        if(WIN32 AND NOT DEFINED VCPKG_TARGET_TRIPLET)
+            set(VCPKG_TARGET_TRIPLET "x64-windows" CACHE STRING "vcpkg target triplet")
+        endif()
+        foreach(_xer_triplet x64-windows x64-windows-static x64-linux)
+            if(EXISTS "${_xer_vcpkg_root}/installed/${_xer_triplet}")
+                list(APPEND CMAKE_PREFIX_PATH "${_xer_vcpkg_root}/installed/${_xer_triplet}")
+            endif()
+        endforeach()
+        message(STATUS "Using vcpkg root: ${_xer_vcpkg_root}")
+        break()
+    endif()
+endforeach()
+
+if(NOT DEFINED CMAKE_CXX_COMPILER)
+    find_program(XER_CLANGXX clang++)
+    if(XER_CLANGXX)
+        set(CMAKE_CXX_COMPILER "${XER_CLANGXX}" CACHE FILEPATH "C++ compiler for XER" FORCE)
+    endif()
+endif()
 
 function(xer_option_from_env option_name default_value description)
     set(option_default "${default_value}")

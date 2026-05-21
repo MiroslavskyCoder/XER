@@ -1,11 +1,14 @@
 #include "io_thread_pool.h"
 
+#include <algorithm>
 #include <cstdlib>
 #include <string>
 
+#if defined(__linux__)
 #include <pthread.h>
 #include <sched.h>
 #include <sys/resource.h>
+#endif
 
 namespace IO::AsyncIO {
 
@@ -29,7 +32,8 @@ static size_t ResolveSharedThreadCount() {
     return n;
 }
 
-// Parse "0,1,2,3" into a cpu_set_t.  Returns false if string is empty or invalid.
+#if defined(__linux__)
+// Parse "0,1,2,3" into a cpu_set_t. Returns false if string is empty or invalid.
 static bool ParseCpuAffinity(const std::string& spec, cpu_set_t* out) {
     CPU_ZERO(out);
     if (spec.empty()) return false;
@@ -49,9 +53,11 @@ static bool ParseCpuAffinity(const std::string& spec, cpu_set_t* out) {
     }
     return CPU_COUNT(out) > 0;
 }
+#endif
 
 // Apply affinity + nice-priority to the calling thread.
 static void ApplyThreadSettings() {
+#if defined(__linux__)
     // CPU affinity
     const char* aff_env = std::getenv("ENGINE_CPU_AFFINITY");
     if (aff_env != nullptr && aff_env[0] != '\0') {
@@ -72,6 +78,7 @@ static void ApplyThreadSettings() {
             }
         } catch (...) {}
     }
+#endif
 }
 
 IOThreadPool& IOThreadPool::GetSharedInstance() {

@@ -1,5 +1,8 @@
 #include "cpu_info.h"
 
+#include <fstream>
+#include <sstream>
+
 #if defined(_WIN32)
     #include <windows.h>
     #include <intrin.h>

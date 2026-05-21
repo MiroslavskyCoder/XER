@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <string>
 #include <vector>
+#include <future>
 
 #include "async_io/sync_primitives/mutex_wrapper.h"
 #include "audio/dsp_algorithms/dsp_biquad_processor.h"
@@ -18,6 +19,7 @@ struct ParametricBand {
 
 class ParametricEQ {
 public:
+	std::string GetMemoryStats() const;
 	ParametricEQ();
 	~ParametricEQ();
 
@@ -25,6 +27,7 @@ public:
 	bool SetBand(size_t index, const ParametricBand& band);
 	ParametricBand GetBand(size_t index) const;
 	bool ProcessBlock(const float* input, size_t frame_count, float* output);
+	std::future<bool> ProcessBlockAsync(const float* input, size_t frame_count, float* output);
 
 	std::string GetReport() const;
 

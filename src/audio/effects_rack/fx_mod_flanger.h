@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <string>
+#include <future>
 
 #include "async_io/log_and_debug/io_perf_counter.h"
 #include "audio/dsp_algorithms/dsp_delay_line_circular.h"
@@ -10,6 +11,7 @@ namespace Engine::Audio::FX {
 
 class ModFlanger {
 public:
+	std::string GetMemoryStats() const;
 	ModFlanger();
 	~ModFlanger();
 
@@ -19,6 +21,7 @@ public:
 	void SetFeedback(float feedback);
 	void SetMix(float mix);
 	bool ProcessBlock(const float* input, size_t frame_count, float* output);
+	std::future<bool> ProcessBlockAsync(const float* input, size_t frame_count, float* output);
 
 	std::string GetReport() const;
 

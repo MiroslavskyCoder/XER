@@ -1,5 +1,7 @@
 #include "async_buffer_pool.h"
 
+#include <algorithm>
+
 namespace IO::AsyncIO {
 
 AsyncBufferPool::AsyncBufferPool(size_t block_size, size_t initial_blocks)
@@ -33,11 +35,17 @@ std::shared_ptr<BufferBlock> AsyncBufferPool::AcquireBuffer() {
 void AsyncBufferPool::ReleaseBuffer(std::shared_ptr<BufferBlock> buffer) {
     std::lock_guard<std::mutex> lock(pool_mutex_);
     
-    if (buffer) {
-        buffer->in_use = false;
-        buffer->used_bytes = 0;
-        available_blocks_.push(buffer);
+    if (!buffer || !buffer->in_use) {
+        return;
     }
+
+    if (std::find(all_blocks_.begin(), all_blocks_.end(), buffer) == all_blocks_.end()) {
+        return;
+    }
+
+    buffer->in_use = false;
+    buffer->used_bytes = 0;
+    available_blocks_.push(buffer);
 }
 
 size_t AsyncBufferPool::GetAvailableBlocks() const {
@@ -52,7 +60,9 @@ size_t AsyncBufferPool::GetTotalBlocks() const {
 
 size_t AsyncBufferPool::GetUsedBlocks() const {
     std::lock_guard<std::mutex> lock(pool_mutex_);
-    return all_blocks_.size() - available_blocks_.size();
+    return available_blocks_.size() <= all_blocks_.size()
+        ? all_blocks_.size() - available_blocks_.size()
+        : 0;
 }
 
 void AsyncBufferPool::Resize(size_t total_blocks) {
@@ -93,6 +103,7 @@ void AsyncBufferPool::Trim() {
 }
 
 void AsyncBufferPool::AllocateBlocks(size_t count) {
+    all_blocks_.reserve(all_blocks_.size() + count);
     for (size_t i = 0; i < count; ++i) {
         auto block = std::make_shared<BufferBlock>(block_size_);
         all_blocks_.push_back(block);

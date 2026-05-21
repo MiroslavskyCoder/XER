@@ -81,6 +81,7 @@ if(ENGINE_WRAPPER_FFMPEG_CC)
         target_include_directories(XERBridgeFfmpeg PRIVATE
             ${ENGINE_FFMPEG_INCLUDE_DIRS})
     endif()
+    target_link_libraries(XERBridgeFfmpeg PRIVATE absl::str_format)
     if(ENGINE_FFMPEG_LIBRARIES)
         target_link_libraries(XERBridgeFfmpeg PRIVATE ${ENGINE_FFMPEG_LIBRARIES})
     endif()

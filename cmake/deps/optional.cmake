@@ -110,7 +110,40 @@ set(ENGINE_HAS_FFMPEG_AVFILTER 0)
 set(ENGINE_HAS_FFMPEG_AVDEVICE 0)
 set(ENGINE_FFMPEG_INCLUDE_DIRS)
 set(ENGINE_FFMPEG_LIBRARIES)
-if(PkgConfig_FOUND)
+set(XER_BUNDLED_FFMPEG_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../ffmpeg" CACHE PATH "Local patched FFmpeg source tree used by XER")
+option(XER_USE_BUNDLED_FFMPEG "Prefer local deps/ffmpeg over system/pkg-config FFmpeg." ON)
+
+if(XER_USE_BUNDLED_FFMPEG AND EXISTS "${XER_BUNDLED_FFMPEG_DIR}/CMakeLists.txt")
+    set(FFMPEG_BUILD_PROGRAMS OFF CACHE BOOL "Build FFmpeg command line programs from bundled source" FORCE)
+    set(FFMPEG_ENABLE_ASM OFF CACHE BOOL "Enable bundled FFmpeg assembly sources" FORCE)
+    set(FFMPEG_ENABLE_X86ASM OFF CACHE BOOL "Enable bundled FFmpeg NASM sources" FORCE)
+    set(FFMPEG_BUILD_SHARED OFF CACHE BOOL "Build bundled FFmpeg shared libraries" FORCE)
+    add_subdirectory("${XER_BUNDLED_FFMPEG_DIR}" "${CMAKE_BINARY_DIR}/deps/ffmpeg" EXCLUDE_FROM_ALL)
+
+    if(TARGET FFmpeg::avutil AND TARGET FFmpeg::avcodec AND TARGET FFmpeg::avformat
+            AND TARGET FFmpeg::swscale AND TARGET FFmpeg::swresample)
+        set(ENGINE_HAS_FFMPEG_BRIDGE 1)
+        list(APPEND ENGINE_FFMPEG_LIBRARIES
+            FFmpeg::avformat
+            FFmpeg::avcodec
+            FFmpeg::swscale
+            FFmpeg::swresample
+            FFmpeg::avutil)
+        if(TARGET FFmpeg::avfilter)
+            set(ENGINE_HAS_FFMPEG_AVFILTER 1)
+            list(APPEND ENGINE_FFMPEG_LIBRARIES FFmpeg::avfilter)
+        endif()
+        if(TARGET FFmpeg::avdevice)
+            set(ENGINE_HAS_FFMPEG_AVDEVICE 1)
+            list(APPEND ENGINE_FFMPEG_LIBRARIES FFmpeg::avdevice)
+        endif()
+        message(STATUS "Using bundled patched FFmpeg: ${XER_BUNDLED_FFMPEG_DIR}")
+    else()
+        message(WARNING "Bundled FFmpeg was found but required CMake targets are missing; falling back to pkg-config")
+    endif()
+endif()
+
+if(NOT ENGINE_HAS_FFMPEG_BRIDGE AND PkgConfig_FOUND)
     pkg_check_modules(FFMPEG_AVUTIL   libavutil   QUIET)
     pkg_check_modules(FFMPEG_AVCODEC  libavcodec  QUIET)
     pkg_check_modules(FFMPEG_AVFORMAT libavformat QUIET)

@@ -5,11 +5,13 @@
 #include <vector>
 
 #include "async_io/sync_primitives/mutex_wrapper.h"
+#include <future>
 
 namespace Engine::Audio::DSP {
 
 class FIRFilterBank {
 public:
+	std::string GetMemoryStats() const;
 	FIRFilterBank();
 	~FIRFilterBank();
 
@@ -18,6 +20,7 @@ public:
 	size_t GetFilterCount() const { return filters_.size(); }
 
 	bool ProcessSample(float input, std::vector<float>& outputs);
+	std::future<bool> ProcessSampleAsync(float input, std::vector<float>& outputs);
 	std::string GetReport() const;
 
 private:

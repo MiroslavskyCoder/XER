@@ -36,8 +36,32 @@ MemoryStats MemoryMonitor::GetMemoryStats() const {
 MemoryStats MemoryMonitor::GetGPUMemoryStats(int device_id) const {
     MemoryStats stats = {0, 0, 0, 0.0, 0};
 
-    // dlopen NVML at runtime to avoid a hard dependency on libnvidia-ml.
+    // Load NVML at runtime to avoid a hard dependency on NVIDIA drivers.
+#ifdef _WIN32
+    HMODULE lib = LoadLibraryA("nvml.dll");
+    auto load_symbol = [lib](const char* name) -> void* {
+        return lib != nullptr ? reinterpret_cast<void*>(GetProcAddress(lib, name)) : nullptr;
+    };
+    auto close_library = [lib]() {
+        if (lib != nullptr) {
+            FreeLibrary(lib);
+        }
+    };
+#elif defined(__linux__)
     void* lib = dlopen("libnvidia-ml.so.1", RTLD_LAZY | RTLD_LOCAL);
+    auto load_symbol = [lib](const char* name) -> void* {
+        return lib != nullptr ? dlsym(lib, name) : nullptr;
+    };
+    auto close_library = [lib]() {
+        if (lib != nullptr) {
+            dlclose(lib);
+        }
+    };
+#else
+    void* lib = nullptr;
+    auto load_symbol = [](const char*) -> void* { return nullptr; };
+    auto close_library = []() {};
+#endif
     if (!lib) return stats;
 
     using nvmlReturn_t = int;
@@ -50,18 +74,18 @@ MemoryStats MemoryMonitor::GetGPUMemoryStats(int device_id) const {
     using PfnNvmlMemInfo     = nvmlReturn_t (*)(nvmlDevice_t, NvmlMemInfo*);
     using PfnNvmlShutdown    = nvmlReturn_t (*)();
 
-    auto pfnInit     = reinterpret_cast<PfnNvmlInit>    (dlsym(lib, "nvmlInit_v2"));
-    auto pfnHandle   = reinterpret_cast<PfnNvmlHandle>  (dlsym(lib, "nvmlDeviceGetHandleByIndex_v2"));
-    auto pfnMemInfo  = reinterpret_cast<PfnNvmlMemInfo> (dlsym(lib, "nvmlDeviceGetMemoryInfo"));
-    auto pfnShutdown = reinterpret_cast<PfnNvmlShutdown>(dlsym(lib, "nvmlShutdown"));
+    auto pfnInit     = reinterpret_cast<PfnNvmlInit>    (load_symbol("nvmlInit_v2"));
+    auto pfnHandle   = reinterpret_cast<PfnNvmlHandle>  (load_symbol("nvmlDeviceGetHandleByIndex_v2"));
+    auto pfnMemInfo  = reinterpret_cast<PfnNvmlMemInfo> (load_symbol("nvmlDeviceGetMemoryInfo"));
+    auto pfnShutdown = reinterpret_cast<PfnNvmlShutdown>(load_symbol("nvmlShutdown"));
 
     if (!pfnInit || !pfnHandle || !pfnMemInfo) {
-        dlclose(lib);
+        close_library();
         return stats;
     }
 
     if (pfnInit() != kNvmlSuccess) {
-        dlclose(lib);
+        close_library();
         return stats;
     }
 
@@ -80,7 +104,7 @@ MemoryStats MemoryMonitor::GetGPUMemoryStats(int device_id) const {
     }
 
     if (pfnShutdown) pfnShutdown();
-    dlclose(lib);
+    close_library();
     return stats;
 }
 

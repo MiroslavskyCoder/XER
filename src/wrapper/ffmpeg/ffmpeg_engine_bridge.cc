@@ -8,7 +8,6 @@
 #include <string_view>
 
 #include <absl/strings/str_format.h>
-#include <range/v3/all.hpp>
 
 #if ENGINE_HAS_FFMPEG_BRIDGE
 extern "C" {
@@ -47,6 +46,12 @@ namespace engine::bridge::ffmpeg {
 
 namespace {
 
+void SetError(std::string* out_error, const std::string& message) {
+    if (out_error != nullptr) {
+        *out_error = message;
+    }
+}
+
 #if ENGINE_HAS_FFMPEG_BRIDGE
 #ifndef AV_CODEC_CAP_INTRA_ONLY
 #define AV_CODEC_CAP_INTRA_ONLY 0
@@ -57,19 +62,11 @@ namespace {
 #ifndef AV_CODEC_CAP_LOSSLESS
 #define AV_CODEC_CAP_LOSSLESS 0
 #endif
-#endif
 
-#if ENGINE_HAS_FFMPEG_BRIDGE
 std::string ErrorString(int error_code) {
     char buffer[AV_ERROR_MAX_STRING_SIZE] = {};
     av_strerror(error_code, buffer, sizeof(buffer));
     return std::string(buffer);
-}
-
-void SetError(std::string* out_error, const std::string& message) {
-    if (out_error != nullptr) {
-        *out_error = message;
-    }
 }
 
 LibraryVersion MakeVersion(std::string name, unsigned version) {
@@ -1313,7 +1310,7 @@ bool EncodeVideoFrames(const EncodeVideoParams& params,
         return false;
     }
 
-    bool all_valid = ranges::all_of(frames, [width, height](const VideoFrameInfo& f) {
+    bool all_valid = std::all_of(frames.begin(), frames.end(), [width, height](const VideoFrameInfo& f) {
         return f.width == width && f.height == height && !f.line_sizes.empty() && !f.data.empty();
     });
     if (!all_valid) {
@@ -1612,7 +1609,7 @@ bool EncodeAudioFrames(const EncodeAudioParams& params,
         SetError(out_error, "EncodeAudioFrames received invalid sample rate or channel count");
         return false;
     }
-    const bool consistent_stream = ranges::all_of(frames, [input_sample_rate, input_channels](const AudioFrameInfo& frame) {
+    const bool consistent_stream = std::all_of(frames.begin(), frames.end(), [input_sample_rate, input_channels](const AudioFrameInfo& frame) {
         return frame.sample_rate == input_sample_rate && frame.channels == input_channels && frame.sample_count > 0;
     });
     if (!consistent_stream) {

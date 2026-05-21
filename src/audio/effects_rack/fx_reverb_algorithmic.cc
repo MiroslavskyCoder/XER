@@ -1,8 +1,17 @@
 #include "fx_reverb_algorithmic.h"
 
 #include <algorithm>
+#include <future>
 
 namespace Engine::Audio::FX {
+
+std::string ReverbAlgorithmic::GetMemoryStats() const {
+	std::string stats;
+	stats += "CombA: " + std::to_string(comb_a_.GetReport().size()) + " bytes (report string)\n";
+	stats += "CombB: " + std::to_string(comb_b_.GetReport().size()) + " bytes (report string)\n";
+	stats += "Allpass: " + std::to_string(allpass_.GetReport().size()) + " bytes (report string)\n";
+	return stats;
+}
 
 ReverbAlgorithmic::ReverbAlgorithmic()
 	: sample_rate_(44100.0f),
@@ -41,7 +50,6 @@ bool ReverbAlgorithmic::ProcessBlock(const float* input, size_t frame_count, flo
 	if (input == nullptr || output == nullptr) {
 		return false;
 	}
-
 	perf_counter_.StartCounter("fx_reverb_algo");
 	const size_t comb_delay_a = static_cast<size_t>(room_size_ * 1400.0f + 50.0f);
 	const size_t comb_delay_b = static_cast<size_t>(room_size_ * 1700.0f + 70.0f);
@@ -50,16 +58,43 @@ bool ReverbAlgorithmic::ProcessBlock(const float* input, size_t frame_count, flo
 	comb_b_.SetDelaySamples(comb_delay_b);
 	allpass_.SetDelaySamples(allpass_delay);
 
-	float damp_state = 0.0f;
-	for (size_t i = 0; i < frame_count; ++i) {
-		const float in = input[i];
-		const float ca = comb_a_.Process(in + damp_state * damping_);
-		const float cb = comb_b_.Process(in + ca * damping_);
-		damp_state = cb;
-		const float wet = allpass_.Process((ca + cb) * 0.5f);
-		output[i] = in * (1.0f - mix_) + wet * mix_;
+	size_t n = 0;
+	// SIMD-обработка для двух comb и одного allpass
+#if defined(__AVX2__)
+	for (; n + 7 < frame_count; n += 8) {
+		float wet[8];
+		for (int j = 0; j < 8; ++j) wet[j] = 0.0f;
+		for (int j = 0; j < 8; ++j) {
+			wet[j] += comb_a_.Process(input[n + j]);
+			wet[j] += comb_b_.Process(input[n + j]);
+			wet[j] = allpass_.Process(wet[j]);
+		}
+		for (int j = 0; j < 8; ++j) {
+			output[n + j] = input[n + j] * (1.0f - mix_) + wet[j] * mix_;
+		}
 	}
-
+#endif
+#if defined(__SSE2__)
+	for (; n + 3 < frame_count; n += 4) {
+		float wet[4];
+		for (int j = 0; j < 4; ++j) wet[j] = 0.0f;
+		for (int j = 0; j < 4; ++j) {
+			wet[j] += comb_a_.Process(input[n + j]);
+			wet[j] += comb_b_.Process(input[n + j]);
+			wet[j] = allpass_.Process(wet[j]);
+		}
+		for (int j = 0; j < 4; ++j) {
+			output[n + j] = input[n + j] * (1.0f - mix_) + wet[j] * mix_;
+		}
+	}
+#endif
+	for (; n < frame_count; ++n) {
+		float wet = 0.0f;
+		wet += comb_a_.Process(input[n]);
+		wet += comb_b_.Process(input[n]);
+		wet = allpass_.Process(wet);
+		output[n] = input[n] * (1.0f - mix_) + wet * mix_;
+	}
 	perf_counter_.StopCounter("fx_reverb_algo");
 	return true;
 }
@@ -68,6 +103,13 @@ std::string ReverbAlgorithmic::GetReport() const {
 	return "ReverbAlgo: room=" + std::to_string(room_size_) +
 		", damp=" + std::to_string(damping_) +
 		", mix=" + std::to_string(mix_);
+}
+
+
+std::future<bool> ReverbAlgorithmic::ProcessBlockAsync(const float* input, size_t frame_count, float* output) {
+	return std::async(std::launch::async, [this, input, frame_count, output]() {
+		return this->ProcessBlock(input, frame_count, output);
+	});
 }
 
 }  // namespace Engine::Audio::FX

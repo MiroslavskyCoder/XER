@@ -1,8 +1,56 @@
 #include "io_gpu_usage_logger.h"
 
+#ifdef _WIN32
+#include <windows.h>
+#elif defined(__linux__)
 #include <dlfcn.h>
+#endif
   
 namespace AsyncIO::IO::LogDebug {
+
+namespace {
+
+#ifdef _WIN32
+using DynamicLibraryHandle = HMODULE;
+
+DynamicLibraryHandle OpenNvmlLibrary() {
+    return LoadLibraryA("nvml.dll");
+}
+
+void* LoadNvmlSymbol(DynamicLibraryHandle library, const char* name) {
+    return library != nullptr ? reinterpret_cast<void*>(GetProcAddress(library, name)) : nullptr;
+}
+
+void CloseNvmlLibrary(DynamicLibraryHandle library) {
+    if (library != nullptr) {
+        FreeLibrary(library);
+    }
+}
+#elif defined(__linux__)
+using DynamicLibraryHandle = void*;
+
+DynamicLibraryHandle OpenNvmlLibrary() {
+    return dlopen("libnvidia-ml.so.1", RTLD_LAZY | RTLD_LOCAL);
+}
+
+void* LoadNvmlSymbol(DynamicLibraryHandle library, const char* name) {
+    return library != nullptr ? dlsym(library, name) : nullptr;
+}
+
+void CloseNvmlLibrary(DynamicLibraryHandle library) {
+    if (library != nullptr) {
+        dlclose(library);
+    }
+}
+#else
+using DynamicLibraryHandle = void*;
+
+DynamicLibraryHandle OpenNvmlLibrary() { return nullptr; }
+void* LoadNvmlSymbol(DynamicLibraryHandle, const char*) { return nullptr; }
+void CloseNvmlLibrary(DynamicLibraryHandle) {}
+#endif
+
+}  // namespace
 
 GPUUsageLogger::GPUUsageLogger()
     : initialized_(false), is_logging_(false) {}
@@ -13,20 +61,20 @@ GPUUsageLogger::~GPUUsageLogger() {
 
 bool GPUUsageLogger::Initialize() { 
     // Try to load NVML dynamically; if not present, mark as uninitialized.
-    void* lib = dlopen("libnvidia-ml.so.1", RTLD_LAZY | RTLD_LOCAL);
+    DynamicLibraryHandle lib = OpenNvmlLibrary();
     if (!lib) {
         initialized_ = false;
         return false;
     }
     using PfnInit = int (*)();
-    auto pfnInit = reinterpret_cast<PfnInit>(dlsym(lib, "nvmlInit_v2"));
+    auto pfnInit = reinterpret_cast<PfnInit>(LoadNvmlSymbol(lib, "nvmlInit_v2"));
     initialized_ = (pfnInit && pfnInit() == 0);
     if (initialized_) {
         using PfnShutdown = int (*)();
-        if (auto pfnShutdown = reinterpret_cast<PfnShutdown>(dlsym(lib, "nvmlShutdown")))
+        if (auto pfnShutdown = reinterpret_cast<PfnShutdown>(LoadNvmlSymbol(lib, "nvmlShutdown")))
             pfnShutdown();
     }
-    dlclose(lib);
+    CloseNvmlLibrary(lib);
     return initialized_;
 }
 
@@ -139,7 +187,7 @@ bool GPUUsageLogger::QueryGPUUsage(int device_id, GPUUsageSnapshot& snapshot) {
     snapshot.temperature_celsius = 0.0;
     snapshot.power_draw_watts = 0.0;
 
-    void* lib = dlopen("libnvidia-ml.so.1", RTLD_LAZY | RTLD_LOCAL);
+    DynamicLibraryHandle lib = OpenNvmlLibrary();
     if (!lib) return true;  // return true with zeros (non-NVIDIA machine)
 
     using nvmlReturn_t = int;
@@ -157,13 +205,13 @@ bool GPUUsageLogger::QueryGPUUsage(int device_id, GPUUsageSnapshot& snapshot) {
     using PfnPower    = nvmlReturn_t (*)(nvmlDevice_t, unsigned int*);
     using PfnShutdown = nvmlReturn_t (*)();
 
-    auto pfnInit     = reinterpret_cast<PfnInit>    (dlsym(lib, "nvmlInit_v2"));
-    auto pfnHandle   = reinterpret_cast<PfnHandle>  (dlsym(lib, "nvmlDeviceGetHandleByIndex_v2"));
-    auto pfnUtil     = reinterpret_cast<PfnUtil>    (dlsym(lib, "nvmlDeviceGetUtilizationRates"));
-    auto pfnMem      = reinterpret_cast<PfnMem>     (dlsym(lib, "nvmlDeviceGetMemoryInfo"));
-    auto pfnTemp     = reinterpret_cast<PfnTemp>    (dlsym(lib, "nvmlDeviceGetTemperature"));
-    auto pfnPower    = reinterpret_cast<PfnPower>   (dlsym(lib, "nvmlDeviceGetPowerUsage"));
-    auto pfnShutdown = reinterpret_cast<PfnShutdown>(dlsym(lib, "nvmlShutdown"));
+    auto pfnInit     = reinterpret_cast<PfnInit>    (LoadNvmlSymbol(lib, "nvmlInit_v2"));
+    auto pfnHandle   = reinterpret_cast<PfnHandle>  (LoadNvmlSymbol(lib, "nvmlDeviceGetHandleByIndex_v2"));
+    auto pfnUtil     = reinterpret_cast<PfnUtil>    (LoadNvmlSymbol(lib, "nvmlDeviceGetUtilizationRates"));
+    auto pfnMem      = reinterpret_cast<PfnMem>     (LoadNvmlSymbol(lib, "nvmlDeviceGetMemoryInfo"));
+    auto pfnTemp     = reinterpret_cast<PfnTemp>    (LoadNvmlSymbol(lib, "nvmlDeviceGetTemperature"));
+    auto pfnPower    = reinterpret_cast<PfnPower>   (LoadNvmlSymbol(lib, "nvmlDeviceGetPowerUsage"));
+    auto pfnShutdown = reinterpret_cast<PfnShutdown>(LoadNvmlSymbol(lib, "nvmlShutdown"));
 
     bool ok = false;
     if (pfnInit && pfnInit() == kOk) {
@@ -195,7 +243,7 @@ bool GPUUsageLogger::QueryGPUUsage(int device_id, GPUUsageSnapshot& snapshot) {
         }
         if (pfnShutdown) pfnShutdown();
     }
-    dlclose(lib);
+    CloseNvmlLibrary(lib);
     return ok || true;  // always succeed; caller can use zeros for missing data
 }
 

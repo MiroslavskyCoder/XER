@@ -2,6 +2,9 @@
 
 #ifdef _WIN32
     #include <windows.h>
+    #ifdef GetObject
+        #undef GetObject
+    #endif
 #elif defined(__linux__)
     #include <unistd.h>
     #include <fstream>
