@@ -65,6 +65,8 @@ struct FFTEngine::BackendState {
 	fftwf_plan forward_plan = nullptr;
 	fftwf_plan inverse_plan = nullptr;
 };
+#else
+struct FFTEngine::BackendState {};
 #endif
 
 FFTEngine::FFTEngine(size_t fft_size)

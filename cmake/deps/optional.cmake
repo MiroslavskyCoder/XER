@@ -123,20 +123,24 @@ if(XER_USE_BUNDLED_FFMPEG AND EXISTS "${XER_BUNDLED_FFMPEG_DIR}/CMakeLists.txt")
     if(TARGET FFmpeg::avutil AND TARGET FFmpeg::avcodec AND TARGET FFmpeg::avformat
             AND TARGET FFmpeg::swscale AND TARGET FFmpeg::swresample)
         set(ENGINE_HAS_FFMPEG_BRIDGE 1)
+        if(TARGET FFmpeg::avfilter)
+            set(ENGINE_HAS_FFMPEG_AVFILTER 1)
+        endif()
+        if(TARGET FFmpeg::avdevice)
+            set(ENGINE_HAS_FFMPEG_AVDEVICE 1)
+        endif()
+        if(ENGINE_HAS_FFMPEG_AVDEVICE)
+            list(APPEND ENGINE_FFMPEG_LIBRARIES FFmpeg::avdevice)
+        endif()
+        if(ENGINE_HAS_FFMPEG_AVFILTER)
+            list(APPEND ENGINE_FFMPEG_LIBRARIES FFmpeg::avfilter)
+        endif()
         list(APPEND ENGINE_FFMPEG_LIBRARIES
             FFmpeg::avformat
             FFmpeg::avcodec
             FFmpeg::swscale
             FFmpeg::swresample
             FFmpeg::avutil)
-        if(TARGET FFmpeg::avfilter)
-            set(ENGINE_HAS_FFMPEG_AVFILTER 1)
-            list(APPEND ENGINE_FFMPEG_LIBRARIES FFmpeg::avfilter)
-        endif()
-        if(TARGET FFmpeg::avdevice)
-            set(ENGINE_HAS_FFMPEG_AVDEVICE 1)
-            list(APPEND ENGINE_FFMPEG_LIBRARIES FFmpeg::avdevice)
-        endif()
         message(STATUS "Using bundled patched FFmpeg: ${XER_BUNDLED_FFMPEG_DIR}")
     else()
         message(WARNING "Bundled FFmpeg was found but required CMake targets are missing; falling back to pkg-config")
@@ -176,6 +180,18 @@ if(NOT ENGINE_HAS_FFMPEG_BRIDGE AND PkgConfig_FOUND)
             list(APPEND ENGINE_FFMPEG_LIBRARIES ${FFMPEG_AVDEVICE_LIBRARIES})
         endif()
     endif()
+endif()
+
+if(WIN32 AND ENGINE_HAS_FFMPEG_AVDEVICE)
+    list(APPEND ENGINE_FFMPEG_LIBRARIES
+        ole32
+        oleaut32
+        uuid
+        strmiids
+        user32
+        gdi32
+        shlwapi
+        vfw32)
 endif()
 
 # ── ANGLE ────────────────────────────────────────────────────

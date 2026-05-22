@@ -181,6 +181,38 @@ else()
     message(STATUS "ENABLE_V8=OFF: XER executable and JavaScript runtime target are disabled")
 endif()
 
+set(XER_AUDIO_ANALYSIS_SMOKE_SOURCES
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/audio/demo/audio_analysis_cli.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/audio/demo/audio_analysis_smoke.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/audio/audio_core/audio_interleave_processor.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/audio/audio_core/audio_sample_rate_converter.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/audio/audio_core/audio_source_loader.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/audio/analysis_ai/anal_beat_tracker.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/audio/analysis_ai/anal_loudness_meter_lufs.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/audio/analysis_ai/anal_pitch_estimator.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/audio/analysis_ai/audio_fft_analyzer.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/audio/analysis_ai/audio_pitch_detector.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/audio/dsp_algorithms/dsp_fft_engine.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/audio/dsp_algorithms/dsp_windowing_functions.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/audio/file_io_codecs/codec_wav_pcm.cc)
+
+add_executable(XERAudioAnalysisSmoke ${XER_AUDIO_ANALYSIS_SMOKE_SOURCES})
+target_include_directories(XERAudioAnalysisSmoke PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_compile_definitions(XERAudioAnalysisSmoke PRIVATE
+    ENGINE_HAS_FFTW3F=${ENGINE_HAS_FFTW3F}
+    ENGINE_HAS_FFMPEG_BRIDGE=${ENGINE_HAS_FFMPEG_BRIDGE})
+target_link_libraries(XERAudioAnalysisSmoke PRIVATE
+    XERAsyncIO
+    XERBridgeFfmpeg)
+if(ENGINE_HAS_FFTW3F)
+    target_include_directories(XERAudioAnalysisSmoke PRIVATE ${FFTW3_INCLUDE_DIR})
+    target_link_libraries(XERAudioAnalysisSmoke PRIVATE ${FFTW3F_LIBRARY})
+endif()
+if(ENGINE_FFMPEG_LIBRARIES)
+    target_link_libraries(XERAudioAnalysisSmoke PRIVATE ${ENGINE_FFMPEG_LIBRARIES})
+endif()
+
 # ── Interface alias for all Qt6 targets ──────────────────────
 if(ENGINE_QT6_FOUND_TARGETS)
     add_library(EngineQt6All INTERFACE)
