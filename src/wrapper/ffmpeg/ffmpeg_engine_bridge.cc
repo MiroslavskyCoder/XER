@@ -433,6 +433,22 @@ std::string PictureTypeName(AVPictureType picture_type) {
     }
 }
 
+int64_t FrameDuration(const AVFrame* frame) {
+#if LIBAVUTIL_VERSION_MAJOR >= 58
+    return frame->duration;
+#else
+    return frame->pkt_duration;
+#endif
+}
+
+bool FrameIsKeyFrame(const AVFrame* frame) {
+#ifdef AV_FRAME_FLAG_KEY
+    return (frame->flags & AV_FRAME_FLAG_KEY) != 0;
+#else
+    return frame->key_frame != 0;
+#endif
+}
+
 bool CollectVideoFrame(const AVFrame* frame,
                        int stream_index,
                        std::vector<VideoFrameInfo>* out_frames,
@@ -454,8 +470,8 @@ bool CollectVideoFrame(const AVFrame* frame,
     info.picture_type = PictureTypeName(frame->pict_type);
     info.pts = frame->pts;
     info.best_effort_timestamp = frame->best_effort_timestamp;
-    info.duration = frame->pkt_duration;
-    info.key_frame = frame->key_frame != 0;
+    info.duration = FrameDuration(frame);
+    info.key_frame = FrameIsKeyFrame(frame);
     info.line_sizes.assign(frame->linesize, frame->linesize + AV_NUM_DATA_POINTERS);
     info.data.resize(static_cast<size_t>(size));
 

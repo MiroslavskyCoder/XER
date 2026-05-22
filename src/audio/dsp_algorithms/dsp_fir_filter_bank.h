@@ -17,14 +17,14 @@ public:
 
 	void Clear();
 	bool AddFilter(const std::vector<float>& taps);
-	size_t GetFilterCount() const { return filters_.size(); }
+	size_t GetFilterCount() const;
 
 	bool ProcessSample(float input, std::vector<float>& outputs);
 	std::future<bool> ProcessSampleAsync(float input, std::vector<float>& outputs);
 	std::string GetReport() const;
 
 private:
-	AsyncIO::IO::Sync::MutexWrapper mutex_;
+	mutable AsyncIO::IO::Sync::MutexWrapper mutex_;
 	std::vector<std::vector<float>> filters_;
 	std::vector<std::vector<float>> states_;
 };

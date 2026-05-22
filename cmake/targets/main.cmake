@@ -281,3 +281,20 @@ add_executable(FluxUiSmoke
     ${CMAKE_CURRENT_SOURCE_DIR}/src/flux/terminal/terminal_window.cc)
 target_include_directories(FluxUiSmoke PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src)
+
+add_executable(XERDspMemoryAsyncZeroCopySmoke
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/dsp_memory_async_zero_copy_test.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/audio/dsp_algorithms/dsp_fir_filter_bank.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/audio/dsp_algorithms/dsp_convolution_engine.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/audio/dsp_algorithms/dsp_biquad_processor.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/audio/dsp_algorithms/dsp_delay_line_circular.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/audio/effects_rack/fx_eq_parametric.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/audio/effects_rack/fx_mod_phaser.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/audio/effects_rack/fx_mod_flanger.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/audio/effects_rack/fx_mod_chorus.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/audio/effects_rack/fx_reverb_algorithmic.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/async_io/sync_primitives/mutex_wrapper.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/async_io/async_buffer_pool.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/async_io/log_and_debug/io_perf_counter.cc)
+target_include_directories(XERDspMemoryAsyncZeroCopySmoke PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src)
