@@ -144,15 +144,125 @@ bool SetDefaultChannelLayout(int channels, AVChannelLayout* out_layout, std::str
     return true;
 }
 
+const AVSampleFormat* SupportedSampleFormats(const AVCodec* codec, int* out_count) {
+    if (out_count != nullptr) {
+        *out_count = 0;
+    }
+#if LIBAVCODEC_VERSION_MAJOR >= 61
+    const void* configs = nullptr;
+    int count = 0;
+    if (avcodec_get_supported_config(nullptr, codec, AV_CODEC_CONFIG_SAMPLE_FORMAT, 0, &configs, &count) < 0) {
+        return nullptr;
+    }
+    if (out_count != nullptr) {
+        *out_count = count;
+    }
+    return static_cast<const AVSampleFormat*>(configs);
+#else
+    if (codec == nullptr) {
+        return nullptr;
+    }
+    if (out_count != nullptr && codec->sample_fmts != nullptr) {
+        for (const AVSampleFormat* current = codec->sample_fmts; *current != AV_SAMPLE_FMT_NONE; ++current) {
+            ++*out_count;
+        }
+    }
+    return codec->sample_fmts;
+#endif
+}
+
+const int* SupportedSampleRates(const AVCodec* codec, int* out_count) {
+    if (out_count != nullptr) {
+        *out_count = 0;
+    }
+#if LIBAVCODEC_VERSION_MAJOR >= 61
+    const void* configs = nullptr;
+    int count = 0;
+    if (avcodec_get_supported_config(nullptr, codec, AV_CODEC_CONFIG_SAMPLE_RATE, 0, &configs, &count) < 0) {
+        return nullptr;
+    }
+    if (out_count != nullptr) {
+        *out_count = count;
+    }
+    return static_cast<const int*>(configs);
+#else
+    if (codec == nullptr) {
+        return nullptr;
+    }
+    if (out_count != nullptr && codec->supported_samplerates != nullptr) {
+        for (const int* current = codec->supported_samplerates; *current != 0; ++current) {
+            ++*out_count;
+        }
+    }
+    return codec->supported_samplerates;
+#endif
+}
+
+const AVChannelLayout* SupportedChannelLayouts(const AVCodec* codec, int* out_count) {
+    if (out_count != nullptr) {
+        *out_count = 0;
+    }
+#if LIBAVCODEC_VERSION_MAJOR >= 61
+    const void* configs = nullptr;
+    int count = 0;
+    if (avcodec_get_supported_config(nullptr, codec, AV_CODEC_CONFIG_CHANNEL_LAYOUT, 0, &configs, &count) < 0) {
+        return nullptr;
+    }
+    if (out_count != nullptr) {
+        *out_count = count;
+    }
+    return static_cast<const AVChannelLayout*>(configs);
+#else
+    if (codec == nullptr) {
+        return nullptr;
+    }
+    if (out_count != nullptr && codec->ch_layouts != nullptr) {
+        for (const AVChannelLayout* layout = codec->ch_layouts; layout->nb_channels != 0; ++layout) {
+            ++*out_count;
+        }
+    }
+    return codec->ch_layouts;
+#endif
+}
+
+const AVPixelFormat* SupportedPixelFormats(const AVCodec* codec, int* out_count) {
+    if (out_count != nullptr) {
+        *out_count = 0;
+    }
+#if LIBAVCODEC_VERSION_MAJOR >= 61
+    const void* configs = nullptr;
+    int count = 0;
+    if (avcodec_get_supported_config(nullptr, codec, AV_CODEC_CONFIG_PIX_FORMAT, 0, &configs, &count) < 0) {
+        return nullptr;
+    }
+    if (out_count != nullptr) {
+        *out_count = count;
+    }
+    return static_cast<const AVPixelFormat*>(configs);
+#else
+    if (codec == nullptr) {
+        return nullptr;
+    }
+    if (out_count != nullptr && codec->pix_fmts != nullptr) {
+        for (const AVPixelFormat* fmt = codec->pix_fmts; *fmt != AV_PIX_FMT_NONE; ++fmt) {
+            ++*out_count;
+        }
+    }
+    return codec->pix_fmts;
+#endif
+}
+
 bool EncoderSupportsSampleFormat(const AVCodec* codec, AVSampleFormat sample_format) {
     if (codec == nullptr || sample_format == AV_SAMPLE_FMT_NONE) {
         return false;
     }
-    if (codec->sample_fmts == nullptr) {
+    int sample_format_count = 0;
+    const AVSampleFormat* sample_formats = SupportedSampleFormats(codec, &sample_format_count);
+    if (sample_formats == nullptr) {
         return true;
     }
-    for (const AVSampleFormat* current = codec->sample_fmts; *current != AV_SAMPLE_FMT_NONE; ++current) {
-        if (*current == sample_format) {
+    for (int index = 0; index < sample_format_count; ++index) {
+        if (sample_formats[index] == sample_format) {
             return true;
         }
     }
@@ -169,23 +279,27 @@ AVSampleFormat SelectEncoderSampleFormat(const AVCodec* codec, const std::string
             return requested;
         }
     }
-    return codec->sample_fmts != nullptr ? codec->sample_fmts[0] : AV_SAMPLE_FMT_FLTP;
+    int sample_format_count = 0;
+    const AVSampleFormat* sample_formats = SupportedSampleFormats(codec, &sample_format_count);
+    return sample_formats != nullptr && sample_format_count > 0 ? sample_formats[0] : AV_SAMPLE_FMT_FLTP;
 }
 
 int SelectEncoderSampleRate(const AVCodec* codec, int requested_sample_rate) {
     if (requested_sample_rate <= 0) {
         return 44100;
     }
-    if (codec == nullptr || codec->supported_samplerates == nullptr) {
+    int sample_rate_count = 0;
+    const int* sample_rates = SupportedSampleRates(codec, &sample_rate_count);
+    if (codec == nullptr || sample_rates == nullptr || sample_rate_count == 0) {
         return requested_sample_rate;
     }
-    int best_rate = codec->supported_samplerates[0];
-    for (const int* current = codec->supported_samplerates; *current != 0; ++current) {
-        if (*current == requested_sample_rate) {
-            return *current;
+    int best_rate = sample_rates[0];
+    for (int index = 0; index < sample_rate_count; ++index) {
+        if (sample_rates[index] == requested_sample_rate) {
+            return sample_rates[index];
         }
-        if (std::abs(*current - requested_sample_rate) < std::abs(best_rate - requested_sample_rate)) {
-            best_rate = *current;
+        if (std::abs(sample_rates[index] - requested_sample_rate) < std::abs(best_rate - requested_sample_rate)) {
+            best_rate = sample_rates[index];
         }
     }
     return best_rate;
@@ -195,15 +309,17 @@ int SelectEncoderChannels(const AVCodec* codec, int requested_channels) {
     if (requested_channels <= 0) {
         return 1;
     }
-    if (codec == nullptr || codec->ch_layouts == nullptr) {
+    int channel_layout_count = 0;
+    const AVChannelLayout* channel_layouts = SupportedChannelLayouts(codec, &channel_layout_count);
+    if (codec == nullptr || channel_layouts == nullptr || channel_layout_count == 0) {
         return requested_channels;
     }
-    for (const AVChannelLayout* layout = codec->ch_layouts; layout->nb_channels != 0; ++layout) {
-        if (layout->nb_channels == requested_channels) {
+    for (int index = 0; index < channel_layout_count; ++index) {
+        if (channel_layouts[index].nb_channels == requested_channels) {
             return requested_channels;
         }
     }
-    return codec->ch_layouts[0].nb_channels > 0 ? codec->ch_layouts[0].nb_channels : requested_channels;
+    return channel_layouts[0].nb_channels > 0 ? channel_layouts[0].nb_channels : requested_channels;
 }
 
 bool CopyAudioFrameToAvFrame(const AudioFrameInfo& input, AVFrame* frame, std::string* out_error) {
@@ -977,8 +1093,7 @@ bool ReadPackets(const std::string& path,
 
     std::vector<PacketInfo> packets;
     packets.reserve(static_cast<size_t>(std::max(max_packets, 0)));
-    AVPacket packet;
-    av_init_packet(&packet);
+    AVPacket packet = {};
 
     const int packet_limit = max_packets <= 0 ? 0 : max_packets;
     while (packet_limit == 0 || static_cast<int>(packets.size()) < packet_limit) {
@@ -1138,8 +1253,7 @@ bool RemuxCopy(const std::string& input_path,
         return false;
     }
 
-    AVPacket packet;
-    av_init_packet(&packet);
+    AVPacket packet = {};
     while ((result = av_read_frame(input_context, &packet)) >= 0) {
         AVStream* input_stream = input_context->streams[packet.stream_index];
         AVStream* output_stream = output_context->streams[packet.stream_index];
@@ -1251,8 +1365,7 @@ bool ExtractStream(const std::string& input_path,
         return false;
     }
 
-    AVPacket packet;
-    av_init_packet(&packet);
+    AVPacket packet = {};
     while ((result = av_read_frame(input_context, &packet)) >= 0) {
         if (packet.stream_index != stream_index) {
             av_packet_unref(&packet);
@@ -1381,11 +1494,13 @@ bool EncodeVideoFrames(const EncodeVideoParams& params,
     codec_context->bit_rate = params.bit_rate > 0 ? params.bit_rate : 4000000;
 
     AVPixelFormat encoder_pix_fmt = AV_PIX_FMT_YUV420P;
-    if (codec->pix_fmts != nullptr) {
-        encoder_pix_fmt = codec->pix_fmts[0];
-        for (const AVPixelFormat* fmt = codec->pix_fmts; *fmt != AV_PIX_FMT_NONE; ++fmt) {
-            if (*fmt == AV_PIX_FMT_RGBA) {
-                encoder_pix_fmt = *fmt;
+    int pixel_format_count = 0;
+    const AVPixelFormat* pixel_formats = SupportedPixelFormats(codec, &pixel_format_count);
+    if (pixel_formats != nullptr && pixel_format_count > 0) {
+        encoder_pix_fmt = pixel_formats[0];
+        for (int index = 0; index < pixel_format_count; ++index) {
+            if (pixel_formats[index] == AV_PIX_FMT_RGBA) {
+                encoder_pix_fmt = pixel_formats[index];
                 break;
             }
         }
