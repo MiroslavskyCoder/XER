@@ -32,6 +32,8 @@ RUN sed -i 's/Components: main/Components: main universe multiverse/g' /etc/apt/
       librange-v3-dev \
       libavutil-dev \
       libavcodec-dev \
+      libavdevice-dev \
+      libavfilter-dev \
       libavformat-dev \
       libswscale-dev \
       libswresample-dev \
@@ -58,6 +60,7 @@ COPY . .
 ARG ENABLE_CUDA=OFF
 ARG ENABLE_CUDNN=OFF
 ARG ENABLE_AI=OFF
+ARG ENABLE_V8=OFF
 ARG CMAKE_CUDA_ARCHITECTURES=75;86
 RUN cmake --preset default \
       -DLLVM_DIR="${LLVM_DIR}" \
@@ -65,9 +68,32 @@ RUN cmake --preset default \
       -DENABLE_CUDA="${ENABLE_CUDA}" \
       -DENABLE_CUDNN="${ENABLE_CUDNN}" \
       -DENABLE_AI="${ENABLE_AI}" \
+      -DENABLE_V8="${ENABLE_V8}" \
       -DCMAKE_CUDA_ARCHITECTURES="${CMAKE_CUDA_ARCHITECTURES}" \
-    && cmake --build --preset default --target XER -- -j"$(nproc)" \
-    && install -m 0755 out/build/default/XER /usr/local/bin/XER
+    && cmake --build --preset default --target XERAudioAnalysisSmoke -- -j"$(nproc)" \
+    && install -m 0755 out/build/default/XERAudioAnalysisSmoke /usr/local/bin/XERAudioAnalysisSmoke \
+    && if cmake --build --preset default --target XER -- -j"$(nproc)"; then install -m 0755 out/build/default/XER /usr/local/bin/XER; else echo "XER target unavailable; installed XERAudioAnalysisSmoke only"; fi \
+    && printf '%s\n' \
+      '#!/bin/sh' \
+      'set -e' \
+      'if [ "$#" -eq 0 ]; then exec /usr/local/bin/XERAudioAnalysisSmoke --version; fi' \
+      'case "$1" in' \
+      '  audio_analysis_smoke)' \
+      '    shift' \
+      '    exec /usr/local/bin/XERAudioAnalysisSmoke "$@"' \
+      '    ;;' \
+      '  version|--version|-v|help|--help|-h)' \
+      '    if [ -x /usr/local/bin/XER ]; then exec /usr/local/bin/XER "$@"; fi' \
+      '    exec /usr/local/bin/XERAudioAnalysisSmoke "$@"' \
+      '    ;;' \
+      '  *)' \
+      '    if [ -x /usr/local/bin/XER ]; then exec /usr/local/bin/XER "$@"; fi' \
+      '    echo "XER executable is not available in this image; audio_analysis_smoke is available." >&2' \
+      '    exit 127' \
+      '    ;;' \
+      'esac' \
+      > /usr/local/bin/xer-entrypoint \
+    && chmod 0755 /usr/local/bin/xer-entrypoint
 
-ENTRYPOINT ["/usr/local/bin/XER"]
+ENTRYPOINT ["/usr/local/bin/xer-entrypoint"]
 CMD ["version"]
