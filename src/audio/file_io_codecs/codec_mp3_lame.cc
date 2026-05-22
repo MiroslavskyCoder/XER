@@ -9,12 +9,6 @@
 
 namespace Engine::Audio::CodecIO {
 
-namespace {
-
-constexpr std::uint8_t kFallbackMagic[4] = {'M', 'P', 'F', '0'};
-
-} // namespace
-
 bool Mp3LameCodec::Encode(const float* input, size_t frames, std::vector<uint8_t>& out) const {
 	return EncodeInterleaved(input, frames, 44100, 1, out);
 }
@@ -84,6 +78,9 @@ bool Mp3LameCodec::EncodeInterleaved(const float* input, size_t frames, int samp
     if (detail::EncodeInterleavedAudioBufferWithFfmpeg(input, frames, sample_rate, channels, ".mp3", "mp3", &out, &error)) {
         return true;
     }
+    if (detail::EncodeInterleavedAudioBufferWithFfmpeg(input, frames, sample_rate, channels, ".mp3", "mp3_mf", &out, &error)) {
+        return true;
+    }
     out.clear();
     return false;
 #endif
@@ -92,21 +89,6 @@ bool Mp3LameCodec::EncodeInterleaved(const float* input, size_t frames, int samp
 bool Mp3LameCodec::Decode(const uint8_t* data, size_t bytes, std::vector<float>& out) const {
     if (data == nullptr || bytes == 0) {
         return false;
-    }
-
-    if (bytes >= 4 && data[0] == kFallbackMagic[0] && data[1] == kFallbackMagic[1]
-        && data[2] == kFallbackMagic[2] && data[3] == kFallbackMagic[3]) {
-        const std::size_t payload = bytes - 4;
-        if ((payload % 2) != 0) {
-            return false;
-        }
-        const std::size_t samples = payload / 2;
-        out.resize(samples);
-        for (std::size_t i = 0; i < samples; ++i) {
-            const std::int16_t s = static_cast<std::int16_t>(data[4 + i * 2 + 0] | (data[4 + i * 2 + 1] << 8));
-            out[i] = static_cast<float>(s) / 32768.0f;
-        }
-        return true;
     }
 
     std::string error;

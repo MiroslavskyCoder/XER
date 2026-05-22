@@ -30,7 +30,7 @@ bool AudioThreadPriority::SetCurrentThreadPriority(ThreadPriority priority) {
         case ThreadPriority::CRITICAL: win_priority = THREAD_PRIORITY_HIGHEST; break;
     }
     
-    success = SetThreadPriority(GetCurrentThread(), win_priority);
+    success = ::SetThreadPriority(GetCurrentThread(), win_priority);
     return success != FALSE;
 #elif defined(__linux__)
     struct sched_param param;
@@ -60,7 +60,7 @@ bool AudioThreadPriority::SetThreadPriority(std::thread::native_handle_type thre
         case ThreadPriority::CRITICAL: win_priority = THREAD_PRIORITY_HIGHEST; break;
     }
     
-    BOOL success = SetThreadPriority(thread_handle, win_priority);
+    BOOL success = ::SetThreadPriority(thread_handle, win_priority);
     return success != FALSE;
 #else
     return false;

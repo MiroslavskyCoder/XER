@@ -15,6 +15,8 @@ void PrintHelp(const char* binary_name) {
 		<< "  --output_dir <dir>           Directory for report artifacts\n"
 		<< "  --target_sample_rate <hz>    Analysis sample rate, default 44100\n"
 		<< "  --audio_raw_sample_rate <hz> Raw PCM sample rate, default 44100\n"
+		<< "  --max_cpu_threads <n>        Limit XER worker CPU threads\n"
+		<< "  --skip_artifacts             Do not write report/CSV artifacts\n"
 		<< "  --version                    Print version\n"
 		<< "  help                         Print this help\n";
 }
@@ -49,6 +51,10 @@ int main(int argc, char** argv) {
 		if (arg == "audio_analysis_smoke") {
 			continue;
 		}
+		if (arg == "--skip_artifacts" || arg == "--no_artifacts") {
+			options.write_artifacts = false;
+			continue;
+		}
 		if (arg == "help" || arg == "--help" || arg == "-h") {
 			PrintHelp(binary_name);
 			return 0;
@@ -77,6 +83,23 @@ int main(int argc, char** argv) {
 				std::cerr << "Invalid --audio_raw_sample_rate value\n";
 				return 2;
 			}
+			continue;
+		}
+		if ((arg == "--max_cpu_threads" || arg == "--max-threads-cpu") && index + 1 < argc) {
+			if (!ParseInt(argv[++index], &options.max_cpu_threads)) {
+				std::cerr << "Invalid --max_cpu_threads value\n";
+				return 2;
+			}
+			const std::string threads = std::to_string(options.max_cpu_threads);
+			#if defined(_WIN32)
+			_putenv_s("ENGINE_MAX_CPU_THREADS", threads.c_str());
+			_putenv_s("ENGINE_ASYNC_IO_WORKERS", threads.c_str());
+			#else
+			setenv("ENGINE_MAX_CPU_THREADS", threads.c_str(), 1);
+			setenv("ENGINE_ASYNC_IO_WORKERS", threads.c_str(), 1);
+			setenv("OMP_NUM_THREADS", threads.c_str(), 1);
+			setenv("FFTW_NUM_THREADS", threads.c_str(), 1);
+			#endif
 			continue;
 		}
 		if (!arg.empty() && arg.front() != '-' && options.input_path.empty()) {

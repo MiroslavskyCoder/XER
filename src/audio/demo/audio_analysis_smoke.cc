@@ -235,7 +235,7 @@ bool RunAudioAnalysisSmoke(
 	output << "loudness_report=" << loudness_meter.GetReport() << "\n";
 	output << "smoke_status=pass\n";
 
-	if (!options.output_dir.empty()) {
+	if (options.write_artifacts && !options.output_dir.empty()) {
 		std::error_code fs_error;
 		std::filesystem::create_directories(options.output_dir, fs_error);
 		if (fs_error) {

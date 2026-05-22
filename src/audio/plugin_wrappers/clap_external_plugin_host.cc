@@ -3,8 +3,13 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
-#include <dlfcn.h>
 #include <memory>
+
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <dlfcn.h>
+#endif
 
 namespace Engine::Audio::Plugin {
 
@@ -21,6 +26,36 @@ std::string MakeLoadedIdentifier(const std::string& path, const char* plugin_id)
 
 float DbToLinear(float db_value) {
 	return std::pow(10.0f, db_value / 20.0f);
+}
+
+void* OpenPluginLibrary(const char* path) {
+#ifdef _WIN32
+	return reinterpret_cast<void*>(LoadLibraryA(path));
+#else
+	return dlopen(path, RTLD_NOW | RTLD_LOCAL);
+#endif
+}
+
+void* ResolvePluginSymbol(void* handle, const char* name) {
+	if (handle == nullptr) {
+		return nullptr;
+	}
+#ifdef _WIN32
+	return reinterpret_cast<void*>(GetProcAddress(reinterpret_cast<HMODULE>(handle), name));
+#else
+	return dlsym(handle, name);
+#endif
+}
+
+void ClosePluginLibrary(void* handle) {
+	if (handle == nullptr) {
+		return;
+	}
+#ifdef _WIN32
+	FreeLibrary(reinterpret_cast<HMODULE>(handle));
+#else
+	dlclose(handle);
+#endif
 }
 
 std::string SafeClapString(const char* value) {
@@ -97,7 +132,7 @@ void ClapExternalPluginHost::Reset() {
 	}
 	entry_ = nullptr;
 	if (library_handle_ != nullptr) {
-		dlclose(library_handle_);
+		ClosePluginLibrary(library_handle_);
 	}
 	library_handle_ = nullptr;
 }
@@ -110,11 +145,11 @@ bool ClapExternalPluginHost::Load(const std::string& plugin_reference) {
 		return false;
 	}
 
-	library_handle_ = dlopen(plugin_path.c_str(), RTLD_NOW | RTLD_LOCAL);
+	library_handle_ = OpenPluginLibrary(plugin_path.c_str());
 	if (library_handle_ == nullptr) {
 		return false;
 	}
-	entry_ = reinterpret_cast<const ClapAbi::clap_plugin_entry*>(dlsym(library_handle_, "clap_entry"));
+	entry_ = reinterpret_cast<const ClapAbi::clap_plugin_entry*>(ResolvePluginSymbol(library_handle_, "clap_entry"));
 	if (entry_ == nullptr || !ClapAbi::clap_version_is_compatible(entry_->clap_version) || entry_->init == nullptr || entry_->get_factory == nullptr) {
 		Reset();
 		return false;

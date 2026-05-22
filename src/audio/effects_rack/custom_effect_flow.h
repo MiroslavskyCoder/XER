@@ -22,7 +22,7 @@ private:
 	CustomEffectPackage package_;
 	CustomEffectRenderConfig render_config_;
 	std::vector<uint32_t> stage_indices_;
-	std::vector<std::deque<CustomEffectProcessor>> stage_processors_;
+	std::deque<std::deque<CustomEffectProcessor>> stage_processors_;
 	CustomEffectReport last_report_;
 };
 

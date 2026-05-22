@@ -7,13 +7,14 @@ namespace Engine::Audio::DSP {
 
 namespace {
 
+constexpr float kPi = 3.14159265358979323846f;
 constexpr float kTwoPi = 6.28318530717958647692f;
 
 float WrapPhase(float phase) {
-	while (phase > static_cast<float>(M_PI)) {
+	while (phase > kPi) {
 		phase -= kTwoPi;
 	}
-	while (phase < -static_cast<float>(M_PI)) {
+	while (phase < -kPi) {
 		phase += kTwoPi;
 	}
 	return phase;

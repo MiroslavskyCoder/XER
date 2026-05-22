@@ -10,6 +10,8 @@ struct AudioAnalysisSmokeOptions {
 	std::filesystem::path output_dir;
 	int raw_sample_rate = 44100;
 	int target_sample_rate = 44100;
+	int max_cpu_threads = -1;
+	bool write_artifacts = true;
 };
 
 bool RunAudioAnalysisSmoke(
