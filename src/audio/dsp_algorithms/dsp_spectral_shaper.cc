@@ -2,6 +2,10 @@
 
 #include <algorithm>
 
+#if defined(__AVX2__) || defined(__SSE2__)
+#include <immintrin.h>
+#endif
+
 namespace Engine::Audio::DSP {
 
 SpectralShaper::SpectralShaper(size_t fft_size, size_t hop_size)

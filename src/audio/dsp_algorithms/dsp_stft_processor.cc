@@ -3,6 +3,10 @@
 #include <algorithm>
 #include <cmath>
 
+#if defined(__AVX2__) || defined(__SSE2__)
+#include <immintrin.h>
+#endif
+
 namespace Engine::Audio::DSP {
 
 namespace {
