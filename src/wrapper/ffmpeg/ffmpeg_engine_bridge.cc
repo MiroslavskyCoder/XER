@@ -686,6 +686,8 @@ bool DecodeFramesImpl(const std::string& path,
     int frame_count = 0;
     int result = 0;
     bool success = true;
+    int skipped_packets = 0;
+    std::string last_packet_error;
 
     while (frame_limit == 0 || frame_count < frame_limit) {
         result = av_read_frame(format_context, packet);
@@ -705,7 +707,12 @@ bool DecodeFramesImpl(const std::string& path,
         result = avcodec_send_packet(codec_context, packet);
         av_packet_unref(packet);
         if (result < 0) {
-            SetError(out_error, "avcodec_send_packet failed: " + ErrorString(result));
+            last_packet_error = "avcodec_send_packet failed: " + ErrorString(result);
+            if (media_type == AVMEDIA_TYPE_AUDIO) {
+                ++skipped_packets;
+                continue;
+            }
+            SetError(out_error, last_packet_error);
             success = false;
             break;
         }
@@ -731,6 +738,11 @@ bool DecodeFramesImpl(const std::string& path,
         if (!success) {
             break;
         }
+    }
+
+    if (success && frame_count == 0 && skipped_packets > 0) {
+        SetError(out_error, last_packet_error.empty() ? "ffmpeg skipped invalid audio packets without decoding frames" : last_packet_error);
+        success = false;
     }
 
     if (success && (frame_limit == 0 || frame_count < frame_limit)) {
