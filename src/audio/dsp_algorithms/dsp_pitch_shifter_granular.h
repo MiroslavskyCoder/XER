@@ -26,6 +26,7 @@ public:
 private:
 	struct GrainState {
 		double position = 0.0;
+		double delay_offset_samples = 0.0;
 	};
 
 	float ReadDelayedSample(double delay_samples) const;
@@ -33,12 +34,13 @@ private:
 
 	float sample_rate_;
 	float pitch_ratio_;
+	float smoothed_pitch_ratio_;
 	size_t grain_size_;
 	size_t max_delay_samples_;
 	size_t write_index_;
 	std::vector<float> grain_window_;
 	std::vector<float> delay_buffer_;
-	std::array<GrainState, 2> grains_;
+	std::array<GrainState, 4> grains_;
 	AsyncIO::IO::LogDebug::PerformanceCounter perf_counter_;
 };
 

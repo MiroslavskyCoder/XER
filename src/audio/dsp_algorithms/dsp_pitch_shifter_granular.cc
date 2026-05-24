@@ -8,6 +8,7 @@ namespace Engine::Audio::DSP {
 GranularPitchShifter::GranularPitchShifter()
 	: sample_rate_(44100.0f),
 	  pitch_ratio_(1.0f),
+	  smoothed_pitch_ratio_(1.0f),
 	  grain_size_(256),
 	  max_delay_samples_(0),
 	  write_index_(0) {
@@ -25,10 +26,16 @@ bool GranularPitchShifter::Initialize(float sample_rate, size_t grain_size, size
 	grain_size_ = grain_size;
 	max_delay_samples_ = std::max(max_delay_samples, grain_size_ * 2);
 	write_index_ = 0;
+	smoothed_pitch_ratio_ = pitch_ratio_;
 	grain_window_ = WindowingFunctions::GenerateHann(grain_size_);
 	delay_buffer_.assign(max_delay_samples_, 0.0f);
-	grains_[0].position = 0.0;
-	grains_[1].position = static_cast<double>(grain_size_) * 0.5;
+	const double phase_step = static_cast<double>(grain_size_) / static_cast<double>(grains_.size());
+	const double spread = std::min(24.0, std::max(2.0, static_cast<double>(grain_size_) * 0.055));
+	const double offsets[] = {-0.45, 0.18, 0.62, -0.12};
+	for (size_t index = 0; index < grains_.size(); ++index) {
+		grains_[index].position = phase_step * static_cast<double>(index);
+		grains_[index].delay_offset_samples = offsets[index] * spread;
+	}
 	return !delay_buffer_.empty();
 }
 
@@ -43,27 +50,37 @@ bool GranularPitchShifter::ProcessBlock(const float* input, size_t frame_count, 
 
 	perf_counter_.StartCounter("granular_pitch_shift");
 	const double usable_delay = static_cast<double>(max_delay_samples_ > 2 ? max_delay_samples_ - 2 : 1);
-	const double sweep = std::min(usable_delay * 0.75, std::max(8.0, static_cast<double>(grain_size_) * 0.85));
-	const double base_delay = std::max(1.0, usable_delay - sweep);
+	const double grain_size = static_cast<double>(grain_size_);
+	const double smoothing = std::clamp(64.0 / std::max(1.0f, sample_rate_), 0.00025, 0.006);
 
 	for (size_t i = 0; i < frame_count; ++i) {
 		delay_buffer_[write_index_] = input[i];
+		smoothed_pitch_ratio_ += static_cast<float>((pitch_ratio_ - smoothed_pitch_ratio_) * smoothing);
+		const double ratio = static_cast<double>(smoothed_pitch_ratio_);
+		const double pitch_delta = std::abs(1.0 - ratio) * grain_size;
+		const double minimum_base_delay = pitch_delta + std::max(24.0, grain_size * 0.45);
+		const double maximum_base_delay = std::max(minimum_base_delay, usable_delay - pitch_delta - 4.0);
+		const double natural_base_delay = grain_size * 1.55 + pitch_delta;
+		const double base_delay = std::clamp(natural_base_delay, minimum_base_delay, maximum_base_delay);
+		const double delay_slope = 1.0 - ratio;
 
 		float mixed = 0.0f;
 		float weight_sum = 0.0f;
 		for (GrainState& grain : grains_) {
-			const double normalized_phase = grain.position / static_cast<double>(grain_size_);
+			const double normalized_phase = grain.position / grain_size;
 			const size_t window_index = std::min(
 				grain_window_.size() - 1,
 				static_cast<size_t>(grain.position) % grain_window_.size());
 			const float window = grain_window_[window_index];
-			const double delay = base_delay + (1.0 - normalized_phase) * sweep;
+			const double delay = base_delay + delay_slope * grain.position + grain.delay_offset_samples;
 			mixed += ReadDelayedSample(delay) * window;
 			weight_sum += window;
 			AdvanceGrain(&grain);
 		}
 
-		output[i] = weight_sum > 1.0e-6f ? mixed / weight_sum : 0.0f;
+		const float shifted = weight_sum > 1.0e-6f ? mixed / weight_sum : input[i];
+		const float neutral_blend = std::clamp(1.0f - std::abs(smoothed_pitch_ratio_ - 1.0f) * 36.0f, 0.0f, 1.0f);
+		output[i] = shifted * (1.0f - neutral_blend) + input[i] * neutral_blend;
 		write_index_ = (write_index_ + 1) % delay_buffer_.size();
 	}
 
@@ -73,17 +90,21 @@ bool GranularPitchShifter::ProcessBlock(const float* input, size_t frame_count, 
 
 void GranularPitchShifter::Reset() {
 	write_index_ = 0;
+	smoothed_pitch_ratio_ = pitch_ratio_;
 	std::fill(delay_buffer_.begin(), delay_buffer_.end(), 0.0f);
-	grains_[0].position = 0.0;
-	grains_[1].position = static_cast<double>(grain_size_) * 0.5;
+	const double phase_step = static_cast<double>(grain_size_) / static_cast<double>(grains_.size());
+	for (size_t index = 0; index < grains_.size(); ++index) {
+		grains_[index].position = phase_step * static_cast<double>(index);
+	}
 }
 
 std::string GranularPitchShifter::GetReport() const {
 	return "GranularPitchShifter: sr=" + std::to_string(sample_rate_) +
 		", ratio=" + std::to_string(pitch_ratio_) +
+		", smooth=" + std::to_string(smoothed_pitch_ratio_) +
 		", grain=" + std::to_string(grain_size_) +
 		", delay=" + std::to_string(max_delay_samples_) +
-		", grains=2";
+		", grains=4";
 }
 
 float GranularPitchShifter::ReadDelayedSample(double delay_samples) const {
@@ -111,7 +132,7 @@ void GranularPitchShifter::AdvanceGrain(GrainState* grain) {
 		return;
 	}
 
-	grain->position += static_cast<double>(pitch_ratio_);
+	grain->position += 1.0;
 	while (grain->position >= static_cast<double>(grain_size_)) {
 		grain->position -= static_cast<double>(grain_size_);
 	}

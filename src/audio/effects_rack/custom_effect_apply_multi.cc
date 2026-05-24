@@ -6,6 +6,7 @@
 #include <mutex>
 
 #include "async_io/io_thread_pool.h"
+#include "custom_effect_accel.h"
 
 namespace Engine::Audio::FX {
 
@@ -83,15 +84,7 @@ bool ApplyCustomEffectProcessors(
 		}
 	}
 
-	output->assign(input.size(), 0.0f);
-	const float normalization = 1.0f / static_cast<float>(branch_outputs.size());
-	for (size_t frame = 0; frame < output->size(); ++frame) {
-		float mixed = 0.0f;
-		for (const auto& branch_output : branch_outputs) {
-			mixed += branch_output[frame];
-		}
-		(*output)[frame] = mixed * normalization;
-	}
+	SumNormalizeBuffers(branch_outputs, output);
 	return true;
 }
 

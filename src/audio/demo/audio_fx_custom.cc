@@ -481,6 +481,15 @@ bool WantsStereoByDefault(const std::string& effect_name) {
 		|| normalized == "eqreverb"
 		|| normalized == "delayreverb"
 		|| normalized == "delay"
+		|| normalized == "tapeecho"
+		|| normalized == "platereverb"
+		|| normalized == "dreamchorus"
+		|| normalized == "dubdelay"
+		|| normalized == "springtank"
+		|| normalized == "dimensionchorus"
+		|| normalized == "spaceecho"
+		|| normalized == "shimmerbloom"
+		|| normalized == "psychowidener"
 		|| normalized == "airvoice";
 }
 

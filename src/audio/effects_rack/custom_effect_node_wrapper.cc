@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <optional>
 
+#include "custom_effect_accel.h"
 #include "custom_effect_core.h"
 #include "custom_effect_fxdata.h"
 
@@ -218,9 +219,14 @@ bool CustomEffectNodeWrapper::ProcessBlock(
 		return false;
 	}
 
-	for (size_t index = 0; index < frame_count; ++index) {
-		const float mix = ResolveCustomEffectNodeMix(node_, frame_offset + index);
-		output[index] = MixCustomEffectDryWet(input[index], wet_buffer_[index], mix);
+	float constant_mix = 1.0f;
+	if (ResolveCustomEffectNodeConstantMix(node_, &constant_mix)) {
+		MixDryWetConstant(input, wet_buffer_.data(), frame_count, constant_mix, output);
+	} else {
+		for (size_t index = 0; index < frame_count; ++index) {
+			const float mix = ResolveCustomEffectNodeMix(node_, frame_offset + index);
+			output[index] = MixCustomEffectDryWet(input[index], wet_buffer_[index], mix);
+		}
 	}
 	return true;
 }
