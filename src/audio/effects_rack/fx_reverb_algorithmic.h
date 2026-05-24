@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <string>
 #include <future>
+#include <array>
 
 #include "async_io/log_and_debug/io_perf_counter.h"
 #include "audio/dsp_algorithms/dsp_delay_line_circular.h"
@@ -29,9 +30,11 @@ private:
 	float room_size_;
 	float damping_;
 	float mix_;
-	Engine::Audio::DSP::CircularDelayLine comb_a_;
-	Engine::Audio::DSP::CircularDelayLine comb_b_;
-	Engine::Audio::DSP::CircularDelayLine allpass_;
+	std::array<Engine::Audio::DSP::CircularDelayLine, 6> combs_;
+	std::array<Engine::Audio::DSP::CircularDelayLine, 3> allpasses_;
+	std::array<Engine::Audio::DSP::CircularDelayLine, 4> early_reflections_;
+	std::array<float, 6> comb_damping_state_{};
+	std::array<float, 3> allpass_state_{};
 	AsyncIO::IO::LogDebug::PerformanceCounter perf_counter_;
 };
 

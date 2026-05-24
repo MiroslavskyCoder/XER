@@ -1,6 +1,7 @@
 #include "fx_customs_presets.h"
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cmath>
 
@@ -57,7 +58,11 @@ bool ResolveSharedSpatialBusSettings(const std::string& normalized_name, SharedS
 		return true;
 	}
 	if (normalized_name == "roomreverb") {
-		*settings_out = SharedSpatialBusSettings{0.03f, 0.96f, 1.0f, 0.12f, 0.38f, 0.22f, 0.08f};
+		*settings_out = SharedSpatialBusSettings{0.04f, 1.02f, 1.0f, 0.18f, 0.54f, 0.36f, 0.12f};
+		return true;
+	}
+	if (normalized_name == "8dreverbstereo") {
+		*settings_out = SharedSpatialBusSettings{0.16f, 1.58f, 0.94f, 0.36f, 0.76f, 0.42f, 0.32f};
 		return true;
 	}
 	if (normalized_name == "studioreverb") {
@@ -87,6 +92,7 @@ bool IsSpatialPreset(const std::string& normalized_name) {
 	return normalized_name == "stereoconverter"
 		|| normalized_name == "superreverb"
 		|| normalized_name == "roomreverb"
+		|| normalized_name == "8dreverbstereo"
 		|| normalized_name == "studioreverb"
 		|| normalized_name == "eqreverb"
 		|| normalized_name == "delayreverb"
@@ -122,6 +128,16 @@ void ApplySpatialVariant(CustomEffectPackage* package, const std::string& normal
 		return;
 	}
 
+	if (normalized_name == "8dreverbstereo") {
+		InvokeCustomEffectParameter(package, "8d_orbit_width", "rate_hz", 0.36f + 0.08f * static_cast<float>(channel_index + 1));
+		InvokeCustomEffectParameter(package, "8d_orbit_width", "depth_samples", 24.0f + 8.0f * pan_abs);
+		InvokeCustomEffectParameter(package, "8d_orbit_micro_delay", "delay_samples", 74.0f + 38.0f * static_cast<float>(channel_index + 1));
+		InvokeCustomEffectParameter(package, "8d_orbit_micro_delay", "feedback", 0.14f + 0.08f * pan_abs);
+		InvokeCustomEffectParameter(package, "8d_orbit_room", "room_size", std::clamp(0.64f + 0.18f * (1.0f - pan_abs), 0.45f, 0.92f));
+		InvokeCustomEffectParameter(package, "8d_orbit_room", "damping", std::clamp(0.34f + 0.14f * pan_abs, 0.18f, 0.68f));
+		return;
+	}
+
 	if (normalized_name == "superreverb" || normalized_name == "roomreverb" || normalized_name == "studioreverb" || normalized_name == "eqreverb" || normalized_name == "delayreverb") {
 		InvokeCustomEffectParameter(package, normalized_name == "eqreverb" ? "eq_reverb_room" : (normalized_name == "delayreverb" ? "delay_reverb_room" : (normalized_name == "superreverb" ? "super_reverb" : (normalized_name == "roomreverb" ? "room_reverb" : "studio_reverb"))), "room_size", std::clamp(0.45f + 0.22f * (1.0f - pan_abs) + 0.05f * pan, 0.2f, 0.98f));
 		InvokeCustomEffectParameter(package, normalized_name == "eqreverb" ? "eq_reverb_room" : (normalized_name == "delayreverb" ? "delay_reverb_room" : (normalized_name == "superreverb" ? "super_reverb" : (normalized_name == "roomreverb" ? "room_reverb" : "studio_reverb"))), "damping", std::clamp(0.24f + 0.10f * pan_abs, 0.05f, 0.9f));
@@ -150,6 +166,110 @@ void ApplySpatialVariant(CustomEffectPackage* package, const std::string& normal
 	}
 }
 
+bool ApplyEightChannelOrbitBus(
+	float sample_rate,
+	std::vector<std::vector<float>>* channels,
+	CustomEffectReport* aggregate_report,
+	std::string* error_out) {
+	if (channels == nullptr || channels->size() < 2u) {
+		return true;
+	}
+	const size_t frame_count = channels->front().size();
+	if (frame_count == 0u || sample_rate <= 0.0f) {
+		return true;
+	}
+	for (const auto& channel : *channels) {
+		if (channel.size() != frame_count) {
+			if (error_out != nullptr) {
+				*error_out = "8D orbit bus channels are not aligned";
+			}
+			return false;
+		}
+	}
+
+	constexpr size_t kVirtualChannels = 8u;
+	constexpr float kPi = 3.14159265358979323846f;
+	constexpr float kOrbitRateHz = 0.18f;
+	std::array<std::vector<float>, kVirtualChannels> virtual_inputs;
+	std::array<std::vector<float>, kVirtualChannels> virtual_outputs;
+	for (size_t channel = 0; channel < kVirtualChannels; ++channel) {
+		virtual_inputs[channel].assign(frame_count, 0.0f);
+		virtual_outputs[channel].assign(frame_count, 0.0f);
+	}
+
+	for (size_t frame = 0; frame < frame_count; ++frame) {
+		float source = 0.0f;
+		for (const auto& channel : *channels) {
+			source += channel[frame];
+		}
+		source /= static_cast<float>(channels->size());
+		const float time_seconds = static_cast<float>(frame) / sample_rate;
+		const float orbit = time_seconds * kOrbitRateHz * 2.0f * kPi;
+		for (size_t virtual_channel = 0; virtual_channel < kVirtualChannels; ++virtual_channel) {
+			const float channel_angle = 2.0f * kPi * static_cast<float>(virtual_channel) / static_cast<float>(kVirtualChannels);
+			const float distance = 0.5f + 0.5f * std::cos(orbit - channel_angle);
+			const float lobe = 0.18f + std::pow(std::max(0.0f, distance), 2.2f) * 0.82f;
+			const float shimmer = 0.85f + 0.15f * std::sin(orbit * 0.5f + channel_angle * 1.7f);
+			virtual_inputs[virtual_channel][frame] = source * lobe * shimmer;
+		}
+	}
+
+	for (size_t virtual_channel = 0; virtual_channel < kVirtualChannels; ++virtual_channel) {
+		ReverbAlgorithmic room;
+		if (!room.Initialize(sample_rate, std::max<size_t>(8192u, static_cast<size_t>(sample_rate * 1.4f)))) {
+			if (error_out != nullptr) {
+				*error_out = "failed to initialize 8D virtual room channel";
+			}
+			return false;
+		}
+		const float phase = static_cast<float>(virtual_channel) / static_cast<float>(kVirtualChannels - 1u);
+		room.SetRoomSize(0.62f + 0.22f * phase);
+		room.SetDamping(0.34f + 0.16f * (1.0f - phase));
+		room.SetMix(1.0f);
+		if (!room.ProcessBlock(virtual_inputs[virtual_channel].data(), frame_count, virtual_outputs[virtual_channel].data())) {
+			if (error_out != nullptr) {
+				*error_out = "8D virtual room processing failed";
+			}
+			return false;
+		}
+		if (aggregate_report != nullptr) {
+			aggregate_report->node_reports.push_back("8d_virtual_channel=" + std::to_string(virtual_channel) + ":" + room.GetReport());
+		}
+	}
+
+	for (size_t frame = 0; frame < frame_count; ++frame) {
+		const float dry_left = (*channels)[0][frame];
+		const float dry_right = (*channels)[1][frame];
+		float wet_left = 0.0f;
+		float wet_right = 0.0f;
+		const float time_seconds = static_cast<float>(frame) / sample_rate;
+		const float orbit = time_seconds * kOrbitRateHz * 2.0f * kPi;
+		for (size_t virtual_channel = 0; virtual_channel < kVirtualChannels; ++virtual_channel) {
+			const float angle = orbit + 2.0f * kPi * static_cast<float>(virtual_channel) / static_cast<float>(kVirtualChannels);
+			const float pan = std::sin(angle);
+			const float left_gain = std::sqrt(std::max(0.0f, (1.0f - pan) * 0.5f));
+			const float right_gain = std::sqrt(std::max(0.0f, (1.0f + pan) * 0.5f));
+			const float depth = 0.74f + 0.26f * std::cos(angle);
+			const float wet = virtual_outputs[virtual_channel][frame] * depth;
+			wet_left += wet * left_gain;
+			wet_right += wet * right_gain;
+		}
+		wet_left /= static_cast<float>(kVirtualChannels) * 0.62f;
+		wet_right /= static_cast<float>(kVirtualChannels) * 0.62f;
+		(*channels)[0][frame] = dry_left * 0.72f + wet_left * 0.42f;
+		(*channels)[1][frame] = dry_right * 0.72f + wet_right * 0.42f;
+		for (size_t channel_index = 2; channel_index < channels->size(); ++channel_index) {
+			const float blend = (wet_left + wet_right) * 0.5f;
+			(*channels)[channel_index][frame] = (*channels)[channel_index][frame] * 0.65f + blend * 0.35f;
+		}
+	}
+
+	if (aggregate_report != nullptr) {
+		aggregate_report->stage_reports.push_back("8d_orbit_bus=virtual_channels=8,orbit_rate_hz=" + std::to_string(kOrbitRateHz) + ",downmix=stereo");
+	}
+	return true;
+}
+
 bool ApplySharedSpatialBus(
 	const std::string& normalized_name,
 	float sample_rate,
@@ -158,6 +278,9 @@ bool ApplySharedSpatialBus(
 	std::string* error_out) {
 	if (channels == nullptr || channels->size() < 2u) {
 		return true;
+	}
+	if (normalized_name == "8dreverbstereo") {
+		return ApplyEightChannelOrbitBus(sample_rate, channels, aggregate_report, error_out);
 	}
 	SharedSpatialBusSettings settings;
 	if (!ResolveSharedSpatialBusSettings(normalized_name, &settings)) {
@@ -420,6 +543,10 @@ CustomEffectPackage BuildSuperReverbEffect() {
 
 CustomEffectPackage BuildRoomReverbEffect() {
 	return BuildNamedPreset("RoomReverb");
+}
+
+CustomEffectPackage Build8DReverbStereoEffect() {
+	return BuildNamedPreset("8DReverbStereo");
 }
 
 CustomEffectPackage BuildStudioReverbEffect() {

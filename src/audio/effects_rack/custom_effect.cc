@@ -59,13 +59,28 @@ CustomEffectPackage BuildNamedCustomEffectPackage(const std::string& effect_name
 	const std::string normalized = NormalizeEffectName(effect_name);
 
 	if (normalized == "bassboost") {
-		CustomEffectNode eq = MakeNode("parametric_eq", "bass_eq", 0u, 0.95f);
-		SetParam(&eq, "frequency_hz", 110.0f);
-		SetParam(&eq, "q", 0.7f);
-		SetParam(&eq, "gain_db", 8.0f);
-		CustomEffectNode limiter = MakeNode("limiter", "bass_limiter", 1u, 1.0f);
+		CustomEffectNode sub = MakeNode("parametric_eq", "bass_eq_sub_front", 0u, 1.0f);
+		SetParam(&sub, "frequency_hz", 48.0f);
+		SetParam(&sub, "q", 0.85f);
+		SetParam(&sub, "gain_db", 5.5f);
+		CustomEffectNode thump = MakeNode("parametric_eq", "bass_eq_thump_front", 1u, 1.0f);
+		SetParam(&thump, "frequency_hz", 82.0f);
+		SetParam(&thump, "q", 0.78f);
+		SetParam(&thump, "gain_db", 8.0f);
+		CustomEffectNode body = MakeNode("parametric_eq", "bass_eq_body_front", 2u, 0.92f);
+		SetParam(&body, "frequency_hz", 135.0f);
+		SetParam(&body, "q", 0.90f);
+		SetParam(&body, "gain_db", 6.0f);
+		CustomEffectNode warmth = MakeNode("parametric_eq", "bass_eq_warmth_front", 3u, 0.55f);
+		SetParam(&warmth, "frequency_hz", 205.0f);
+		SetParam(&warmth, "q", 1.05f);
+		SetParam(&warmth, "gain_db", 2.5f);
+		CustomEffectNode tube = MakeNode("tube", "bass_harmonic_guard", 4u, 0.18f);
+		SetParam(&tube, "drive", 1.45f);
+		SetParam(&tube, "output_gain", 0.92f);
+		CustomEffectNode limiter = MakeNode("limiter", "bass_limiter", 5u, 1.0f);
 		SetParam(&limiter, "ceiling_db", -0.8f);
-		return MakePresetPackage("BassBoost", {eq, limiter});
+		return MakePresetPackage("BassBoost", {sub, thump, body, warmth, tube, limiter});
 	}
 	if (normalized == "eq") {
 		CustomEffectNode low = MakeNode("parametric_eq", "eq_body", 0u, 1.0f);
@@ -182,10 +197,31 @@ CustomEffectPackage BuildNamedCustomEffectPackage(const std::string& effect_name
 		return MakePresetPackage("SuperReverb", {reverb});
 	}
 	if (normalized == "roomreverb") {
-		CustomEffectNode reverb = MakeNode("reverb_algorithmic", "room_reverb", 0u, 0.25f);
-		SetParam(&reverb, "room_size", 0.35f);
-		SetParam(&reverb, "damping", 0.22f);
-		return MakePresetPackage("RoomReverb", {reverb});
+		CustomEffectNode early = MakeNode("delay", "room_reverb_early_reflections", 0u, 0.14f);
+		SetParam(&early, "delay_samples", 360.0f);
+		SetParam(&early, "feedback", 0.16f);
+		CustomEffectNode reverb = MakeNode("reverb_algorithmic", "room_reverb_physical_tail", 1u, 0.38f);
+		SetParam(&reverb, "room_size", 0.54f);
+		SetParam(&reverb, "damping", 0.36f);
+		CustomEffectNode air = MakeNode("parametric_eq", "room_reverb_air_loss", 2u, 0.72f);
+		SetParam(&air, "frequency_hz", 7200.0f);
+		SetParam(&air, "q", 0.85f);
+		SetParam(&air, "gain_db", -1.8f);
+		return MakePresetPackage("RoomReverb", {early, reverb, air});
+	}
+	if (normalized == "8dreverbstereo" || normalized == "eightdreverbstereo") {
+		CustomEffectNode width = MakeNode("chorus", "8d_orbit_width", 0u, 0.32f);
+		SetParam(&width, "rate_hz", 0.42f);
+		SetParam(&width, "depth_samples", 28.0f);
+		CustomEffectNode orbit = MakeNode("delay", "8d_orbit_micro_delay", 1u, 0.24f);
+		SetParam(&orbit, "delay_samples", 118.0f);
+		SetParam(&orbit, "feedback", 0.18f);
+		CustomEffectNode reverb = MakeNode("reverb_algorithmic", "8d_orbit_room", 2u, 0.42f);
+		SetParam(&reverb, "room_size", 0.72f);
+		SetParam(&reverb, "damping", 0.42f);
+		CustomEffectNode limiter = MakeNode("limiter", "8d_orbit_limiter", 3u, 1.0f);
+		SetParam(&limiter, "ceiling_db", -0.9f);
+		return MakePresetPackage("8DReverbStereo", {width, orbit, reverb, limiter});
 	}
 	if (normalized == "studioreverb") {
 		CustomEffectNode reverb = MakeNode("reverb_algorithmic", "studio_reverb", 0u, 0.35f);

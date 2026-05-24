@@ -49,6 +49,7 @@ CustomEffectPackage BuildVhsEffect();
 CustomEffectPackage BuildRetroVhsEffect();
 CustomEffectPackage BuildSuperReverbEffect();
 CustomEffectPackage BuildRoomReverbEffect();
+CustomEffectPackage Build8DReverbStereoEffect();
 CustomEffectPackage BuildStudioReverbEffect();
 CustomEffectPackage BuildEqReverbEffect();
 CustomEffectPackage BuildDelayReverbEffect();

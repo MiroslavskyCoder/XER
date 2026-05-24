@@ -130,6 +130,7 @@ std::vector<std::string> ListCustomEffectPresets() {
 		"RetroVHS",
 		"SuperReverb",
 		"RoomReverb",
+		"8DReverbStereo",
 		"StudioReverb",
 		"EQReverb",
 		"DelayReverb",

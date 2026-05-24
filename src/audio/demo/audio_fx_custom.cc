@@ -476,6 +476,7 @@ bool WantsStereoByDefault(const std::string& effect_name) {
 	return normalized == "stereoconverter"
 		|| normalized == "superreverb"
 		|| normalized == "roomreverb"
+		|| normalized == "8dreverbstereo"
 		|| normalized == "studioreverb"
 		|| normalized == "eqreverb"
 		|| normalized == "delayreverb"
