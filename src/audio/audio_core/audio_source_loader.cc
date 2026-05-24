@@ -721,16 +721,17 @@ bool AudioSourceLoader::Load(
 		}
 	} else {
 		std::string ffmpeg_error;
+		std::string wav_error;
 		bool decoded = false;
-		if (engine::bridge::ffmpeg::IsAvailable()) {
-			decoded = DecodeWithFFmpeg(options.input_path, &decoded_audio, &ffmpeg_error);
+		if (extension == ".wav") {
+			decoded = DecodeWavPcmFile(options.input_path, &decoded_audio, &wav_error);
 		}
-		if (!decoded && extension == ".wav") {
-			decoded = DecodeWavPcmFile(options.input_path, &decoded_audio, error_out);
+		if (!decoded && engine::bridge::ffmpeg::IsAvailable()) {
+			decoded = DecodeWithFFmpeg(options.input_path, &decoded_audio, &ffmpeg_error);
 		}
 		if (!decoded) {
 			if (error_out != nullptr) {
-				*error_out = !ffmpeg_error.empty() ? ffmpeg_error : "no decoder available for input audio";
+				*error_out = !wav_error.empty() ? wav_error : (!ffmpeg_error.empty() ? ffmpeg_error : "no decoder available for input audio");
 			}
 			return false;
 		}

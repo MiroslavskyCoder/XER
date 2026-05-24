@@ -689,6 +689,26 @@ bool DecodeFramesImpl(const std::string& path,
     int skipped_packets = 0;
     std::string last_packet_error;
 
+    auto receive_available_frames = [&]() {
+        while (frame_limit == 0 || frame_count < frame_limit) {
+            result = avcodec_receive_frame(codec_context, frame);
+            if (result == AVERROR(EAGAIN) || result == AVERROR_EOF) {
+                break;
+            }
+            if (result < 0) {
+                SetError(out_error, "avcodec_receive_frame failed: " + ErrorString(result));
+                return false;
+            }
+            if (!collector(frame, stream_index, out_error)) {
+                av_frame_unref(frame);
+                return false;
+            }
+            ++frame_count;
+            av_frame_unref(frame);
+        }
+        return true;
+    };
+
     while (frame_limit == 0 || frame_count < frame_limit) {
         result = av_read_frame(format_context, packet);
         if (result == AVERROR_EOF) {
@@ -704,38 +724,42 @@ bool DecodeFramesImpl(const std::string& path,
             continue;
         }
 
-        result = avcodec_send_packet(codec_context, packet);
-        av_packet_unref(packet);
-        if (result < 0) {
-            last_packet_error = "avcodec_send_packet failed: " + ErrorString(result);
-            if (media_type == AVMEDIA_TYPE_AUDIO) {
-                ++skipped_packets;
+        bool packet_sent = false;
+        while (!packet_sent) {
+            result = avcodec_send_packet(codec_context, packet);
+            if (result == AVERROR(EAGAIN)) {
+                if (!receive_available_frames()) {
+                    success = false;
+                    break;
+                }
                 continue;
             }
-            SetError(out_error, last_packet_error);
-            success = false;
+            if (result < 0) {
+                last_packet_error = "avcodec_send_packet failed: " + ErrorString(result);
+                if (media_type == AVMEDIA_TYPE_AUDIO) {
+                    if (!receive_available_frames()) {
+                        success = false;
+                        break;
+                    }
+                    avcodec_flush_buffers(codec_context);
+                    ++skipped_packets;
+                    break;
+                }
+                SetError(out_error, last_packet_error);
+                success = false;
+                break;
+            }
+            packet_sent = true;
+        }
+        av_packet_unref(packet);
+        if (!success) {
             break;
         }
-
-        while (frame_limit == 0 || frame_count < frame_limit) {
-            result = avcodec_receive_frame(codec_context, frame);
-            if (result == AVERROR(EAGAIN) || result == AVERROR_EOF) {
-                break;
-            }
-            if (result < 0) {
-                SetError(out_error, "avcodec_receive_frame failed: " + ErrorString(result));
-                success = false;
-                break;
-            }
-            if (!collector(frame, stream_index, out_error)) {
-                av_frame_unref(frame);
-                success = false;
-                break;
-            }
-            ++frame_count;
-            av_frame_unref(frame);
+        if (!packet_sent) {
+            continue;
         }
-        if (!success) {
+        if (!receive_available_frames()) {
+            success = false;
             break;
         }
     }
@@ -1912,6 +1936,7 @@ bool EncodeAudioFrames(const EncodeAudioParams& params,
 
     int64_t next_pts = 0;
     bool success = true;
+    const int preferred_audio_frame_size = codec_context->frame_size > 0 ? codec_context->frame_size : 1152;
     for (const auto& input_frame : frames) {
         AVFrame* source_frame = av_frame_alloc();
         if (source_frame == nullptr || !CopyAudioFrameToAvFrame(input_frame, source_frame, out_error)) {
@@ -1970,8 +1995,8 @@ bool EncodeAudioFrames(const EncodeAudioParams& params,
         av_freep(&converted_data[0]);
         av_freep(&converted_data);
 
-        while (success && av_audio_fifo_size(fifo) >= std::max(codec_context->frame_size, 1)) {
-            const int frame_samples = codec_context->frame_size > 0 ? codec_context->frame_size : av_audio_fifo_size(fifo);
+        while (success && av_audio_fifo_size(fifo) >= preferred_audio_frame_size) {
+            const int frame_samples = preferred_audio_frame_size;
             AVFrame* encoded_frame = av_frame_alloc();
             if (encoded_frame == nullptr) {
                 success = false;
@@ -2015,7 +2040,7 @@ bool EncodeAudioFrames(const EncodeAudioParams& params,
         const int remaining = av_audio_fifo_size(fifo);
         const int frame_samples = (codec_context->frame_size > 0 && !variable_frame_size)
             ? codec_context->frame_size
-            : remaining;
+            : std::min(remaining, preferred_audio_frame_size);
         AVFrame* encoded_frame = av_frame_alloc();
         if (encoded_frame == nullptr) {
             success = false;
