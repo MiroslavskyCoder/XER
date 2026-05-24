@@ -190,6 +190,7 @@ bool ApplyEightChannelOrbitBus(
 	constexpr size_t kVirtualChannels = 8u;
 	constexpr float kPi = 3.14159265358979323846f;
 	constexpr float kOrbitRateHz = 0.18f;
+	constexpr size_t kVerticalChannel = 7u;
 	std::array<std::vector<float>, kVirtualChannels> virtual_inputs;
 	std::array<std::vector<float>, kVirtualChannels> virtual_outputs;
 	for (size_t channel = 0; channel < kVirtualChannels; ++channel) {
@@ -207,10 +208,11 @@ bool ApplyEightChannelOrbitBus(
 		const float orbit = time_seconds * kOrbitRateHz * 2.0f * kPi;
 		for (size_t virtual_channel = 0; virtual_channel < kVirtualChannels; ++virtual_channel) {
 			const float channel_angle = 2.0f * kPi * static_cast<float>(virtual_channel) / static_cast<float>(kVirtualChannels);
-			const float distance = 0.5f + 0.5f * std::cos(orbit - channel_angle);
-			const float lobe = 0.18f + std::pow(std::max(0.0f, distance), 2.2f) * 0.82f;
-			const float shimmer = 0.85f + 0.15f * std::sin(orbit * 0.5f + channel_angle * 1.7f);
-			virtual_inputs[virtual_channel][frame] = source * lobe * shimmer;
+			const float angular_distance = 0.5f + 0.5f * std::cos(orbit - channel_angle);
+			const float lobe = 0.14f + std::pow(std::max(0.0f, angular_distance), 2.5f) * 0.86f;
+			const float vertical_lift = virtual_channel == kVerticalChannel ? 0.82f + 0.18f * std::sin(orbit * 0.33f) : 1.0f;
+			const float shimmer = 0.84f + 0.16f * std::sin(orbit * 0.5f + channel_angle * 1.7f);
+			virtual_inputs[virtual_channel][frame] = source * lobe * shimmer * vertical_lift;
 		}
 	}
 
@@ -237,6 +239,19 @@ bool ApplyEightChannelOrbitBus(
 		}
 	}
 
+	auto read_delayed = [frame_count](const std::vector<float>& samples, size_t frame, size_t delay_samples) {
+		if (samples.empty()) {
+			return 0.0f;
+		}
+		if (delay_samples >= frame) {
+			return samples.front() * 0.25f;
+		}
+		return samples[frame - delay_samples];
+	};
+
+	const size_t max_itd_samples = std::max<size_t>(1u, static_cast<size_t>(sample_rate * 0.00072f));
+	const size_t min_haas_samples = std::max<size_t>(1u, static_cast<size_t>(sample_rate * 0.006f));
+	const size_t max_haas_samples = std::max(min_haas_samples + 1u, static_cast<size_t>(sample_rate * 0.034f));
 	for (size_t frame = 0; frame < frame_count; ++frame) {
 		const float dry_left = (*channels)[0][frame];
 		const float dry_right = (*channels)[1][frame];
@@ -247,17 +262,34 @@ bool ApplyEightChannelOrbitBus(
 		for (size_t virtual_channel = 0; virtual_channel < kVirtualChannels; ++virtual_channel) {
 			const float angle = orbit + 2.0f * kPi * static_cast<float>(virtual_channel) / static_cast<float>(kVirtualChannels);
 			const float pan = std::sin(angle);
-			const float left_gain = std::sqrt(std::max(0.0f, (1.0f - pan) * 0.5f));
-			const float right_gain = std::sqrt(std::max(0.0f, (1.0f + pan) * 0.5f));
-			const float depth = 0.74f + 0.26f * std::cos(angle);
-			const float wet = virtual_outputs[virtual_channel][frame] * depth;
-			wet_left += wet * left_gain;
-			wet_right += wet * right_gain;
+			const float front = std::cos(angle);
+			const float rear = std::max(0.0f, -front);
+			const float side = std::abs(pan);
+			const float elevation = virtual_channel == kVerticalChannel ? 1.0f : 0.0f;
+			const size_t itd_samples = static_cast<size_t>(std::round(side * static_cast<float>(max_itd_samples)));
+			const size_t haas_samples = min_haas_samples + static_cast<size_t>(rear * static_cast<float>(max_haas_samples - min_haas_samples));
+			const size_t left_delay = pan > 0.0f ? itd_samples : 0u;
+			const size_t right_delay = pan < 0.0f ? itd_samples : 0u;
+			const float left_shadow = 1.0f - std::max(0.0f, pan) * 0.22f;
+			const float right_shadow = 1.0f - std::max(0.0f, -pan) * 0.22f;
+			const float front_focus = 0.72f + 0.28f * std::max(0.0f, front);
+			const float rear_muffle = 1.0f - rear * 0.20f;
+			const float vertical_air = 1.0f + elevation * 0.14f;
+			const float left_gain = std::sqrt(std::max(0.0f, (1.0f - pan) * 0.5f)) * left_shadow;
+			const float right_gain = std::sqrt(std::max(0.0f, (1.0f + pan) * 0.5f)) * right_shadow;
+			const float direct_left = read_delayed(virtual_outputs[virtual_channel], frame, left_delay);
+			const float direct_right = read_delayed(virtual_outputs[virtual_channel], frame, right_delay);
+			const float haas = read_delayed(virtual_outputs[virtual_channel], frame, haas_samples) * (0.20f + rear * 0.22f);
+			const float depth = (0.68f + 0.32f * front_focus) * rear_muffle * vertical_air;
+			wet_left += (direct_left * depth + haas) * left_gain;
+			wet_right += (direct_right * depth + haas) * right_gain;
 		}
-		wet_left /= static_cast<float>(kVirtualChannels) * 0.62f;
-		wet_right /= static_cast<float>(kVirtualChannels) * 0.62f;
-		(*channels)[0][frame] = dry_left * 0.72f + wet_left * 0.42f;
-		(*channels)[1][frame] = dry_right * 0.72f + wet_right * 0.42f;
+		wet_left /= static_cast<float>(kVirtualChannels) * 0.58f;
+		wet_right /= static_cast<float>(kVirtualChannels) * 0.58f;
+		const float circular_energy = 0.5f + 0.5f * std::sin(orbit);
+		const float wet_mix = 0.36f + 0.08f * circular_energy;
+		(*channels)[0][frame] = dry_left * (1.0f - wet_mix) + wet_left * wet_mix;
+		(*channels)[1][frame] = dry_right * (1.0f - wet_mix) + wet_right * wet_mix;
 		for (size_t channel_index = 2; channel_index < channels->size(); ++channel_index) {
 			const float blend = (wet_left + wet_right) * 0.5f;
 			(*channels)[channel_index][frame] = (*channels)[channel_index][frame] * 0.65f + blend * 0.35f;
@@ -265,7 +297,7 @@ bool ApplyEightChannelOrbitBus(
 	}
 
 	if (aggregate_report != nullptr) {
-		aggregate_report->stage_reports.push_back("8d_orbit_bus=virtual_channels=8,orbit_rate_hz=" + std::to_string(kOrbitRateHz) + ",downmix=stereo");
+		aggregate_report->stage_reports.push_back("8d_orbit_bus=virtual_channels=8,orbit_rate_hz=" + std::to_string(kOrbitRateHz) + ",haas_delay_ms=6-34,itd_ms=0.72,vertical_channel=8,downmix=binaural_stereo");
 	}
 	return true;
 }
