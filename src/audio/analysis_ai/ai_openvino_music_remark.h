@@ -25,6 +25,7 @@ struct MusicRemarkOptions {
 	float vocal_move_beats = 0.0f;
 	float drums_move_beats = 0.0f;
 	float vocal_stretch_ratio = 1.0f;
+	std::string openvino_model_path;
 };
 
 struct MusicRemarkSampleSlot {
@@ -78,6 +79,9 @@ struct MusicRemarkMixPlan {
 	bool openvino_available = false;
 	std::string backend;
 	std::string model_hint;
+	bool model_found = false;
+	std::string model_source;
+	std::vector<std::string> model_suggestions;
 	float score = 0.0f;
 	std::string grade;
 	std::vector<std::string> effects;

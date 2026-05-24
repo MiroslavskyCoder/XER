@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <filesystem>
 #include <utility>
 
 #if __has_include(<openvino/openvino.hpp>)
@@ -44,6 +45,101 @@ void PushUnique(std::vector<std::string>* values, const std::string& value) {
 	if (std::find(values->begin(), values->end(), value) == values->end()) {
 		values->push_back(value);
 	}
+}
+
+struct OpenVinoModelCandidate {
+	bool found = false;
+	std::string path;
+	std::string source;
+	std::vector<std::string> suggestions;
+};
+
+bool IsXmlModelPath(const std::filesystem::path& path) {
+	return path.has_extension() && path.extension().string() == ".xml";
+}
+
+bool HasBinPair(const std::filesystem::path& xml_path) {
+	std::filesystem::path bin_path = xml_path;
+	bin_path.replace_extension(".bin");
+	std::error_code error;
+	return std::filesystem::exists(bin_path, error) && !error;
+}
+
+std::string PathString(const std::filesystem::path& path) {
+	return path.lexically_normal().string();
+}
+
+void AddModelSuggestion(std::vector<std::string>* suggestions, const std::string& value) {
+	PushUnique(suggestions, value);
+}
+
+OpenVinoModelCandidate ResolveOpenVinoModel(const MusicRemarkOptions& options) {
+	OpenVinoModelCandidate result;
+	AddModelSuggestion(&result.suggestions, "Put OpenVINO IR files into data/models/openvino/musicmixremark/music-remark-mix.xml and music-remark-mix.bin");
+	AddModelSuggestion(&result.suggestions, "Run npm run models:openvino:music:list to view Open Model Zoo candidates and search URLs");
+	AddModelSuggestion(&result.suggestions, "Run npm run models:openvino:music:download -- --name music-remark-mix --xml-url <url> --bin-url <url> for direct IR downloads");
+	AddModelSuggestion(&result.suggestions, "Run npm run models:openvino:music:omz -- --name aclnet --local-name music-remark-mix when OpenVINO dev tools are installed");
+	AddModelSuggestion(&result.suggestions, "Set XER_OPENVINO_MUSIC_REMARK_MODEL to an absolute .xml path when using a custom model");
+	AddModelSuggestion(&result.suggestions, "Search OpenVINO/Open Model Zoo for audio classification, beat, vocal, stem, or source-separation IR models and convert them with model optimizer if needed");
+
+	auto try_path = [&](const std::filesystem::path& candidate, const std::string& source) {
+		if (result.found || !IsXmlModelPath(candidate)) return;
+		std::error_code error;
+		if (std::filesystem::exists(candidate, error) && !error) {
+			result.found = true;
+			result.path = PathString(candidate);
+			result.source = HasBinPair(candidate) ? source : source + ":xml-without-bin";
+		}
+	};
+
+	if (!options.openvino_model_path.empty()) {
+		try_path(options.openvino_model_path, "request");
+	}
+	const char* env_model = std::getenv("XER_OPENVINO_MUSIC_REMARK_MODEL");
+	if (env_model != nullptr && env_model[0] != '\0') {
+		try_path(env_model, "env:XER_OPENVINO_MUSIC_REMARK_MODEL");
+	}
+	if (result.found) return result;
+
+	std::vector<std::filesystem::path> roots;
+	const char* env_dir = std::getenv("XER_OPENVINO_MODEL_DIR");
+	if (env_dir != nullptr && env_dir[0] != '\0') roots.emplace_back(env_dir);
+	roots.emplace_back("data/models/openvino/musicmixremark");
+	roots.emplace_back("data/models/openvino/music-remark-mix");
+	roots.emplace_back("data/models/openvino");
+	roots.emplace_back("../data/models/openvino/musicmixremark");
+	roots.emplace_back("../../data/models/openvino/musicmixremark");
+
+	const std::vector<std::string> preferred_names = {
+		"music-remark-mix.xml",
+		"musicmixremark.xml",
+		"music_remark_mix.xml",
+		"dj-mix-planner.xml",
+		"audio-stem-mix.xml",
+	};
+	for (const auto& root : roots) {
+		for (const auto& name : preferred_names) {
+			try_path(root / name, "auto:" + PathString(root));
+			if (result.found) return result;
+		}
+	}
+
+	for (const auto& root : roots) {
+		std::error_code error;
+		if (!std::filesystem::exists(root, error) || error) continue;
+		for (const auto& entry : std::filesystem::recursive_directory_iterator(root, std::filesystem::directory_options::skip_permission_denied, error)) {
+			if (error || !entry.is_regular_file()) continue;
+			const std::string filename = entry.path().filename().string();
+			std::string lower = filename;
+			std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+			if (!IsXmlModelPath(entry.path())) continue;
+			if (lower.find("music") == std::string::npos && lower.find("audio") == std::string::npos && lower.find("stem") == std::string::npos && lower.find("vocal") == std::string::npos && lower.find("beat") == std::string::npos) continue;
+			try_path(entry.path(), "scan:" + PathString(root));
+			if (result.found) return result;
+		}
+	}
+	result.source = "missing";
+	return result;
 }
 
 void AddSampleSlot(
@@ -156,11 +252,12 @@ bool IsOpenVinoRuntimeAvailable() {
 MusicRemarkMixPlan BuildOpenVinoMusicRemarkMixPlan(const MusicRemarkMetrics& metrics, const MusicRemarkOptions& options) {
 	MusicRemarkMixPlan plan;
 	plan.openvino_available = IsOpenVinoRuntimeAvailable();
-	plan.backend = plan.openvino_available ? "xer-openvino-audio-ai" : "xer-ai-heuristic-openvino-fallback";
-	const char* model_path = std::getenv("XER_OPENVINO_MUSIC_REMARK_MODEL");
-	plan.model_hint = model_path != nullptr && model_path[0] != '\0'
-		? std::string(model_path)
-		: std::string("openvino-ir:music-remark-mix.xml");
+	const OpenVinoModelCandidate model = ResolveOpenVinoModel(options);
+	plan.model_found = model.found;
+	plan.model_source = model.source;
+	plan.model_suggestions = model.suggestions;
+	plan.backend = plan.openvino_available && plan.model_found ? "xer-openvino-audio-ai" : "xer-ai-heuristic-openvino-fallback";
+	plan.model_hint = plan.model_found ? model.path : std::string("openvino-ir:music-remark-mix.xml");
 
 	float score = 38.0f;
 	score += 15.0f * Closeness(metrics.bpm, 124.0f, 64.0f);
